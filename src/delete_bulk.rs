@@ -102,7 +102,12 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
         if self.traversal_forced(decision, min_reqs, max_reqs) || decision.traverse_left {
             if decision.consume_curr {
                 max_reqs += 1;
-            }
+            } else if max_reqs != self.replacements_max.len() {
+                max_reqs += 1;
+                let node = self.tree.node_mut(idx);
+                let item = node.item.take().unwrap();
+                self.replacements_max.push(item);
+            };
 
             self.descend_minmax_left(drv, idx, min_reqs, max_reqs);
 
@@ -123,6 +128,11 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
         if decision.traverse_right || self.traversal_forced(decision, min_reqs, max_reqs) {
             if decision.consume_curr {
                 min_reqs += 1;
+            } else if min_reqs != self.replacements_min.len() {
+                min_reqs += 1;
+                let node = self.tree.node_mut(idx);
+                let item = node.item.take().unwrap();
+                self.replacements_min.push(item);
             }
 
             self.descend_minmax_right(drv, idx, min_reqs, max_reqs);
