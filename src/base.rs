@@ -1,5 +1,6 @@
 use std::mem;
 use std::cmp::max;
+use std::fmt::{Debug, Formatter};
 use delete_bulk::{DeleteBulk, TraversalDriver, TraversalDecision};
 
 pub trait Item: Sized {
@@ -18,7 +19,6 @@ pub struct Node<T: Item> {
     pub height: u32,
 }
 
-#[derive(Debug)]
 pub struct ImplicitIntervalTree<T: Item> {
     data: Vec<Node<T>>,
     size: usize,
@@ -28,7 +28,6 @@ pub struct ImplicitIntervalTree<T: Item> {
 impl<T: Item> ImplicitIntervalTree<T> {
     pub fn new(sorted: Vec<T>) -> ImplicitIntervalTree<T> {
         let size = sorted.len();
-        let default = Node::<T>{item: None, height: 0};
 
         let capacity = Self::level_from(size)*4 + 3;
 
@@ -39,6 +38,25 @@ impl<T: Item> ImplicitIntervalTree<T> {
 
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
         Self::build(&mut sorted, 0, &mut data);
+        ImplicitIntervalTree { data: data, size: size }
+    }
+
+    pub fn with_nodes(nodes: Vec<Node<T>>) -> ImplicitIntervalTree<T> {
+        let size = nodes.iter().filter(|x| x.height != 0).count();
+        println!("size={}", size);
+        let capacity = Self::level_from(size)*4 + 3; // allocate enough nodes that righti() is never out of bounds
+
+        let mut data = Vec::with_capacity(capacity);
+        for i in 0..capacity {
+            data.push(Node{item: None, height: 0});
+        }
+
+        unsafe {
+            use ::std::ptr;
+            ptr::copy_nonoverlapping(nodes.as_ptr(), data.as_mut_ptr(), nodes.len());
+        }
+        ::std::mem::forget(nodes);
+
         ImplicitIntervalTree { data: data, size: size }
     }
 
@@ -674,4 +692,20 @@ impl<T: Item> ImplicitIntervalTree<T> {
     //            }
     //        }
     //    }
+}
+
+
+impl<T: Item<Key=usize>+Debug> Debug for ImplicitIntervalTree<T> {
+    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
+        let mut nz: Vec<_> = self.data.iter()
+            .rev()
+            .skip_while(|node| node.item.is_none() && node.height==0)
+            .map(|node| match node.item {
+                None => (0, 0),
+                Some(ref x) => (x.ord(), node.height)
+            })
+            .collect();
+        nz.reverse();
+        write!(fmt, "{:?}", nz)
+    }
 }
