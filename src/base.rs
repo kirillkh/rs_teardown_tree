@@ -15,19 +15,18 @@ pub trait Item: Sized+Clone+Debug {
 #[derive(Debug, Clone)]
 pub struct Node<T: Item> {
     pub item: Option<T>,    // TODO we can remove the option and use height==0 as null indicator
-//    pub max: T::Key,
     pub height: u32,
 }
 
 #[derive(Clone)]
-pub struct ImplicitIntervalTree<T: Item> {
+pub struct ImplicitTree<T: Item> {
     data: Vec<Node<T>>,
     size: usize,
 }
 
 
-impl<T: Item> ImplicitIntervalTree<T> {
-    pub fn new(sorted: Vec<T>) -> ImplicitIntervalTree<T> {
+impl<T: Item> ImplicitTree<T> {
+    pub fn new(sorted: Vec<T>) -> ImplicitTree<T> {
         let size = sorted.len();
 
         let capacity = Self::level_from(size)*4 + 3;
@@ -39,10 +38,10 @@ impl<T: Item> ImplicitIntervalTree<T> {
 
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
         Self::build(&mut sorted, 0, &mut data);
-        ImplicitIntervalTree { data: data, size: size }
+        ImplicitTree { data: data, size: size }
     }
 
-    pub fn with_nodes(nodes: Vec<Node<T>>) -> ImplicitIntervalTree<T> {
+    pub fn with_nodes(nodes: Vec<Node<T>>) -> ImplicitTree<T> {
         let size = nodes.iter().filter(|x| x.height != 0).count();
         let capacity = Self::level_from(size)*4 + 3; // allocate enough nodes that righti() is never out of bounds
 
@@ -57,7 +56,7 @@ impl<T: Item> ImplicitIntervalTree<T> {
         }
         ::std::mem::forget(nodes);
 
-        ImplicitIntervalTree { data: data, size: size }
+        ImplicitTree { data: data, size: size }
     }
 
 
@@ -286,7 +285,7 @@ impl<T: Item> ImplicitIntervalTree<T> {
 }
 
 
-impl<T: Item> Debug for ImplicitIntervalTree<T> {
+impl<T: Item> Debug for ImplicitTree<T> {
     fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
         let mut nz: Vec<_> = self.data.iter()
             .rev()

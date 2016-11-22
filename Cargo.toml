@@ -1,6 +1,6 @@
 [package]
 name = "implicit_tree"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 
 [dependencies]

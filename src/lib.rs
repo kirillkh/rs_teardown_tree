@@ -1,3 +1,5 @@
+//extern crate test;
+
 mod base;
 mod delete_bulk;
 
@@ -9,10 +11,10 @@ mod delete_bulk;
 
 #[cfg(test)]
 mod tests {
-    use base::{Item, ImplicitIntervalTree, Node};
+    use base::{Item, ImplicitTree, Node};
     use delete_bulk::{TraversalDecision, TraversalDriver};
 
-    type Tree = ImplicitIntervalTree<usize>;
+    type Tree = ImplicitTree<usize>;
 
     impl Item for usize {
         type Key = usize;
