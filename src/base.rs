@@ -29,7 +29,7 @@ impl<T: Item> ImplicitTree<T> {
     pub fn new(sorted: Vec<T>) -> ImplicitTree<T> {
         let size = sorted.len();
 
-        let capacity = Self::level_from(size)*4 + 3;
+        let capacity = Self::row_start(size)*4 + 3;
 
         let mut data = Vec::with_capacity(capacity);
         for _ in 0..capacity {
@@ -43,7 +43,7 @@ impl<T: Item> ImplicitTree<T> {
 
     pub fn with_nodes(nodes: Vec<Node<T>>) -> ImplicitTree<T> {
         let size = nodes.iter().filter(|x| x.height != 0).count();
-        let capacity = Self::level_from(size)*4 + 3; // allocate enough nodes that righti() is never out of bounds
+        let capacity = Self::row_start(nodes.len())*4 + 3; // allocate enough nodes that righti() is never out of bounds
 
         let mut data = Vec::with_capacity(capacity);
         for _ in 0..capacity {
