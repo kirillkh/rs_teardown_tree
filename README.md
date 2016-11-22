@@ -1,4 +1,4 @@
-An implicit Binary Search Tree, written in Rust, that supports **bulk-delete** and fast **clone** operations.
+An implicit BST (binary search tree), written in Rust, that supports **bulk-delete** and fast **clone** operations.
 
 The tree does not use any kind of autobalancing (at least at the moment) and does not support insert operation. Thus the
 typical usage pattern is to build a master copy of the tree, then
