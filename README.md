@@ -9,7 +9,7 @@ typical usage pattern is to build a master copy of the tree, then
 
 
 -------
-##### Details
+### Details
 
 "Implicit" means that nodes do not store explicit pointers to their children. This is similar to how binary heaps work:
 all nodes in the tree reside in an array, the root always at index 0, and given a node with index i, its left/right 
@@ -26,5 +26,6 @@ to the size n=10.
     
     
 **TODO 1**: benchmarks in comparison to typical AVL/RB/explicit-array-based (the last is the tough one!)
+
 **TODO 2**: we currently allocate space for 4*n+3 items in order to avoid bounds checking. We can at least improve that 
             by a factor of 2 in the best case (complete tree). Also need to investigate doing bounds checking instead.
