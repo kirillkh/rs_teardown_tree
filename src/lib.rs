@@ -1,4 +1,5 @@
-//extern crate test;
+#![feature(test)]
+extern crate test;
 
 mod base;
 mod delete_bulk;
@@ -255,5 +256,56 @@ mod tests {
 
             return Some((min, max));
         }
+    }
+
+
+    //---- benchmarks ------------------------------------------------------------------------------
+    use test::Bencher;
+    use test;
+
+    #[bench]
+    fn bench_bulk_delete_100(bencher: &mut Bencher) {
+        bench_bulk_delete_n(100, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_1000(bencher: &mut Bencher) {
+        bench_bulk_delete_n(1000, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_10000(bencher: &mut Bencher) {
+        bench_bulk_delete_n(10000, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_50000(bencher: &mut Bencher) {
+        bench_bulk_delete_n(50000, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_100000(bencher: &mut Bencher) {
+        bench_bulk_delete_n(100000, bencher);
+    }
+
+//    #[bench]
+//    fn bench_bulk_delete_10000000(bencher: &mut Bencher) {
+//        bench_bulk_delete_n(10000000, bencher);
+//    }
+
+
+    fn bench_bulk_delete_n(n: usize, bencher: &mut Bencher) {
+        let elems: Vec<_> = (1..n+1).collect();
+//        println!("bench {} ------------------------", n);
+
+        let mut tree = Tree::new(elems);
+
+        bencher.iter(|| {
+            let mut tree = tree.clone();
+            for i in 0..10 {
+                let output = tree.delete_bulk(&mut DriverFromTo::new(1,i));
+                test::black_box(output);
+            }
+        });
     }
 }
