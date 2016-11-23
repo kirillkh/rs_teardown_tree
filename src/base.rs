@@ -1,9 +1,12 @@
+use std::ptr;
 use std::mem;
 use std::cmp::max;
 use std::fmt::{Debug, Formatter};
 use delete_bulk::{DeleteBulk, TraversalDriver};
 
-pub trait Item: Sized+Clone+Debug {
+// items must be Copy to allow for efficient cloning, though with Clone it still ought to work well, so
+// TODO: support both Copy and Clone in separate impls in future
+pub trait Item: Sized+Clone+Copy+Debug {
     type Key: Ord+Debug;
 
     fn ord(&self) -> Self::Key;
@@ -19,11 +22,28 @@ pub struct Node<T: Item> {
 }
 
 #[derive(Clone)]
+struct DeleteBulkCache<T: Item> {
+    replacements_min: Vec<T>, replacements_max: Vec<T>,
+}
+
+impl<T: Item> DeleteBulkCache<T> {
+    pub fn new(height: usize, capacity: usize) -> DeleteBulkCache<T> {
+        let replacements_min = Vec::with_capacity(height);
+        let replacements_max = Vec::with_capacity(height);
+        DeleteBulkCache { replacements_min: replacements_min, replacements_max: replacements_max }
+    }
+}
+
+
+
+
+#[derive(Clone)]
 pub struct ImplicitTree<T: Item> {
     data: Vec<Node<T>>,
     size: usize,
-}
 
+    delete_bulk_cache: DeleteBulkCache<T>,
+}
 
 impl<T: Item> ImplicitTree<T> {
     pub fn new(sorted: Vec<T>) -> ImplicitTree<T> {
@@ -38,7 +58,8 @@ impl<T: Item> ImplicitTree<T> {
 
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
         Self::build(&mut sorted, 0, &mut data);
-        ImplicitTree { data: data, size: size }
+        let cache = DeleteBulkCache::new(data[0].height as usize, data.len());
+        ImplicitTree { data: data, size: size, delete_bulk_cache: cache }
     }
 
     pub fn with_nodes(nodes: Vec<Node<T>>) -> ImplicitTree<T> {
@@ -51,12 +72,26 @@ impl<T: Item> ImplicitTree<T> {
         }
 
         unsafe {
-            use ::std::ptr;
             ptr::copy_nonoverlapping(nodes.as_ptr(), data.as_mut_ptr(), nodes.len());
         }
         ::std::mem::forget(nodes);
 
-        ImplicitTree { data: data, size: size }
+        let cache = DeleteBulkCache::new(data[0].height as usize, data.len());
+        ImplicitTree { data: data, size: size, delete_bulk_cache: cache }
+    }
+
+
+    pub fn refill(&mut self, master: &ImplicitTree<T>) {
+        assert!(self.data.len() == master.data.len());
+        unsafe {
+            ptr::copy_nonoverlapping(master.data.as_ptr(), self.data.as_mut_ptr(), master.data.len());
+        }
+        self.size = master.size;
+    }
+
+
+    pub fn into_node_vec(self) -> Vec<Node<T>> {
+        self.data
     }
 
 
@@ -82,14 +117,14 @@ impl<T: Item> ImplicitTree<T> {
 
 
 
-    pub fn delete_bulk<D: TraversalDriver<T>>(&mut self, drv: &mut D) -> Vec<T> {
-        let output = {
-            let mut d = DeleteBulk::new(self);
+    pub fn delete_bulk<D: TraversalDriver<T>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
+        assert!(output.is_empty());
+        output.truncate(0);
+        {
+            let mut d = DeleteBulk::new(self, output);
             d.delete_bulk(drv);
-            d.output
-        };
+        }
         self.size -= output.len();
-        output
     }
 
 

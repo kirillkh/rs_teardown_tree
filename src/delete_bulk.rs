@@ -28,15 +28,14 @@ enum ItemListId {
 pub struct DeleteBulk<'a, T: 'a+Item> {
     tree: &'a mut ImplicitTree<T>,
     replacements_min: Vec<T>, replacements_max: Vec<T>,
-    pub output: Vec<T>
+    pub output: &'a mut Vec<T>
 }
 
 impl<'a, T: Item> DeleteBulk<'a, T> {
-    pub fn new(tree: &'a mut ImplicitTree<T>) -> DeleteBulk<'a, T> {
+    pub fn new(tree: &'a mut ImplicitTree<T>, output: &'a mut Vec<T>) -> DeleteBulk<'a, T> {
         let height = tree.node(0).height as usize;
         let replacements_min = Vec::with_capacity(height);
         let replacements_max = Vec::with_capacity(height);
-        let output = Vec::with_capacity(tree.len());
         DeleteBulk { tree: tree, replacements_min: replacements_min, replacements_max: replacements_max, output: output }
     }
 

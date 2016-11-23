@@ -1,5 +1,6 @@
 #![feature(test)]
 extern crate test;
+extern crate rand;
 
 mod base;
 mod delete_bulk;
@@ -62,9 +63,10 @@ mod tests {
     fn delete_bulk4() {
         let mut tree = Tree::new(vec![1, 2, 3, 4]);
         let mut drv = DriverFromTo::new(2,2);
-        let d = tree.delete_bulk(&mut drv);
+        let mut output = Vec::with_capacity(tree.size());
+        tree.delete_bulk(&mut drv, &mut output);
         println!("tree: {:?}", &tree);
-        println!("output: {:?}", &d);
+        println!("output: {:?}", &output);
 //        panic!();
     }
 
@@ -76,7 +78,8 @@ mod tests {
         let mut tree = Tree::with_nodes(nodes);
         let (from, to) = from_to;
         let mut drv = DriverFromTo::new(from, to);
-        let output = tree.delete_bulk(&mut drv);
+        let mut output = Vec::with_capacity(tree.size());
+        tree.delete_bulk(&mut drv, &mut output);
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
         assert_eq!(format!("{:?}", &output), format!("{:?}", expect_out));
     }
@@ -205,23 +208,25 @@ mod tests {
 
     fn delete_bulk_exhaustive_with_tree(tree: Tree) {
         let n = tree.size();
+        let mut output = Vec::with_capacity(n);
         for i in 1..n+1 {
             for j in i..n+1 {
                 let mut tree_mod = tree.clone();
                 let mut drv = DriverFromTo::new(i, j);
 //                println!("from={}, to={}", i, j);
-                let output = tree_mod.delete_bulk(&mut drv);
-                delete_bulk_exhaustive_check(n, i, j, output, tree_mod, &tree);
+                output.truncate(0);
+                tree_mod.delete_bulk(&mut drv, &mut output);
+                delete_bulk_exhaustive_check(n, i, j, &mut output, tree_mod, &tree);
             }
         }
     }
 
-    fn delete_bulk_exhaustive_check(n: usize, i: usize, j: usize, mut output: Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
+    fn delete_bulk_exhaustive_check(n: usize, i: usize, j: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
         assert!(output.len() == j-i+1);
         assert!(tree_mod.size() + output.len() == n);
 
         output.sort();
-        assert_eq!(output, (i..j+1).collect::<Vec<_>>());
+        assert_eq!(output, &(i..j+1).collect::<Vec<_>>());
         check_bst(&tree_mod, &output, tree_orig, 0);
     }
 
@@ -264,13 +269,53 @@ mod tests {
     use test;
 
     #[bench]
-    fn bench_bulk_delete_100(bencher: &mut Bencher) {
+    fn bench_bulk_delete_00100(bencher: &mut Bencher) {
         bench_bulk_delete_n(100, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_1000(bencher: &mut Bencher) {
-        bench_bulk_delete_n(1000, bencher);
+    fn bench_bulk_delete_01022(bencher: &mut Bencher) {
+        bench_bulk_delete_n(1022, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_01023(bencher: &mut Bencher) {
+        bench_bulk_delete_n(1023, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_02046(bencher: &mut Bencher) {
+        bench_bulk_delete_n(2046, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_02047(bencher: &mut Bencher) {
+        bench_bulk_delete_n(2047, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_04094(bencher: &mut Bencher) {
+        bench_bulk_delete_n(4094, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_04095(bencher: &mut Bencher) {
+        bench_bulk_delete_n(4095, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_05000(bencher: &mut Bencher) {
+        bench_bulk_delete_n(5000, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_08190(bencher: &mut Bencher) {
+        bench_bulk_delete_n(8190, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_08191(bencher: &mut Bencher) {
+        bench_bulk_delete_n(8191, bencher);
     }
 
     #[bench]
@@ -279,32 +324,79 @@ mod tests {
     }
 
     #[bench]
+    fn bench_bulk_delete_16000(bencher: &mut Bencher) {
+        bench_bulk_delete_n(16000, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_16381(bencher: &mut Bencher) {
+        bench_bulk_delete_n(16381, bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_16382(bencher: &mut Bencher) {
+        bench_bulk_delete_n(test::black_box(16382), bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_16383(bencher: &mut Bencher) {
+        bench_bulk_delete_n(test::black_box(16383), bencher);
+    }
+
+    #[bench]
+    fn bench_bulk_delete_25000(bencher: &mut Bencher) {
+        bench_bulk_delete_n(25000, bencher);
+    }
+
+    #[bench]
     fn bench_bulk_delete_50000(bencher: &mut Bencher) {
         bench_bulk_delete_n(50000, bencher);
     }
 
-    #[bench]
-    fn bench_bulk_delete_100000(bencher: &mut Bencher) {
-        bench_bulk_delete_n(100000, bencher);
-    }
-
+//    #[bench]
+//    fn bench_bulk_delete_100000(bencher: &mut Bencher) {
+//        bench_bulk_delete_n(100000, bencher);
+//    }
+//
 //    #[bench]
 //    fn bench_bulk_delete_10000000(bencher: &mut Bencher) {
 //        bench_bulk_delete_n(10000000, bencher);
 //    }
 
-
+    #[inline(never)]
     fn bench_bulk_delete_n(n: usize, bencher: &mut Bencher) {
         let elems: Vec<_> = (1..n+1).collect();
-//        println!("bench {} ------------------------", n);
+
+        let perm = {
+            // generate a random permutation
+            let mut pool: Vec<_> = (1..101).collect();
+            let mut perm = vec![];
+
+            use rand::{XorShiftRng, SeedableRng, Rng};
+
+            let mut rng = XorShiftRng::from_seed([1,2,3,4]);
+
+            for i in 0..100 {
+                let n: u32 = rng.gen_range(0, 100-i);
+                let next = pool.swap_remove(n as usize);
+                perm.push(next);
+            }
+
+            perm
+        };
+
 
         let mut tree = Tree::new(elems);
+        let mut copy = tree.clone();
+        let mut output = Vec::with_capacity(tree.size());
 
         bencher.iter(|| {
-            let mut tree = tree.clone();
-            for i in 0..10 {
-                let output = tree.delete_bulk(&mut DriverFromTo::new(1,i));
-                test::black_box(output);
+            copy.refill(&tree);
+            for i in 0..100 {
+                output.truncate(0);
+                let x = perm[i];
+                copy.delete_bulk(&mut DriverFromTo::new((x-1)*n/100, x*n/100), &mut output);
+                test::black_box(output.len());
             }
         });
     }
