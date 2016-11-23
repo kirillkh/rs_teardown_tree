@@ -3,5 +3,5 @@ name = "implicit_tree"
 version = "0.2.0"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 
-[dev-dependencies]
+[dependencies]
 rand = "0.3.14"

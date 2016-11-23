@@ -152,11 +152,7 @@ impl<T: Item> ImplicitTree<T> {
     }
 
 
-    pub fn item(&self, idx: usize) -> &T {
-        self.node(idx).item.as_ref().unwrap()
-    }
-
-    pub fn item_mut(&mut self, idx: usize) -> &mut T {
+    pub fn item_mut_unwrap(&mut self, idx: usize) -> &mut T {
         self.node_mut(idx).item.as_mut().unwrap()
     }
 
@@ -165,24 +161,20 @@ impl<T: Item> ImplicitTree<T> {
         assert!(!self.is_null(idx));
 
         if !self.has_left(idx) && !self.has_right(idx) {
-            //            if idx != 0 {
-            //                let parent = self.parent_mut(idx);
-            //                parent.has_child[Self::branch(idx)] = false;
-            //            }
             let root = self.node_mut(idx);
             root.height = 0;
             root.item.take().unwrap()
         } else {
             let removed = if self.has_left(idx) && !self.has_right(idx) {
                 let left_max = self.delete_max(Self::lefti(idx));
-                mem::replace(self.item_mut(idx), left_max)
+                mem::replace(self.item_mut_unwrap(idx), left_max)
             } else if !self.has_left(idx) && self.has_right(idx) {
                 let right_min = self.delete_min(Self::righti(idx));
-                mem::replace(self.item_mut(idx), right_min)
+                mem::replace(self.item_mut_unwrap(idx), right_min)
             } else { // self.has_left(idx) && self.has_right(idx)
                 // TODO: remove from the subtree with bigger height, not always from the left
                 let left_max = self.delete_max(Self::lefti(idx));
-                mem::replace(self.item_mut(idx), left_max)
+                mem::replace(self.item_mut_unwrap(idx), left_max)
             };
 
             self.update_height(idx);

@@ -53,27 +53,16 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
 
     fn delete_bulk_recurse<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
                                                   min_reqs: usize, max_reqs: usize) {
-        let decision = drv.decide(self.tree.node_mut(idx));
+        let decision = drv.decide(self.node_mut(idx));
         if decision.consume_curr {
             self.take_item(idx, ItemListId::OUT);
         }
 
         match (self.tree.has_left(idx), self.tree.has_right(idx)) {
-            (false, false) => {
-                self.traverse_shape_leaf(idx, decision, min_reqs, max_reqs)
-            }
-
-            (true, false) => {
-                self.traverse_shape_left(drv, idx, decision, min_reqs, max_reqs)
-            }
-
-            (false, true) => {
-                self.traverse_shape_right(drv, idx, decision, min_reqs, max_reqs)
-            }
-
-            (true, true) => {
-                self.traverse_shape_dual(drv, idx, decision, min_reqs, max_reqs)
-            }
+            (false, false) => self.traverse_shape_leaf(idx, decision, min_reqs, max_reqs),
+            (true, false)  => self.traverse_shape_left(drv, idx, decision, min_reqs, max_reqs),
+            (false, true)  => self.traverse_shape_right(drv, idx, decision, min_reqs, max_reqs),
+            (true, true)   => self.traverse_shape_dual(drv, idx, decision, min_reqs, max_reqs)
         }
     }
 
@@ -84,7 +73,7 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
                            min_reqs: usize, max_reqs: usize) {
         if self.traversal_forced(decision, min_reqs, max_reqs) {
             if decision.consume_curr {
-                let node = self.tree.node_mut(idx);
+                let node = self.node_mut(idx);
                 node.height = 0;
             } else if self.open_min_reqs(min_reqs) {
                 let node = self.take_item(idx, ItemListId::MIN);
@@ -110,18 +99,18 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
             self.descend_minmax_left(drv, idx, min_reqs, max_reqs);
 
             // fulfill a min req if necessary
-            if self.tree.node(idx).item.is_some() && self.open_min_reqs(min_reqs) {
+            if self.item(idx).is_some() && self.open_min_reqs(min_reqs) {
                 self.take_item(idx, ItemListId::MIN);
             }
 
             // update height
-            let height = if self.tree.node(idx).item.is_none() {
+            let height = if self.item(idx).is_none() {
                 0
             } else {
-                let left = self.tree.node_mut(ImplicitTree::<T>::lefti(idx));
+                let left = self.node_mut(ImplicitTree::<T>::lefti(idx));
                 left.height + 1
             };
-            self.tree.node_mut(idx).height = height;
+            self.node_mut(idx).height = height;
         }
     }
 
@@ -139,18 +128,18 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
             self.descend_minmax_right(drv, idx, min_reqs, max_reqs);
 
             // fulfill a max req if necessary
-            if self.tree.node(idx).item.is_some() && self.open_max_reqs(max_reqs) {
+            if self.item(idx).is_some() && self.open_max_reqs(max_reqs) {
                 self.take_item(idx, ItemListId::MAX);
             }
 
             // update height
-            let height = if self.tree.node(idx).item.is_none() {
+            let height = if self.item(idx).is_none() {
                 0
             } else {
-                let right = self.tree.node_mut(ImplicitTree::<T>::righti(idx));
+                let right = self.node_mut(ImplicitTree::<T>::righti(idx));
                 right.height + 1
             };
-            self.tree.node_mut(idx).height = height;
+            self.node_mut(idx).height = height;
         }
     }
 
@@ -171,7 +160,7 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
         }
 
         // this node
-        if self.tree.node(idx).item.is_none() {
+        if self.item(idx).is_none() {
             // this node was consumed, and the left subtree did not have a replacement
             min_reqs += 1;
         } else if self.open_min_reqs(min_reqs) {
@@ -186,24 +175,27 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
         }
 
         // this node again
-        if self.tree.node(idx).item.is_none() {
-            max_reqs += 1;
-        } else if self.open_max_reqs(max_reqs) {
-            // this node is the maximum of the tree: use it to fulfill a max request
-            max_reqs += 1;
-            self.take_item(idx, ItemListId::MAX);
-        }
-
-        // fulfill the remaining max requests from the left subtree
-        if self.open_max_reqs(max_reqs) && self.tree.has_left(idx) {
-            self.take_max_left(idx, max_reqs)
-        }
-
-        // update height
-        if self.tree.node(idx).item.is_none() {
-            self.tree.node_mut(idx).height = 0;
+        if self.item(idx).is_none() {
+            // this node was consumed, and both subtrees are empty now: nothing more to do here
+            self.node_mut(idx).height = 0;
         } else {
-            self.tree.update_height(idx);
+            if self.open_max_reqs(max_reqs) {
+                // this node is the maximum of the tree: use it to fulfill a max request
+                max_reqs += 1;
+                self.take_item(idx, ItemListId::MAX);
+
+                // fulfill the remaining max requests from the left subtree
+                if self.tree.has_left(idx) {
+                    self.take_max_left(idx, max_reqs)
+                }
+            }
+
+            // update height
+            if self.item(idx).is_none() {
+                self.node_mut(idx).height = 0;
+            } else {
+                self.tree.update_height(idx);
+            }
         }
     }
 
@@ -290,5 +282,25 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
         assert!(move_to.len() < move_to.capacity()); // there should be no dynamic allocation here! we pre-allocate enough space in all 3 vecs
         move_to.push(item);
         node
+    }
+
+    #[inline]
+    fn node(&self, idx: usize) -> &Node<T> {
+        self.tree.node(idx)
+    }
+
+    #[inline]
+    fn node_mut(&mut self, idx: usize) -> &mut Node<T> {
+        self.tree.node_mut(idx)
+    }
+
+    #[inline]
+    fn item(&mut self, idx: usize) -> &Option<T> {
+        &self.node(idx).item
+    }
+
+    #[inline]
+    fn item_mut(&mut self, idx: usize) -> &mut Option<T> {
+        &mut self.node_mut(idx).item
     }
 }
