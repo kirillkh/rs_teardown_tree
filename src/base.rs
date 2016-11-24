@@ -2,14 +2,21 @@ use std::ptr;
 use std::mem;
 use std::cmp::max;
 use std::fmt::{Debug, Formatter};
-use delete_bulk::{DeleteBulk, TraversalDriver};
+use delete_bulk::{DeleteBulk, TraversalDriver, TraversalDecision};
 
-// items must be Copy to allow for efficient cloning, though with Clone it still ought to work well, so
-// TODO: support both Copy and Clone in separate impls in future
-pub trait Item: Sized+Clone+Copy+Debug {
+pub trait Item: Sized+Clone+Debug {
     type Key: Ord+Debug;
 
     fn ord(&self) -> Self::Key;
+}
+
+
+impl Item for usize {
+    type Key = usize;
+
+    fn ord(&self) -> Self::Key {
+        *self
+    }
 }
 
 
@@ -33,6 +40,51 @@ impl<T: Item> DeleteBulkCache<T> {
         DeleteBulkCache { replacements_min: replacements_min, replacements_max: replacements_max }
     }
 }
+
+
+/// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
+pub trait ImplicitTreeRefill<T: Copy+Item> {
+    fn refill(&mut self, master: &ImplicitTree<T>);
+}
+
+
+impl<T: Copy+Item> ImplicitTreeRefill<T> for ImplicitTree<T> {
+    fn refill(&mut self, master: &ImplicitTree<T>) {
+        let len = self.data.len();
+        assert!(len == master.data.len());
+        self.data.truncate(0);
+        unsafe {
+            ptr::copy_nonoverlapping(master.data.as_ptr(), self.data.as_mut_ptr(), len);
+            self.data.set_len(len);
+        }
+        self.size = master.size;
+    }
+}
+
+
+pub struct DriverFromTo {
+    from: usize,
+    to: usize
+}
+
+impl DriverFromTo {
+    pub fn new(from: usize, to: usize) -> DriverFromTo {
+        DriverFromTo { from:from, to:to }
+    }
+}
+
+impl TraversalDriver<usize> for DriverFromTo {
+    fn decide(&mut self, node: &mut Node<usize>) -> TraversalDecision {
+        let x = node.item.unwrap();
+        let left = self.from <= x;
+        let right = x <= self.to;
+        let consume = left && right;
+
+        TraversalDecision { traverse_left: left, traverse_right: right, consume_curr: consume }
+    }
+}
+
+
 
 
 
@@ -79,16 +131,6 @@ impl<T: Item> ImplicitTree<T> {
         let cache = DeleteBulkCache::new(data[0].height as usize, data.len());
         ImplicitTree { data: data, size: size, delete_bulk_cache: cache }
     }
-
-
-    pub fn refill(&mut self, master: &ImplicitTree<T>) {
-        assert!(self.data.len() == master.data.len());
-        unsafe {
-            ptr::copy_nonoverlapping(master.data.as_ptr(), self.data.as_mut_ptr(), master.data.len());
-        }
-        self.size = master.size;
-    }
-
 
     pub fn into_node_vec(self) -> Vec<Node<T>> {
         self.data

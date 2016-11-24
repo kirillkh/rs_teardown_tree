@@ -1,7 +1,17 @@
 [package]
 name = "implicit_tree"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
+
+[lib]
+name = "implicit_tree"
+path = "src/lib.rs"
+
+[[bin]]
+name = "benchmarks"
+path = "src/bin/benchmarks.rs"
+
+
 
 [dependencies]
 rand = "0.3.14"

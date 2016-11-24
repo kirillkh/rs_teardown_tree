@@ -5,7 +5,7 @@ extern crate rand;
 mod base;
 mod delete_bulk;
 
-
+pub use base::{Item, ImplicitTree, ImplicitTreeRefill, Node, DriverFromTo};
 
 
 
@@ -13,41 +13,10 @@ mod delete_bulk;
 
 #[cfg(test)]
 mod tests {
-    use base::{Item, ImplicitTree, Node};
+    use base::{Item, ImplicitTree, Node, DriverFromTo};
     use delete_bulk::{TraversalDecision, TraversalDriver};
 
     type Tree = ImplicitTree<usize>;
-
-    impl Item for usize {
-        type Key = usize;
-
-        fn ord(&self) -> Self::Key {
-            *self
-        }
-    }
-
-
-    struct DriverFromTo {
-        from: usize,
-        to: usize
-    }
-
-    impl DriverFromTo {
-        pub fn new(from: usize, to: usize) -> DriverFromTo {
-            DriverFromTo { from:from, to:to }
-        }
-    }
-
-    impl TraversalDriver<usize> for DriverFromTo {
-        fn decide(&mut self, node: &mut Node<usize>) -> TraversalDecision {
-            let x = node.item.unwrap();
-            let left = self.from <= x;
-            let right = x <= self.to;
-            let consume = left && right;
-
-            TraversalDecision { traverse_left: left, traverse_right: right, consume_curr: consume }
-        }
-    }
 
 
     #[test]

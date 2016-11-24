@@ -3,6 +3,7 @@ use base::{ImplicitTree, Item, Node};
 use std::mem;
 
 pub trait TraversalDriver<T: Item> {
+    #[inline]
     fn decide(&mut self, node: &mut Node<T>) -> TraversalDecision;
 }
 
