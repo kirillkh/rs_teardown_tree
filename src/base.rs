@@ -2,7 +2,7 @@ use std::ptr;
 use std::mem;
 use std::cmp::max;
 use std::fmt::{Debug, Formatter};
-use delete_bulk::{DeleteBulk, TraversalDriver, TraversalDecision};
+use delete_range::{DeleteRange, TraversalDriver, TraversalDecision};
 
 pub trait Item: Sized+Clone+Debug {
     type Key: Ord+Debug;
@@ -29,15 +29,15 @@ pub struct Node<T: Item> {
 }
 
 #[derive(Clone)]
-struct DeleteBulkCache<T: Item> {
+struct DeleteRangeCache<T: Item> {
     replacements_min: Vec<T>, replacements_max: Vec<T>,
 }
 
-impl<T: Item> DeleteBulkCache<T> {
-    pub fn new(height: usize, capacity: usize) -> DeleteBulkCache<T> {
+impl<T: Item> DeleteRangeCache<T> {
+    pub fn new(height: usize, capacity: usize) -> DeleteRangeCache<T> {
         let replacements_min = Vec::with_capacity(height);
         let replacements_max = Vec::with_capacity(height);
-        DeleteBulkCache { replacements_min: replacements_min, replacements_max: replacements_max }
+        DeleteRangeCache { replacements_min: replacements_min, replacements_max: replacements_max }
     }
 }
 
@@ -94,7 +94,7 @@ pub struct ImplicitTree<T: Item> {
     data: Vec<Node<T>>,
     size: usize,
 
-    delete_bulk_cache: DeleteBulkCache<T>,
+    delete_range_cache: DeleteRangeCache<T>,
 }
 
 impl<T: Item> ImplicitTree<T> {
@@ -110,8 +110,8 @@ impl<T: Item> ImplicitTree<T> {
 
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
         Self::build(&mut sorted, 0, &mut data);
-        let cache = DeleteBulkCache::new(data[0].height as usize, data.len());
-        ImplicitTree { data: data, size: size, delete_bulk_cache: cache }
+        let cache = DeleteRangeCache::new(data[0].height as usize, data.len());
+        ImplicitTree { data: data, size: size, delete_range_cache: cache }
     }
 
     pub fn with_nodes(nodes: Vec<Node<T>>) -> ImplicitTree<T> {
@@ -128,8 +128,8 @@ impl<T: Item> ImplicitTree<T> {
         }
         ::std::mem::forget(nodes);
 
-        let cache = DeleteBulkCache::new(data[0].height as usize, data.len());
-        ImplicitTree { data: data, size: size, delete_bulk_cache: cache }
+        let cache = DeleteRangeCache::new(data[0].height as usize, data.len());
+        ImplicitTree { data: data, size: size, delete_range_cache: cache }
     }
 
     pub fn into_node_vec(self) -> Vec<Node<T>> {
@@ -159,12 +159,12 @@ impl<T: Item> ImplicitTree<T> {
 
 
 
-    pub fn delete_bulk<D: TraversalDriver<T>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
+    pub fn delete_range<D: TraversalDriver<T>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
         assert!(output.is_empty());
         output.truncate(0);
         {
-            let mut d = DeleteBulk::new(self, output);
-            d.delete_bulk(drv);
+            let mut d = DeleteRange::new(self, output);
+            d.delete_range(drv);
         }
         self.size -= output.len();
     }

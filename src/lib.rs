@@ -3,7 +3,7 @@ extern crate test;
 extern crate rand;
 
 mod base;
-mod delete_bulk;
+mod delete_range;
 
 pub use base::{Item, ImplicitTree, ImplicitTreeRefill, Node, DriverFromTo};
 
@@ -13,8 +13,8 @@ pub use base::{Item, ImplicitTree, ImplicitTreeRefill, Node, DriverFromTo};
 
 #[cfg(test)]
 mod tests {
-    use base::{Item, ImplicitTree, Node, DriverFromTo};
-    use delete_bulk::{TraversalDecision, TraversalDriver};
+    use base::{Item, ImplicitTree, Node, DriverFromTo, ImplicitTreeRefill};
+    use delete_range::{TraversalDecision, TraversalDriver};
 
     type Tree = ImplicitTree<usize>;
 
@@ -29,11 +29,11 @@ mod tests {
     }
 
     #[test]
-    fn delete_bulk4() {
+    fn delete_range4() {
         let mut tree = Tree::new(vec![1, 2, 3, 4]);
         let mut drv = DriverFromTo::new(2,2);
         let mut output = Vec::with_capacity(tree.size());
-        tree.delete_bulk(&mut drv, &mut output);
+        tree.delete_range(&mut drv, &mut output);
         println!("tree: {:?}", &tree);
         println!("output: {:?}", &output);
 //        panic!();
@@ -48,14 +48,14 @@ mod tests {
         let (from, to) = from_to;
         let mut drv = DriverFromTo::new(from, to);
         let mut output = Vec::with_capacity(tree.size());
-        tree.delete_bulk(&mut drv, &mut output);
+        tree.delete_range(&mut drv, &mut output);
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
         assert_eq!(format!("{:?}", &output), format!("{:?}", expect_out));
     }
 
 
     #[test]
-    fn delete_bulk_prebuilt() {
+    fn delete_range_prebuilt() {
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (1,1),
                       &[(2, 3), (0, 0), (3, 2), (0, 0), (0, 0), (0, 0), (4, 1)], &[1]);
 
@@ -123,26 +123,26 @@ mod tests {
 
 
     #[test]
-    fn delete_bulk_exhaustive() {
+    fn delete_range_exhaustive() {
         for i in 1..7 {
-            delete_bulk_exhaustive_n(i);
+            delete_range_exhaustive_n(i);
         }
     }
 
-    fn delete_bulk_exhaustive_n(n: usize) {
+    fn delete_range_exhaustive_n(n: usize) {
         let elems: Vec<_> = (1..n+1).collect();
         println!("exhaustive {}: elems={:?} ------------------------", n, &elems);
 
         let mut stack = vec![TreeRangeInfo { range: (1..n+1), root_idx: 0 }];
         let mut items: Vec<usize> = vec![0; 1 << n];
-        delete_bulk_exhaustive_rec(&mut stack, &mut items);
+        delete_range_exhaustive_rec(&mut stack, &mut items);
     }
 
-    fn delete_bulk_exhaustive_rec(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>) {
+    fn delete_range_exhaustive_rec(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>) {
         if stack.is_empty() {
             let nodes: Vec<Node<usize>> = mk_prebuilt(items);
             let tree = Tree::with_nodes(nodes);
-            delete_bulk_exhaustive_with_tree(tree);
+            delete_range_exhaustive_with_tree(tree);
         } else {
             let info = stack.pop().unwrap();
             let (lefti, righti) = (Tree::lefti(info.root_idx), Tree::righti(info.root_idx));
@@ -162,7 +162,7 @@ mod tests {
                     pushed += 1;
                 }
 
-                delete_bulk_exhaustive_rec(stack, items);
+                delete_range_exhaustive_rec(stack, items);
 
                 for _ in 0..pushed {
                     stack.pop();
@@ -175,7 +175,7 @@ mod tests {
     }
 
 
-    fn delete_bulk_exhaustive_with_tree(tree: Tree) {
+    fn delete_range_exhaustive_with_tree(tree: Tree) {
         let n = tree.size();
         let mut output = Vec::with_capacity(n);
         for i in 1..n+1 {
@@ -184,13 +184,13 @@ mod tests {
                 let mut drv = DriverFromTo::new(i, j);
 //                println!("from={}, to={}", i, j);
                 output.truncate(0);
-                tree_mod.delete_bulk(&mut drv, &mut output);
-                delete_bulk_exhaustive_check(n, i, j, &mut output, tree_mod, &tree);
+                tree_mod.delete_range(&mut drv, &mut output);
+                delete_range_exhaustive_check(n, i, j, &mut output, tree_mod, &tree);
             }
         }
     }
 
-    fn delete_bulk_exhaustive_check(n: usize, i: usize, j: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
+    fn delete_range_exhaustive_check(n: usize, i: usize, j: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
         assert!(output.len() == j-i+1);
         assert!(tree_mod.size() + output.len() == n);
 
@@ -238,102 +238,102 @@ mod tests {
     use test;
 
     #[bench]
-    fn bench_bulk_delete_00100(bencher: &mut Bencher) {
-        bench_bulk_delete_n(100, bencher);
+    fn bench_delete_range_00100(bencher: &mut Bencher) {
+        bench_delete_range_n(100, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_01022(bencher: &mut Bencher) {
-        bench_bulk_delete_n(1022, bencher);
+    fn bench_delete_range_01022(bencher: &mut Bencher) {
+        bench_delete_range_n(1022, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_01023(bencher: &mut Bencher) {
-        bench_bulk_delete_n(1023, bencher);
+    fn bench_delete_range_01023(bencher: &mut Bencher) {
+        bench_delete_range_n(1023, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_02046(bencher: &mut Bencher) {
-        bench_bulk_delete_n(2046, bencher);
+    fn bench_delete_range_02046(bencher: &mut Bencher) {
+        bench_delete_range_n(2046, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_02047(bencher: &mut Bencher) {
-        bench_bulk_delete_n(2047, bencher);
+    fn bench_delete_range_02047(bencher: &mut Bencher) {
+        bench_delete_range_n(2047, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_04094(bencher: &mut Bencher) {
-        bench_bulk_delete_n(4094, bencher);
+    fn bench_delete_range_04094(bencher: &mut Bencher) {
+        bench_delete_range_n(4094, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_04095(bencher: &mut Bencher) {
-        bench_bulk_delete_n(4095, bencher);
+    fn bench_delete_range_04095(bencher: &mut Bencher) {
+        bench_delete_range_n(4095, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_05000(bencher: &mut Bencher) {
-        bench_bulk_delete_n(5000, bencher);
+    fn bench_delete_range_05000(bencher: &mut Bencher) {
+        bench_delete_range_n(5000, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_08190(bencher: &mut Bencher) {
-        bench_bulk_delete_n(8190, bencher);
+    fn bench_delete_range_08190(bencher: &mut Bencher) {
+        bench_delete_range_n(8190, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_08191(bencher: &mut Bencher) {
-        bench_bulk_delete_n(8191, bencher);
+    fn bench_delete_range_08191(bencher: &mut Bencher) {
+        bench_delete_range_n(8191, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_10000(bencher: &mut Bencher) {
-        bench_bulk_delete_n(10000, bencher);
+    fn bench_delete_range_10000(bencher: &mut Bencher) {
+        bench_delete_range_n(10000, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_16000(bencher: &mut Bencher) {
-        bench_bulk_delete_n(16000, bencher);
+    fn bench_delete_range_16000(bencher: &mut Bencher) {
+        bench_delete_range_n(16000, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_16381(bencher: &mut Bencher) {
-        bench_bulk_delete_n(16381, bencher);
+    fn bench_delete_range_16381(bencher: &mut Bencher) {
+        bench_delete_range_n(16381, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_16382(bencher: &mut Bencher) {
-        bench_bulk_delete_n(test::black_box(16382), bencher);
+    fn bench_delete_range_16382(bencher: &mut Bencher) {
+        bench_delete_range_n(test::black_box(16382), bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_16383(bencher: &mut Bencher) {
-        bench_bulk_delete_n(test::black_box(16383), bencher);
+    fn bench_delete_range_16383(bencher: &mut Bencher) {
+        bench_delete_range_n(test::black_box(16383), bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_25000(bencher: &mut Bencher) {
-        bench_bulk_delete_n(25000, bencher);
+    fn bench_delete_range_25000(bencher: &mut Bencher) {
+        bench_delete_range_n(25000, bencher);
     }
 
     #[bench]
-    fn bench_bulk_delete_50000(bencher: &mut Bencher) {
-        bench_bulk_delete_n(50000, bencher);
+    fn bench_delete_range_50000(bencher: &mut Bencher) {
+        bench_delete_range_n(50000, bencher);
     }
 
 //    #[bench]
-//    fn bench_bulk_delete_100000(bencher: &mut Bencher) {
-//        bench_bulk_delete_n(100000, bencher);
+//    fn bench_delete_range_100000(bencher: &mut Bencher) {
+//        bench_delete_range_n(100000, bencher);
 //    }
 //
 //    #[bench]
-//    fn bench_bulk_delete_10000000(bencher: &mut Bencher) {
-//        bench_bulk_delete_n(10000000, bencher);
+//    fn bench_delete_range_10000000(bencher: &mut Bencher) {
+//        bench_delete_range_n(10000000, bencher);
 //    }
 
     #[inline(never)]
-    fn bench_bulk_delete_n(n: usize, bencher: &mut Bencher) {
+    fn bench_delete_range_n(n: usize, bencher: &mut Bencher) {
         let elems: Vec<_> = (1..n+1).collect();
 
         let perm = {
@@ -364,7 +364,7 @@ mod tests {
             for i in 0..100 {
                 output.truncate(0);
                 let x = perm[i];
-                copy.delete_bulk(&mut DriverFromTo::new((x-1)*n/100, x*n/100), &mut output);
+                copy.delete_range(&mut DriverFromTo::new((x-1)*n/100, x*n/100), &mut output);
                 test::black_box(output.len());
             }
         });

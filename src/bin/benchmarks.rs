@@ -76,7 +76,7 @@ fn imptree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
         let start = time::SystemTime::now();
         for i in 0..rm_items {
             output.truncate(0);
-            let x = copy.delete_bulk(&mut DriverFromTo::new(keys[i], keys[i]), &mut output);
+            let x = copy.delete_range(&mut DriverFromTo::new(keys[i], keys[i]), &mut output);
             test::black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
@@ -88,7 +88,7 @@ fn imptree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
 
 
 
-fn btree_bulk_delete_n(n: usize, rm_items: usize, iters: u64) {
+fn btree_delete_range_n(n: usize, rm_items: usize, iters: u64) {
     let mut rng = XorShiftRng::from_seed([1,2,3,4]);
     let mut elapsed_nanos = 0;
     for _ in 0..iters {
@@ -111,10 +111,10 @@ fn btree_bulk_delete_n(n: usize, rm_items: usize, iters: u64) {
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to bulk delete {} elements from BTreeMap of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete range of {} elements from BTreeMap of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
-fn imptree_bulk_delete_n(n: usize, rm_items: usize, iters: u64) {
+fn imptree_delete_range_n(n: usize, rm_items: usize, iters: u64) {
     let mut rng = XorShiftRng::from_seed([1,2,3,4]);
     let mut elapsed_nanos = 0;
 
@@ -132,13 +132,13 @@ fn imptree_bulk_delete_n(n: usize, rm_items: usize, iters: u64) {
         copy.refill(&tree);
 
         let start = time::SystemTime::now();
-        let x = copy.delete_bulk(&mut DriverFromTo::new(from, from+rm_items), &mut output);
+        let x = copy.delete_range(&mut DriverFromTo::new(from, from+rm_items), &mut output);
         test::black_box(x);
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to bulk delete {} elements from implicit_tree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete range of {} elements from implicit_tree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
 #[inline]
@@ -148,18 +148,20 @@ fn nanos(d: Duration) -> u64 {
 
 
 fn main() {
-    imptree_bulk_delete_n(100, 100, 10000000);
+    imptree_delete_range_n(100, 100, 10000000);
 
 
-    imptree_bulk_delete_n(100, 100, 5000000);
-    imptree_bulk_delete_n(1000, 100, 1200000);
-    imptree_bulk_delete_n(10000, 100, 500000);
-    imptree_bulk_delete_n(100000, 100, 30000);
+    imptree_delete_range_n(100, 100, 5000000);
+    imptree_delete_range_n(1000, 100, 1200000);
+    imptree_delete_range_n(10000, 100, 500000);
+    imptree_delete_range_n(100000, 100, 30000);
+    imptree_delete_range_n(1000000, 100, 10000);
 
-    btree_bulk_delete_n(100, 100, 200000);
-    btree_bulk_delete_n(1000, 100, 200000);
-    btree_bulk_delete_n(10000, 100, 20000);
-    btree_bulk_delete_n(100000, 100, 5000);
+    btree_delete_range_n(100, 100, 200000);
+    btree_delete_range_n(1000, 100, 200000);
+    btree_delete_range_n(10000, 100, 20000);
+    btree_delete_range_n(100000, 100, 5000);
+    btree_delete_range_n(1000000, 100, 2000);
 
     imptree_single_delete_n(100, 100, 100000);
     imptree_single_delete_n(1000, 100, 30000);

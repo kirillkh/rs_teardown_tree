@@ -26,33 +26,33 @@ enum ItemListId {
     MIN, MAX, OUT
 }
 
-pub struct DeleteBulk<'a, T: 'a+Item> {
+pub struct DeleteRange<'a, T: 'a+Item> {
     tree: &'a mut ImplicitTree<T>,
     replacements_min: Vec<T>, replacements_max: Vec<T>,
     pub output: &'a mut Vec<T>
 }
 
-impl<'a, T: Item> DeleteBulk<'a, T> {
-    pub fn new(tree: &'a mut ImplicitTree<T>, output: &'a mut Vec<T>) -> DeleteBulk<'a, T> {
+impl<'a, T: Item> DeleteRange<'a, T> {
+    pub fn new(tree: &'a mut ImplicitTree<T>, output: &'a mut Vec<T>) -> DeleteRange<'a, T> {
         let height = tree.node(0).height as usize;
         let replacements_min = Vec::with_capacity(height);
         let replacements_max = Vec::with_capacity(height);
-        DeleteBulk { tree: tree, replacements_min: replacements_min, replacements_max: replacements_max, output: output }
+        DeleteRange { tree: tree, replacements_min: replacements_min, replacements_max: replacements_max, output: output }
     }
 
-    pub fn delete_bulk<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
+    pub fn delete_range<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
 //        // TEST
 //        let orig = self.tree.clone();
 
         if !self.tree.is_null(0) {
-            self.delete_bulk_recurse(drv, 0, 0, 0);
+            self.delete_range_recurse(drv, 0, 0, 0);
             assert!(self.replacements_min.is_empty() && self.replacements_max.is_empty(),
                     "tree: {:?}, replacements_min: {:?}, replacements_max: {:?}, output: {:?}", self.tree, self.replacements_min, self.replacements_max, self.output);
         }
     }
 
 
-    fn delete_bulk_recurse<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
+    fn delete_range_recurse<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
                                                   min_reqs: usize, max_reqs: usize) {
         let decision = drv.decide(self.node_mut(idx));
         if decision.consume_curr {
@@ -205,7 +205,7 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
     #[inline]
     fn descend_minmax_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
                                                   min_reqs: usize, max_reqs: usize) {
-        self.delete_bulk_recurse(drv, ImplicitTree::<T>::lefti(idx), min_reqs, max_reqs);
+        self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx), min_reqs, max_reqs);
 
         // TODO: we do not handle correctly the case where after return from recursion there are some open min_reqs.
         // That is because it's a case that doesn't happen with range queries.
@@ -222,7 +222,7 @@ impl<'a, T: Item> DeleteBulk<'a, T> {
     #[inline]
     fn descend_minmax_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
                                                    min_reqs: usize, max_reqs: usize) {
-        self.delete_bulk_recurse(drv, ImplicitTree::<T>::righti(idx), min_reqs, max_reqs);
+        self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx), min_reqs, max_reqs);
 
         if !self.open_min_reqs(min_reqs) {
             let node = self.tree.node_mut(idx);
