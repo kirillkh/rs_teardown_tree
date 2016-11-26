@@ -173,16 +173,22 @@ fn nanos(d: Duration) -> u64 {
     d.as_secs()*1000000000 + d.subsec_nanos() as u64
 }
 
+#[cfg(target_os = "windows")]
+fn set_affinity() {
+    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
+}
+
+#[cfg(not(target_os = "windows"))]
+fn set_affinity() {
+}
 
 fn main() {
-    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
-
-
 //    imptree_delete_range_n(100, 100, 10000000);
 
 //    // TEST
 //    bench_delete_range_n::<Tree>(1000000, 100, 10000);
 //    return;
+    set_affinity();
 
     bench_delete_range_n::<Tree>(100000, 100, 15000);
     bench_delete_range_n::<Tree>(1000000, 100, 2000);
