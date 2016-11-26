@@ -2,6 +2,7 @@
 extern crate test;
 extern crate rand;
 extern crate implicit_tree;
+extern crate wio;
 use std::time;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -157,7 +158,7 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
             copy.del_range(*from, *to, &mut output);
             test::black_box(output.len());
         }
-        assert!(copy.sz() == 0);
+        debug_assert!(copy.sz() == 0);
     }
     let elapsed = start.elapsed().unwrap();
     let avg_nanos = nanos(elapsed) / iters;
@@ -174,34 +175,29 @@ fn nanos(d: Duration) -> u64 {
 
 
 fn main() {
+    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
+
+
 //    imptree_delete_range_n(100, 100, 10000000);
 
-    bench_delete_range_n::<BTreeSet<usize>>(100, 100, 600000);
-    bench_delete_range_n::<BTreeSet<usize>>(1000, 100, 600000);
-    bench_delete_range_n::<BTreeSet<usize>>(10000, 100, 20000);
-    bench_delete_range_n::<BTreeSet<usize>>(100000, 100, 5000);
-    bench_delete_range_n::<BTreeSet<usize>>(1000000, 100, 1000);
+//    // TEST
+//    bench_delete_range_n::<Tree>(1000000, 100, 10000);
+//    return;
+
+    bench_delete_range_n::<Tree>(100000, 100, 15000);
+    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
     bench_delete_range_n::<Tree>(100, 100, 5000000);
-    bench_delete_range_n::<Tree>(1000, 100, 500000);
+    bench_delete_range_n::<Tree>(1000, 100, 800000);
     bench_delete_range_n::<Tree>(10000, 100, 170000);
     bench_delete_range_n::<Tree>(100000, 100, 15000);
-    bench_delete_range_n::<Tree>(1000000, 100, 5000);
+    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
-
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(100, 100, 50000);
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 100, 15000);
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(10000, 100, 8000);
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(100000, 100, 2000);
     bench_clone_teardown_cycle::<Tree>(100, 100, 500000);
     bench_clone_teardown_cycle::<Tree>(1000, 100, 150000);
     bench_clone_teardown_cycle::<Tree>(10000, 100, 10000);
     bench_clone_teardown_cycle::<Tree>(100000, 100, 5000);
 
-
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 1000, 15000);
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(10000, 1000, 8000);
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(100000, 1000, 2000);
     bench_clone_teardown_cycle::<Tree>(1000, 1000, 15000);
     bench_clone_teardown_cycle::<Tree>(10000, 1000, 5000);
     bench_clone_teardown_cycle::<Tree>(100000, 1000, 5000);
@@ -210,6 +206,21 @@ fn main() {
     imptree_single_delete_n(1000, 100, 30000);
     imptree_single_delete_n(10000, 100, 10000);
     imptree_single_delete_n(100000, 100, 800);
+
+    bench_delete_range_n::<BTreeSet<usize>>(100, 100, 600000);
+    bench_delete_range_n::<BTreeSet<usize>>(1000, 100, 600000);
+    bench_delete_range_n::<BTreeSet<usize>>(10000, 100, 20000);
+    bench_delete_range_n::<BTreeSet<usize>>(100000, 100, 5000);
+    bench_delete_range_n::<BTreeSet<usize>>(1000000, 100, 1000);
+
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(100, 100, 50000);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 100, 15000);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(10000, 100, 8000);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(100000, 100, 2000);
+
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 1000, 15000);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(10000, 1000, 8000);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(100000, 1000, 2000);
 
     btree_single_delete_n(100, 100, 100000);
     btree_single_delete_n(1000, 100, 30000);
@@ -320,7 +331,7 @@ impl TeardownTreeCopy for BTreeSetCopy {
     }
 
     fn rfill(&mut self, master: &Self::Master) {
-        assert!(self.set.is_empty(), "size={}", self.set.len());
+        debug_assert!(self.set.is_empty(), "size={}", self.set.len());
         self.set = master.clone();
     }
 

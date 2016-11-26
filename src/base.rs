@@ -34,7 +34,7 @@ struct DeleteRangeCache<T: Item> {
 }
 
 impl<T: Item> DeleteRangeCache<T> {
-    pub fn new(height: usize, capacity: usize) -> DeleteRangeCache<T> {
+    pub fn new(height: usize) -> DeleteRangeCache<T> {
         let replacements_min = Vec::with_capacity(height);
         let replacements_max = Vec::with_capacity(height);
         DeleteRangeCache { replacements_min: replacements_min, replacements_max: replacements_max }
@@ -51,7 +51,7 @@ pub trait ImplicitTreeRefill<T: Copy+Item> {
 impl<T: Copy+Item> ImplicitTreeRefill<T> for ImplicitTree<T> {
     fn refill(&mut self, master: &ImplicitTree<T>) {
         let len = self.data.len();
-        assert!(len == master.data.len());
+        debug_assert!(len == master.data.len());
         self.data.truncate(0);
         unsafe {
             ptr::copy_nonoverlapping(master.data.as_ptr(), self.data.as_mut_ptr(), len);
@@ -110,7 +110,7 @@ impl<T: Item> ImplicitTree<T> {
 
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
         Self::build(&mut sorted, 0, &mut data);
-        let cache = DeleteRangeCache::new(data[0].height as usize, data.len());
+        let cache = DeleteRangeCache::new(data[0].height as usize);
         ImplicitTree { data: data, size: size, delete_range_cache: cache }
     }
 
@@ -128,7 +128,7 @@ impl<T: Item> ImplicitTree<T> {
         }
         ::std::mem::forget(nodes);
 
-        let cache = DeleteRangeCache::new(data[0].height as usize, data.len());
+        let cache = DeleteRangeCache::new(data[0].height as usize);
         ImplicitTree { data: data, size: size, delete_range_cache: cache }
     }
 
@@ -160,7 +160,7 @@ impl<T: Item> ImplicitTree<T> {
 
 
     pub fn delete_range<D: TraversalDriver<T>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
-        assert!(output.is_empty());
+        debug_assert!(output.is_empty());
         output.truncate(0);
         {
             let mut d = DeleteRange::new(self, output);
@@ -185,10 +185,12 @@ impl<T: Item> ImplicitTree<T> {
     }
 
 
+    #[inline(always)]
     pub fn node(&self, idx: usize) -> &Node<T> {
         &self.data[idx]
     }
 
+    #[inline(always)]
     pub fn node_mut(&mut self, idx: usize) -> &mut Node<T> {
         &mut self.data[idx]
     }
@@ -200,7 +202,7 @@ impl<T: Item> ImplicitTree<T> {
 
 
     fn delete_idx_recursive(&mut self, idx: usize) -> T {
-        assert!(!self.is_null(idx));
+        debug_assert!(!self.is_null(idx));
 
         if !self.has_left(idx) && !self.has_right(idx) {
             let root = self.node_mut(idx);
@@ -229,7 +231,7 @@ impl<T: Item> ImplicitTree<T> {
     pub fn update_height(&mut self, idx: usize) {
         let h = max(self.left(idx).height, self.right(idx).height) + 1;
         let node = self.node_mut(idx);
-        assert!(node.item.is_some());
+        debug_assert!(node.item.is_some());
         node.height =  h;
     }
 
@@ -284,33 +286,33 @@ impl<T: Item> ImplicitTree<T> {
     }
 
 
-    #[inline]
+    #[inline(always)]
     pub fn parenti(idx: usize) -> usize {
         (idx-1) >> 1
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn lefti(idx: usize) -> usize {
         (idx<<1) + 1
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn righti(idx: usize) -> usize {
         (idx<<1) + 2
     }
 
 
-    #[inline]
+    #[inline(always)]
     pub fn parent(&self, idx: usize) -> &Node<T> {
         &self.data[Self::parenti(idx)]
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn left(&self, idx: usize) -> &Node<T> {
         &self.data[Self::lefti(idx)]
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn right(&self, idx: usize) -> &Node<T> {
         &self.data[Self::righti(idx)]
     }
@@ -333,21 +335,22 @@ impl<T: Item> ImplicitTree<T> {
 
 
 
-    #[inline]
+    #[inline(always)]
     pub fn has_left(&self, idx: usize) -> bool {
         self.left(idx).height != 0
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn has_right(&self, idx: usize) -> bool {
         self.right(idx).height != 0
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn is_null(&self, idx: usize) -> bool {
         self.data[idx].item.is_none()
     }
 
+    #[inline(always)]
     pub fn size(&self) -> usize {
         self.size
     }

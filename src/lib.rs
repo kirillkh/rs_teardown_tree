@@ -191,8 +191,8 @@ mod tests {
     }
 
     fn delete_range_exhaustive_check(n: usize, i: usize, j: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
-        assert!(output.len() == j-i+1);
-        assert!(tree_mod.size() + output.len() == n);
+        debug_assert!(output.len() == j-i+1);
+        debug_assert!(tree_mod.size() + output.len() == n);
 
         output.sort();
         assert_eq!(output, &(i..j+1).collect::<Vec<_>>());
@@ -206,7 +206,7 @@ mod tests {
 
         let node = tree.node(idx);
         if node.height == 0 || node.item.is_none() {
-            assert!(node.height == 0 && node.item.is_none());
+            debug_assert!(node.height == 0 && node.item.is_none());
             return None;
         } else {
             let item = node.item.unwrap();
@@ -215,14 +215,14 @@ mod tests {
 
             let min =
                 if let Some((lmin, lmax)) = left {
-                    assert!(lmax < item, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    debug_assert!(lmax < item, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
                     lmin
                 } else {
                     item
                 };
             let max =
                 if let Some((rmin, rmax)) = right {
-                    assert!(item < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    debug_assert!(item < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
                     rmax
                 } else {
                     item
