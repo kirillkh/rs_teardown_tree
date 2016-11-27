@@ -152,7 +152,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
 
     //---- traverse_shape_* ------------------------------------------------------------------------
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_leaf(&mut self, idx: usize, consumed: bool) {
         let node = self.node_mut(idx);
         if consumed {
@@ -173,7 +173,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     // tested -- inlining really helps
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
         let mut need_replacement = decision.consume();
         let node = self.node_mut(idx);
@@ -209,7 +209,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     // tested -- inlining really helps
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
         let node = self.node_mut(idx);
 
@@ -247,7 +247,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     // tested -- inlining really helps
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_dual<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
         let node = self.node_mut(idx);
         let mut need_replacement = decision.consume();
