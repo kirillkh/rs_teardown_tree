@@ -74,13 +74,13 @@ impl DriverFromTo {
 }
 
 impl TraversalDriver<usize> for DriverFromTo {
-    fn decide(&mut self, node: &mut Node<usize>) -> TraversalDecision {
-        let x = node.item.unwrap();
-        let left = self.from <= x;
-        let right = x <= self.to;
+    #[inline(always)]
+    fn decide(&mut self, x: &usize) -> TraversalDecision {
+        let left = self.from <= *x;
+        let right = *x <= self.to;
         let consume = left && right;
 
-        TraversalDecision { traverse_left: left, traverse_right: right, consume_curr: consume }
+        TraversalDecision { traverse_left: left, traverse_right: right }
     }
 }
 

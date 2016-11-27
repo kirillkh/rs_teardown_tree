@@ -4,40 +4,121 @@ use std::mem;
 
 pub trait TraversalDriver<T: Item> {
     #[inline(always)]
-    fn decide(&mut self, node: &mut Node<T>) -> TraversalDecision;
+    fn decide(&mut self, node: &T) -> TraversalDecision;
 }
 
 #[derive(Clone, Copy)]
 pub struct TraversalDecision {
     pub traverse_left: bool,
     pub traverse_right: bool,
-    pub consume_curr: bool
+}
+
+impl TraversalDecision {
+    #[inline(always)]
+    pub fn consume(&self) -> bool {
+        self.traverse_left && self.traverse_right
+    }
 }
 
 struct RejectDriver;
 impl<T: Item> TraversalDriver<T> for RejectDriver {
-    fn decide(&mut self, _: &mut Node<T>) -> TraversalDecision {
-        TraversalDecision { traverse_left: false, traverse_right: false, consume_curr: false }
+    fn decide(&mut self, _: &T) -> TraversalDecision {
+        TraversalDecision { traverse_left: false, traverse_right: false }
     }
 }
 
 
-enum ItemListId {
-    MIN, MAX, OUT
+type Slot<T> = Option<T>;
+
+
+#[derive(Clone, Debug)]
+struct SlotStack<T: Item> {
+    nslots: usize,
+    nfilled: usize,
+    slots: Vec<Slot<T>>
 }
 
+impl<T: Item> SlotStack<T> {
+    fn new(capacity: usize) -> SlotStack<T> {
+        SlotStack { nslots: 0, nfilled: 0, slots: vec![None; capacity]}
+    }
+
+    #[inline(always)]
+    fn push_slot(&mut self) {
+        debug_assert!(self.nslots < self.slots.len());
+        debug_assert!(self.slots[self.nslots].is_none());
+        self.nslots += 1;
+    }
+
+    #[inline(always)]
+    fn pop(&mut self) -> Slot<T> {
+        debug_assert!(self.nslots > 0);
+        if self.nfilled == self.nslots {
+            self.nfilled -= 1;
+        }
+        self.nslots -= 1;
+        self.slots[self.nslots].take()
+    }
+
+    #[inline(always)]
+    fn fill_slot(&mut self, item: T) {
+        debug_assert!(self.nfilled < self.nslots);
+        debug_assert!(self.slots[self.nfilled].is_none());
+        self.slots[self.nfilled] = Some(item);
+        self.nfilled += 1;
+    }
+
+    #[inline(always)]
+    fn fill_slot_opt(&mut self, item: Option<T>) {
+        debug_assert!(item.is_some());
+        debug_assert!(self.nfilled < self.nslots);
+        debug_assert!(self.slots[self.nfilled].is_none());
+        self.slots[self.nfilled] = item;
+        self.nfilled += 1;
+    }
+
+//    fn substack(&self, from: usize) -> SlotStack<T> {
+//        let slots_max_left = Self::subvec(&mut self.slots_max, len);
+//        let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
+//
+//    }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.nslots == 0
+    }
+
+    #[inline(always)]
+    fn nslots(&self) -> usize {
+        self.nslots
+    }
+
+    #[inline(always)]
+    fn nfilled(&self) -> usize {
+        self.nfilled
+    }
+}
+
+
+
+
+//enum ItemListId {
+//    MIN, MAX, //OUT
+//}
+
 pub struct DeleteRange<'a, T: 'a+Item> {
+
     tree: &'a mut ImplicitTree<T>,
-    replacements_min: Vec<T>, replacements_max: Vec<T>,
+    slots_min: SlotStack<T>, slots_max: SlotStack<T>,
     pub output: &'a mut Vec<T>
 }
 
 impl<'a, T: Item> DeleteRange<'a, T> {
     pub fn new(tree: &'a mut ImplicitTree<T>, output: &'a mut Vec<T>) -> DeleteRange<'a, T> {
         let height = tree.node(0).height as usize;
-        let replacements_min = Vec::with_capacity(height);
-        let replacements_max = Vec::with_capacity(height);
-        DeleteRange { tree: tree, replacements_min: replacements_min, replacements_max: replacements_max, output: output }
+        let slots_min = SlotStack::new(height);
+        let slots_max = SlotStack::new(height);
+        DeleteRange { tree: tree, slots_min: slots_min, slots_max: slots_max, output: output }
     }
 
     pub fn delete_range<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
@@ -45,249 +126,362 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 //        let orig = self.tree.clone();
 
         if !self.tree.is_null(0) {
-            self.delete_range_recurse(drv, 0, 0, 0);
-            debug_assert!(self.replacements_min.is_empty() && self.replacements_max.is_empty(),
-                    "tree: {:?}, replacements_min: {:?}, replacements_max: {:?}, output: {:?}", self.tree, self.replacements_min, self.replacements_max, self.output);
+            self.delete_range_recurse(drv, 0);
+            debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty(),
+                    "tree: {:?}, replacements_min: {:?}, replacements_max: {:?}, output: {:?}", self.tree, self.slots_min, self.slots_max, self.output);
         }
     }
 
     #[inline(never)]
-    fn delete_range_recurse<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
-                                                   min_reqs: usize, max_reqs: usize) {
-        let decision = drv.decide(self.node_mut(idx));
-        if decision.consume_curr {
-            self.take_item(idx, ItemListId::OUT);
+    fn delete_range_recurse<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize) {
+        let item: &mut Option<T> = &mut self.node_mut(idx).item;
+        let decision = drv.decide(item.as_ref().unwrap());
+        let consumed = decision.consume();
+        if consumed {
+            let item = item.take().unwrap();
+            self.output.push(item);
         }
 
         match (self.tree.has_left(idx), self.tree.has_right(idx)) {
-            (false, false) => self.traverse_shape_leaf(idx, decision, min_reqs, max_reqs),
-            (true, false)  => self.traverse_shape_left(drv, idx, decision, min_reqs, max_reqs),
-            (false, true)  => self.traverse_shape_right(drv, idx, decision, min_reqs, max_reqs),
-            (true, true)   => self.traverse_shape_dual(drv, idx, decision, min_reqs, max_reqs)
+            (false, false) => self.traverse_shape_leaf(idx, consumed),
+            (true, false)  => self.traverse_shape_left(drv, idx, decision),
+            (false, true)  => self.traverse_shape_right(drv, idx, decision),
+            (true, true)   => self.traverse_shape_dual(drv, idx, decision)
         }
     }
 
 
     //---- traverse_shape_* ------------------------------------------------------------------------
-    #[inline(always)]
-    fn traverse_shape_leaf(&mut self, idx: usize, decision: TraversalDecision,
-                           min_reqs: usize, max_reqs: usize) {
-        if decision.consume_curr {
-            let node = self.node_mut(idx);
+    #[inline(never)]
+    fn traverse_shape_leaf(&mut self, idx: usize, consumed: bool) {
+        let node = self.node_mut(idx);
+        if consumed {
             node.height = 0;
-        } else if self.open_min_reqs(min_reqs) {
-            let node = self.take_item(idx, ItemListId::MIN);
+        } else if self.open_min_slots() {
+//            let node = self.move_to_slot(idx, ItemListId::MIN);
+            let item = node.item.take();
+            self.slots_min.fill_slot_opt(item);
+
             node.height = 0;
-        } else if self.open_max_reqs(max_reqs) {
-            let node = self.take_item(idx, ItemListId::MAX);
+        } else if self.open_max_slots() {
+//            let node = self.move_to_slot(idx, ItemListId::MAX);
+            let item = node.item.take();
+            self.slots_max.fill_slot_opt(item);
+
             node.height = 0;
         }
     }
 
     // tested -- inlining really helps
-    #[inline(always)]
-    fn traverse_shape_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision,
-                                                  min_reqs: usize, mut max_reqs: usize) {
-        if decision.consume_curr {
-            max_reqs += 1;
-        } else if self.open_max_reqs(max_reqs) {
-            max_reqs += 1;
-            self.take_item(idx, ItemListId::MAX);
-        } else if !self.open_min_reqs(min_reqs) && !decision.traverse_left {
+    #[inline(never)]
+    fn traverse_shape_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
+        let mut need_replacement = decision.consume();
+        let node = self.node_mut(idx);
+        if need_replacement {
+        } else if self.open_max_slots() {
+            let item = node.item.take();
+            self.slots_max.fill_slot_opt(item);
+
+            need_replacement = true;
+        } else if !self.open_min_slots() && !decision.traverse_left {
             return;
         };
 
-        self.descend_minmax_left(drv, idx, min_reqs, max_reqs);
+        need_replacement = self.descend_left(drv, idx, need_replacement);
 
         // fulfill a min req if necessary
-        if self.item(idx).is_some() && self.open_min_reqs(min_reqs) {
-            self.take_item(idx, ItemListId::MIN);
+        if !need_replacement && self.open_min_slots() {
+//            self.move_to_slot(idx, ItemListId::MIN);
+            let item = node.item.take();
+            self.slots_min.fill_slot_opt(item);
+
+            need_replacement = true;
         }
 
         // update height
-        let height = if self.item(idx).is_none() {
+        let height = if need_replacement {
             0
         } else {
             let left = self.node_mut(ImplicitTree::<T>::lefti(idx));
             left.height + 1
         };
-        self.node_mut(idx).height = height;
+        node.height = height;
     }
 
     // tested -- inlining really helps
-    #[inline(always)]
-    fn traverse_shape_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision,
-                                                   mut min_reqs: usize, max_reqs: usize) {
-        if decision.consume_curr {
-            min_reqs += 1;
-        } else if self.open_min_reqs(min_reqs) {
-            min_reqs += 1;
-            self.take_item(idx, ItemListId::MIN);
-        } else if !self.open_max_reqs(max_reqs) && !decision.traverse_right {
+    #[inline(never)]
+    fn traverse_shape_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
+        let node = self.node_mut(idx);
+
+        let mut need_replacement = decision.consume();
+        if need_replacement {
+        } else if self.open_min_slots() {
+//            self.move_to_slot(idx, ItemListId::MIN);
+            let item = node.item.take();
+            self.slots_min.fill_slot_opt(item);
+
+            need_replacement = true;
+        } else if !self.open_max_slots() && !decision.traverse_right {
             return;
         }
 
-        self.descend_minmax_right(drv, idx, min_reqs, max_reqs);
+        need_replacement = self.descend_right(drv, idx, need_replacement);
 
         // fulfill a max req if necessary
-        if self.item(idx).is_some() && self.open_max_reqs(max_reqs) {
-            self.take_item(idx, ItemListId::MAX);
+        if !need_replacement && self.open_max_slots() {
+//            self.move_to_slot(idx, ItemListId::MAX);
+            let item = node.item.take();
+            self.slots_max.fill_slot_opt(item);
+
+            need_replacement = true;
         }
 
         // update height
-        let height = if self.item(idx).is_none() {
+        let height = if need_replacement {
             0
         } else {
             let right = self.node_mut(ImplicitTree::<T>::righti(idx));
             right.height + 1
         };
-        self.node_mut(idx).height = height;
+        node.height = height;
     }
 
     // tested -- inlining really helps
-    #[inline(always)]
-    fn traverse_shape_dual<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision,
-                                                  mut min_reqs: usize, mut max_reqs: usize) {
-        unsafe {
-            let node = self.node_mut(idx) as *mut Node<T>;
+    #[inline(never)]
+    fn traverse_shape_dual<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
+        let node = self.node_mut(idx);
+        let mut need_replacement = decision.consume();
 
-            // left subtree
-            let max_reqs_left = if decision.consume_curr { 1 } else { 0 };
-            if decision.traverse_left || self.open_min_reqs(min_reqs) || decision.consume_curr {
-                let len = self.replacements_max.len();
-                let replacements_max_left = Self::subvec(&mut self.replacements_max, len);
-                let replacements_max_orig = mem::replace(&mut self.replacements_max, replacements_max_left);
-                {
-                    self.descend_minmax_left(drv, idx, min_reqs, max_reqs_left);
-                }
-                let replacements_max_left = mem::replace(&mut self.replacements_max, replacements_max_orig);
-                mem::forget(replacements_max_left);
+        // left subtree
+        if decision.traverse_left || self.open_min_slots() || need_replacement {
+//            let nslots = self.slots_max.nslots();
+            let slots_max_left = Self::pin_stack(&mut self.slots_max);
+            let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
+
+            {
+                need_replacement = self.descend_left(drv, idx, need_replacement);
             }
 
-            // this node
-            if (*node).item.is_none() {
-                // this node was consumed, and the left subtree did not have a replacement
-                min_reqs += 1;
-            } else if self.open_min_reqs(min_reqs) {
-                // this node is the minimum of the tree: use it to fulfill a min request
-                min_reqs += 1;
-//              self.take_item(idx, ItemListId::MIN);
-                let item = (*node).item.take().unwrap();
-                debug_assert!(self.replacements_min.len() < self.replacements_min.capacity()); // there should be no dynamic allocation here! we pre-allocate enough space in all 3 vecs
-                self.replacements_min.push(item);
-            }
+            let slots_max_left = mem::replace(&mut self.slots_max, slots_max_orig);
+            mem::forget(slots_max_left);
+        }
 
-            // right subtree
-            if decision.traverse_right || self.open_reqs(min_reqs, max_reqs) {
-                self.descend_minmax_right(drv, idx, min_reqs, max_reqs);
-            }
+        // this node
+        if !need_replacement && self.open_min_slots() {
+            // this node is the minimum of the tree: use it to fulfill a min request
+//            self.move_to_slot(idx, ItemListId::MIN);
+            let item = node.item.take();
+            self.slots_min.fill_slot_opt(item);
 
-            // this node again
-            if (*node).item.is_none() {
-                // this node was consumed, and both subtrees are empty now: nothing more to do here
-                (*node).height = 0;
-            } else {
-                if self.open_max_reqs(max_reqs) {
-                    // this node is the maximum of the tree: use it to fulfill a max request
-                    max_reqs += 1;
-                    let item = (*node).item.take().unwrap();
-                    debug_assert!(self.replacements_max.len() < self.replacements_max.capacity()); // there should be no dynamic allocation here! we pre-allocate enough space in all 3 vecs
-                    self.replacements_max.push(item);
+            need_replacement = true;
+        }
 
-                    // fulfill the remaining max requests from the left subtree
-                    if self.tree.has_left(idx) {
-                        self.take_max_left(idx, max_reqs)
-                    }
-                }
+        // right subtree
+        if decision.traverse_right || self.open_slots() || need_replacement {
+            need_replacement = self.descend_right(drv, idx, need_replacement);
+        }
 
-                // update height
-                if (*node).item.is_none() {
-                    (*node).height = 0;
+        // this node again
+        if need_replacement {
+            // this node was consumed, and both subtrees are empty now: nothing more to do here
+            node.height = 0;
+        } else {
+            if self.open_max_slots() {
+                // this node is the maximum of the tree: use it to fulfill a max request
+//                self.move_to_slot(idx, ItemListId::MAX);
+                let item = node.item.take();
+                self.slots_max.fill_slot_opt(item);
+
+                // fulfill the remaining max requests from the left subtree
+                need_replacement = if self.tree.has_left(idx) {
+                    debug_assert!(self.slots_min.is_empty());
+                    self.descend_left(&mut RejectDriver, idx, true)
                 } else {
-                    self.tree.update_height(idx);
+                    true
                 }
+            }
+
+            // update height
+            if need_replacement {
+                node.height = 0;
+            } else {
+                self.tree.update_height(idx);
             }
         }
     }
 
 
     //---- descend_* -------------------------------------------------------------------------------
-    #[inline]
-    fn descend_minmax_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
-                                                  min_reqs: usize, max_reqs: usize) {
-        self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx), min_reqs, max_reqs);
+    /// Returns true if the item needs replacement after recursive call, false otherwise.
+    #[inline(always)]
+    fn descend_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
+                                           push_slot: bool) -> bool {
+        if push_slot {
+            debug_assert!(self.node(idx).item.is_none());
+            self.slots_max.push_slot()
+        }
+
+        self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx));
 
         // TODO: we do not handle correctly the case where after return from recursion there are some open min_reqs.
         // That is because it's a case that doesn't happen with range queries.
 
-        if !self.open_max_reqs(max_reqs) {
-            let node = self.tree.node_mut(idx);
-            if node.item.is_none() {
-                node.item = self.replacements_max.pop();
-                debug_assert!(node.item.is_some());
+        if push_slot {
+            let slot = self.slots_max.pop();
+
+            if slot.is_some() {
+                debug_assert!(self.node(idx).item.is_none());
+                self.node_mut(idx).item = slot;
+                false
+            } else {
+                true
             }
+        } else {
+            false
         }
+//        if push_slot {
+////            let node = self.node_mut(idx);
+//            debug_assert!(self.node(idx).item.is_none());
+//            self.slots_max.push_slot();
+//
+//            self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx));
+//
+//            // TODO: we do not handle correctly the case where after return from recursion there are some open slots_min.
+//            // That is because it's a case that doesn't happen with range queries.
+//            let slot = self.slots_max.pop();
+//
+//            if slot.is_some() {
+//                debug_assert!(self.node(idx).item.is_none());
+//                self.node_mut(idx).item = slot;
+//                false
+//            } else {
+//                true
+//            }
+//        } else {
+//            self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx));
+//            false
+//        }
     }
 
-    #[inline]
-    fn descend_minmax_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
-                                                   min_reqs: usize, max_reqs: usize) {
-        self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx), min_reqs, max_reqs);
+    /// Returns true if the item needs replacement after recursive call, false otherwise.
+    #[inline(always)]
+    fn descend_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize,
+                                            push_slot: bool) -> bool {
+        if push_slot {
+            debug_assert!(self.node(idx).item.is_none());
+            self.slots_min.push_slot()
+        }
 
-        if !self.open_min_reqs(min_reqs) {
-            let node = self.tree.node_mut(idx);
-            if node.item.is_none() {
-                node.item = self.replacements_min.pop();
-                debug_assert!(node.item.is_some());
+        self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx));
+
+        if push_slot {
+            let slot = self.slots_min.pop();
+
+            if slot.is_some() {
+                debug_assert!(self.node(idx).item.is_none());
+                self.node_mut(idx).item = slot;
+                false
+            } else {
+                true
             }
+        } else {
+            false
         }
+//        if push_slot {
+////            let node = self.node_mut(idx);
+//            debug_assert!(self.node(idx).item.is_none());
+//            self.slots_min.push_slot();
+//
+//            self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx));
+//
+//            let slot = self.slots_min.pop();
+//
+//            if slot.is_some() {
+//                debug_assert!(self.node(idx).item.is_none());
+//                self.node_mut(idx).item = slot;
+//                false
+//            } else {
+//                true
+//            }
+//        } else {
+//            self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx));
+//            false
+//        }
     }
 
-    #[inline]
-    fn take_max_left(&mut self, idx: usize, max_reqs: usize) {
-        self.descend_minmax_left(&mut RejectDriver, idx, 0, max_reqs);
-    }
+//    #[inline]
+//    fn take_max_left(&mut self, idx: usize, max_reqs: usize) {
+//        self.descend_left(&mut RejectDriver, idx, 0, max_reqs);
+//    }
 
 
     //---- helpers ---------------------------------------------------------------------------------
-    #[inline]
-    fn open_reqs(&self, min_reqs: usize, max_reqs: usize) -> bool {
-        self.open_min_reqs(min_reqs) || self.open_max_reqs(max_reqs)
+    #[inline(always)]
+    fn open_slots(&self) -> bool {
+        self.open_min_slots() || self.open_max_slots()
     }
 
-    #[inline]
-    fn open_min_reqs(&self, min_reqs: usize) -> bool {
-        min_reqs != self.replacements_min.len()
+    #[inline(always)]
+    fn open_min_slots(&self) -> bool {
+//        if let Some(slot) = self.slots_min.last() {
+//            slot.is_some()
+//        } else {
+//            false
+//        }
+        self.slots_min.nslots() != self.slots_min.nfilled()
     }
 
-    #[inline]
-    fn open_max_reqs(&self, max_reqs: usize) -> bool {
-        max_reqs != self.replacements_max.len()
+    #[inline(always)]
+    fn open_max_slots(&self) -> bool {
+//        if let Some(slot) = self.slots_max.last() {
+//            slot.is_some()
+//        } else {
+//            false
+//        }
+        self.slots_max.nslots() != self.slots_max.nfilled()
     }
 
     // Assumes that the returned vec will never be realloc'd!
     #[inline(always)]
-    fn subvec(v: &mut Vec<T>, from: usize) -> Vec<T> {
-        let ptr = (&mut v[from..]).as_mut_ptr();
-        unsafe {
-            Vec::from_raw_parts(ptr, v.len() - from, v.capacity() - from)
+    fn pin_stack(stack: &mut SlotStack<T>) -> SlotStack<T> {
+        let nslots = stack.nslots;
+        let slots = {
+            let mut v = &mut stack.slots;
+            let ptr = (&mut v[nslots..]).as_mut_ptr();
+            unsafe {
+                Vec::from_raw_parts(ptr, v.len()-nslots, v.capacity() - nslots)
+            }
+        };
+
+        SlotStack {
+            nslots: 0,
+            nfilled: 0,
+            slots: slots
         }
     }
 
 
-    #[inline]
-    fn take_item(&mut self, idx: usize, list_id: ItemListId) -> &mut Node<T> {
-        let node = self.tree.node_mut(idx);
-        let item = node.item.take().unwrap();
-        let mut move_to = match list_id {
-            ItemListId::MIN => &mut self.replacements_min,
-            ItemListId::MAX => &mut self.replacements_max,
-            ItemListId::OUT => &mut self.output
-        };
-        debug_assert!(move_to.len() < move_to.capacity()); // there should be no dynamic allocation here! we pre-allocate enough space in all 3 vecs
-        move_to.push(item);
-        node
-    }
+//    #[inline]
+//    fn move_to_slot(&mut self, idx: usize, list_id: ItemListId) -> &mut Node<T> {
+//        let node = self.tree.node_mut(idx);
+//        let item = node.item.take();
+//        let mut stack = match list_id {
+//            ItemListId::MIN => &mut self.slots_min,
+//            ItemListId::MAX => &mut self.slots_max,
+////            ItemListId::OUT => &mut self.output
+//        };
+//        debug_assert!(stack.nfilled() < stack.nslots()); // there should be no dynamic allocation here! we pre-allocate enough space in all 3 vecs
+//        assert!(!stack.is_empty());
+////        *stack.last_mut().unwrap() = item;
+//        stack.fill_slot_opt(item);
+//        node
+//    }
+
+//    #[inline]
+//    fn move_to_slot(&mut self, item: &mut Option<T>, stack: &mut SlotStack<T>) -> &mut Node<T>{
+//        debug_assert!(stack.len() < stack.capacity()); // there should be no dynamic allocation here! we pre-allocate enough space in all 3 vecs
+//        *stack.last_mut().unwrap() = item.take();
+//    }
 
     #[inline(always)]
     fn node(&self, idx: usize) -> &Node<T> {
@@ -295,8 +489,10 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     #[inline(always)]
-    fn node_mut(&mut self, idx: usize) -> &mut Node<T> {
-        self.tree.node_mut(idx)
+    fn node_mut<'b>(&mut self, idx: usize) -> &'b mut Node<T> {
+        unsafe {
+            mem::transmute(self.tree.node_mut(idx))
+        }
     }
 
     #[inline(always)]

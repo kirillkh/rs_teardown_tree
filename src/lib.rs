@@ -6,6 +6,7 @@ mod base;
 mod delete_range;
 
 pub use base::{Item, ImplicitTree, ImplicitTreeRefill, Node, DriverFromTo};
+pub use delete_range::TraversalDecision;
 
 
 
@@ -56,6 +57,22 @@ mod tests {
 
     #[test]
     fn delete_range_prebuilt() {
+        test_prebuilt(&[1], (1,1),
+                      &[], &[1]);
+
+        test_prebuilt(&[1, 0, 2], (1,1),
+                      &[(2,1)], &[1]);
+
+        test_prebuilt(&[1, 0, 2], (2,2),
+                      &[(1,1)], &[2]);
+
+        test_prebuilt(&[3, 1, 4, 0, 2], (2,4),
+                      &[(1, 1)], &[3,2,4]);
+
+        test_prebuilt(&[4, 2, 0, 1, 3], (3,4),
+                      &[(2, 2), (1,1)], &[4,3]);
+
+
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (1,1),
                       &[(2, 3), (0, 0), (3, 2), (0, 0), (0, 0), (0, 0), (4, 1)], &[1]);
 
@@ -83,13 +100,6 @@ mod tests {
 
         test_prebuilt(&[1, 0, 3, 0, 0, 2, 4], (1,2),
                       &[(3, 2), (0, 0), (4, 1)], &[1, 2]);
-
-
-        test_prebuilt(&[3, 1, 4, 0, 2], (2,4),
-                      &[(1, 1)], &[3,2,4]);
-
-        test_prebuilt(&[4, 2, 0, 1, 3], (3,4),
-                      &[(2, 2), (1,1)], &[4,3]);
     }
 
 
@@ -121,6 +131,34 @@ mod tests {
         root_idx: usize
     }
 
+
+    #[test]
+    fn delete_range_exhaustive1() {
+        for i in 1..2 {
+            delete_range_exhaustive_n(i);
+        }
+    }
+
+    #[test]
+    fn delete_range_exhaustive2() {
+        for i in 2..3 {
+            delete_range_exhaustive_n(i);
+        }
+    }
+
+    #[test]
+    fn delete_range_exhaustive3() {
+        for i in 3..4 {
+            delete_range_exhaustive_n(i);
+        }
+    }
+
+    #[test]
+    fn delete_range_exhaustive4() {
+        for i in 4..5 {
+            delete_range_exhaustive_n(i);
+        }
+    }
 
     #[test]
     fn delete_range_exhaustive() {
