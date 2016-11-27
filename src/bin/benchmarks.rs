@@ -3,11 +3,13 @@ extern crate test;
 extern crate rand;
 extern crate implicit_tree;
 extern crate wio;
+extern crate cpuprofiler;
 use std::time;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 use rand::{XorShiftRng, SeedableRng, Rng};
+use cpuprofiler::PROFILER;
 
 use implicit_tree::{ImplicitTree, ImplicitTreeRefill, DriverFromTo, TraversalDecision};
 
@@ -149,6 +151,7 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
     copy.del_range(0, n-1, &mut output);
     output.truncate(0);
 
+    PROFILER.lock().unwrap().start("./my-prof.profile").expect("Couldn't start");
     let start = time::SystemTime::now();
     for _ in 0..iters {
         copy.rfill(&tree);
@@ -162,6 +165,7 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
     }
     let elapsed = start.elapsed().unwrap();
     let avg_nanos = nanos(elapsed) / iters;
+    PROFILER.lock().unwrap().stop().unwrap();
     println!("average time to clone/tear down {} of {} elements in bulks of {} elements: {}ns", M::descr(), n, rm_items, avg_nanos)
 }
 
@@ -197,6 +201,7 @@ fn main() {
     bench_clone_teardown_cycle::<Tree>(1000, 100, 150000);
     bench_clone_teardown_cycle::<Tree>(10000, 100, 10000);
     bench_clone_teardown_cycle::<Tree>(100000, 100, 5000);
+    return;
 
     bench_clone_teardown_cycle::<Tree>(1000, 1000, 15000);
     bench_clone_teardown_cycle::<Tree>(10000, 1000, 5000);

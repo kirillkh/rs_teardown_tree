@@ -14,7 +14,7 @@ path = "src/bin/benchmarks.rs"
 [dependencies]
 rand = "0.3.14"
 wio = "0.1.2"
-
+cpuprofiler = "0.0.2"
 
 [profile.release]
 opt-level = 3
