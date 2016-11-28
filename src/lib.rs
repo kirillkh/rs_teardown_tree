@@ -1,4 +1,5 @@
 #![feature(test)]
+#![feature(unique)]
 extern crate test;
 extern crate rand;
 
