@@ -1,6 +1,7 @@
 use base::{ImplicitTree, Item, Node};
+use std::ptr::Unique;
 
-use std::mem;
+use std::{mem, ptr};
 
 pub trait TraversalDriver<T: Item> {
     #[inline(always)]
@@ -31,22 +32,26 @@ impl<T: Item> TraversalDriver<T> for RejectDriver {
 type Slot<T> = Option<T>;
 
 
-#[derive(Clone, Debug)]
 struct SlotStack<T: Item> {
     nslots: usize,
     nfilled: usize,
-    slots: Vec<Slot<T>>
+    slots: Unique<T>,
+    capacity: usize
 }
 
 impl<T: Item> SlotStack<T> {
     fn new(capacity: usize) -> SlotStack<T> {
-        SlotStack { nslots: 0, nfilled: 0, slots: vec![None; capacity]}
+        unsafe {
+            let mut slots = vec![mem::uninitialized(); capacity];
+            let ptr: *mut T = slots.as_mut_ptr();
+            mem::forget(slots);
+            SlotStack { nslots: 0, nfilled: 0, slots: Unique::new(ptr), capacity: capacity }
+        }
     }
 
     #[inline(always)]
     fn push_slot(&mut self) {
-        debug_assert!(self.nslots < self.slots.len());
-        debug_assert!(self.slots[self.nslots].is_none());
+        debug_assert!(self.nslots < self.capacity);
         self.nslots += 1;
     }
 
@@ -55,16 +60,20 @@ impl<T: Item> SlotStack<T> {
         debug_assert!(self.nslots > 0);
         if self.nfilled == self.nslots {
             self.nfilled -= 1;
+            self.nslots -= 1;
+            unsafe {
+                Some(ptr::read(self.slot_at(self.nslots) as *const T))
+            }
+        } else {
+            self.nslots -= 1;
+            None
         }
-        self.nslots -= 1;
-        self.slots[self.nslots].take()
     }
 
     #[inline(always)]
     fn fill_slot(&mut self, item: T) {
         debug_assert!(self.nfilled < self.nslots);
-        debug_assert!(self.slots[self.nfilled].is_none());
-        self.slots[self.nfilled] = Some(item);
+        *self.slot_at(self.nfilled) = item;
         self.nfilled += 1;
     }
 
@@ -72,16 +81,27 @@ impl<T: Item> SlotStack<T> {
     fn fill_slot_opt(&mut self, item: Option<T>) {
         debug_assert!(item.is_some());
         debug_assert!(self.nfilled < self.nslots);
-        debug_assert!(self.slots[self.nfilled].is_none());
-        self.slots[self.nfilled] = item;
+        *self.slot_at(self.nfilled) = item.unwrap();
         self.nfilled += 1;
     }
 
-//    fn substack(&self, from: usize) -> SlotStack<T> {
-//        let slots_max_left = Self::subvec(&mut self.slots_max, len);
-//        let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
-//
-//    }
+
+    #[inline(always)]
+    fn slot_at(&self, idx: usize) -> &mut T {
+        unsafe {
+            mem::transmute(self.slots.offset(idx as isize))
+        }
+    }
+
+    fn to_str(&self) -> String {
+        unsafe {
+            let ptr: *mut Slot<T> = mem::transmute(self.slots.get());
+            let slots_vec = Vec::from_raw_parts(ptr, self.capacity, self.capacity);
+            let str = format!("{:?}", slots_vec);
+            mem::forget(slots_vec);
+            str
+        }
+    }
 
     #[inline(always)]
     fn is_empty(&self) -> bool {
@@ -101,10 +121,6 @@ impl<T: Item> SlotStack<T> {
 
 
 
-
-//enum ItemListId {
-//    MIN, MAX, //OUT
-//}
 
 pub struct DeleteRange<'a, T: 'a+Item> {
 
@@ -128,7 +144,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if !self.tree.is_null(0) {
             self.delete_range_recurse(drv, 0);
             debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty(),
-                    "tree: {:?}, replacements_min: {:?}, replacements_max: {:?}, output: {:?}", self.tree, self.slots_min, self.slots_max, self.output);
+                    "tree: {:?}, replacements_min: {}, replacements_max: {}, output: {:?}", self.tree, self.slots_min.to_str(), self.slots_max.to_str(), self.output);
         }
     }
 
@@ -158,13 +174,11 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if consumed {
             node.height = 0;
         } else if self.open_min_slots() {
-//            let node = self.move_to_slot(idx, ItemListId::MIN);
             let item = node.item.take();
             self.slots_min.fill_slot_opt(item);
 
             node.height = 0;
         } else if self.open_max_slots() {
-//            let node = self.move_to_slot(idx, ItemListId::MAX);
             let item = node.item.take();
             self.slots_max.fill_slot_opt(item);
 
@@ -191,7 +205,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         // fulfill a min req if necessary
         if !need_replacement && self.open_min_slots() {
-//            self.move_to_slot(idx, ItemListId::MIN);
             let item = node.item.take();
             self.slots_min.fill_slot_opt(item);
 
@@ -446,18 +459,21 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     fn pin_stack(stack: &mut SlotStack<T>) -> SlotStack<T> {
         let nslots = stack.nslots;
         let slots = {
-            let mut v = &mut stack.slots;
-            let ptr = (&mut v[nslots..]).as_mut_ptr();
+//            let mut v = &mut stack.slots;
+//            let ptr = (&mut v[nslots..]).as_mut_ptr();
+            let ptr = stack.slot_at(nslots) as *mut T;
             unsafe {
-                Vec::from_raw_parts(ptr, v.len()-nslots, v.capacity() - nslots)
+//                Vec::from_raw_parts(ptr, v.len()-nslots, v.capacity() - nslots)
+                SlotStack {
+                    nslots: 0,
+                    nfilled: 0,
+                    slots: Unique::new(ptr),
+                    capacity: stack.capacity - nslots
+                }
             }
         };
 
-        SlotStack {
-            nslots: 0,
-            nfilled: 0,
-            slots: slots
-        }
+        slots
     }
 
 
@@ -503,5 +519,15 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline(always)]
     fn item_mut(&mut self, idx: usize) -> &mut Option<T> {
         &mut self.node_mut(idx).item
+    }
+}
+
+
+impl <T: Item> Drop for SlotStack<T> {
+    fn drop(&mut self) {
+        unsafe {
+            let slots_vec = Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
+            // let it drop
+        }
     }
 }
