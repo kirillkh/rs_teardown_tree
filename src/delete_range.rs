@@ -159,12 +159,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let node = self.node_mut(idx);
         if consumed {
             node.height = 0;
-        } else if self.open_min_slots() {
+        } else if self.slots_min.has_open() {
             let item = node.item.take();
             self.slots_min.fill_slot_opt(item);
 
             node.height = 0;
-        } else if self.open_max_slots() {
+        } else if self.slots_max.has_open() {
             let item = node.item.take();
             self.slots_max.fill_slot_opt(item);
 
@@ -282,31 +282,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
 
     //---- helpers ---------------------------------------------------------------------------------
-    #[inline(always)]
-    fn open_slots(&self) -> bool {
-        self.open_min_slots() || self.open_max_slots()
-    }
-
-    #[inline(always)]
-    fn open_min_slots(&self) -> bool {
-//        if let Some(slot) = self.slots_min.last() {
-//            slot.is_some()
-//        } else {
-//            false
-//        }
-        self.slots_min.nslots() != self.slots_min.nfilled()
-    }
-
-    #[inline(always)]
-    fn open_max_slots(&self) -> bool {
-//        if let Some(slot) = self.slots_max.last() {
-//            slot.is_some()
-//        } else {
-//            false
-//        }
-        self.slots_max.nslots() != self.slots_max.nfilled()
-    }
-
     // Assumes that the returned vec will never be realloc'd!
     #[inline(always)]
     fn pin_stack(stack: &mut SlotStack<T>) -> SlotStack<T> {
@@ -461,34 +436,35 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
 
     #[inline(always)]
-    fn traverse_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, mut consumed: bool, has_left: bool,
+    fn traverse_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, consumed: bool, has_left: bool,
                                             min_included: bool, max_included: bool) {
         //        debug_assert!(!self.slots_max.has_open());
         let node = self.node_mut(idx);
+        let mut removed = consumed;
 
         //        if self.tree.has_left(idx) {
         if has_left {
-            consumed = self.descend_left(drv, idx, consumed,
+            removed = self.descend_left(drv, idx, removed,
                                          min_included, max_included);
         } // else, depending on need_replacement, we might need to traverse the right side, which we do below
 
-        if !consumed && self.slots_min.has_open() {
+        if !removed && self.slots_min.has_open() {
             // fill a min_slot with this node's item
             let item = node.item.take();
             self.slots_min.fill_slot_opt(item);
 
-            consumed = true;
+            removed = true;
         }
 
-        if consumed {
+        if removed {
             if self.tree.has_right(idx) {
-                consumed = self.descend_right(drv, idx, true,
+                removed = self.descend_right(drv, idx, true,
                                               min_included, max_included)
             } // else nothing to do - this node and all its children are gone
         } // else (!consumed and !slots_min.open and !slots_max.open) => nothing to do
 
         // update height
-        if consumed {
+        if removed {
             node.height = 0
         } else {
             //            let left = self.node(TeardownTree::<T>::lefti(idx));
@@ -500,33 +476,34 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
 
     #[inline(always)]
-    fn traverse_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, mut consumed: bool, has_right: bool,
+    fn traverse_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, consumed: bool, has_right: bool,
                                              min_included: bool, max_included: bool) {
         //        debug_assert!(!self.slots_min.has_open());
         let node = self.node_mut(idx);
+        let mut removed = consumed;
 
         if has_right {
-            consumed = self.descend_right(drv, idx, consumed,
+            removed = self.descend_right(drv, idx, removed,
                                           min_included, max_included);
         } // else, depending on need_replacement, we might need to traverse the right side, which we do below
 
-        if !consumed && self.slots_max.has_open() {
+        if !removed && self.slots_max.has_open() {
             // fill a min_slot with this node's item
             let item = node.item.take();
             self.slots_max.fill_slot_opt(item);
 
-            consumed = true;
+            removed = true;
         }
 
-        if consumed {
+        if removed {
             if self.tree.has_left(idx) {
-                consumed = self.descend_left(drv, idx, true,
+                removed = self.descend_left(drv, idx, true,
                                              min_included, max_included)
             } // else nothing to do - this node and all its children are gone
         } // else (!consumed and !slots_min.open and !slots_max.open) => nothing to do
 
         // update height
-        if consumed {
+        if removed {
             node.height = 0
         } else {
             //            let left = self.node(TeardownTree::<T>::lefti(idx));
@@ -555,7 +532,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             mem::forget(slots_max_left);
         }
 
-        if !removed && self.open_min_slots() {
+        if !removed && self.slots_min.has_open() {
             // this node is the minimum of the tree: use it to fill a slot
             let item = node.item.take();
             self.slots_min.fill_slot_opt(item);
@@ -580,7 +557,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             debug_assert!(!self.tree.has_left(idx) && !self.tree.has_right(idx));
             node.height = 0;
         } else {
-            if self.open_max_slots() {
+            if self.slots_max.has_open() {
                 // this node is the maximum of the tree: use it to fulfill a max request
                 let item = node.item.take();
                 self.slots_max.fill_slot_opt(item);
