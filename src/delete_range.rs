@@ -2,6 +2,7 @@ use base::{ImplicitTree, Item, Node};
 use std::ptr::Unique;
 
 use std::{mem, ptr};
+use std::cmp;
 
 pub trait TraversalDriver<T: Item> {
     #[inline(always)]
@@ -117,6 +118,11 @@ impl<T: Item> SlotStack<T> {
     fn nfilled(&self) -> usize {
         self.nfilled
     }
+
+    #[inline(always)]
+    fn has_open(&self) -> bool {
+        self.nslots != self.nfilled
+    }
 }
 
 
@@ -168,7 +174,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
 
     //---- traverse_shape_* ------------------------------------------------------------------------
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_leaf(&mut self, idx: usize, consumed: bool) {
         let node = self.node_mut(idx);
         if consumed {
@@ -187,7 +193,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     // tested -- inlining really helps
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
         let mut need_replacement = decision.consume();
         let node = self.node_mut(idx);
@@ -222,7 +228,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     // tested -- inlining really helps
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
         let node = self.node_mut(idx);
 
@@ -260,7 +266,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     // tested -- inlining really helps
-    #[inline(never)]
+    #[inline(always)]
     fn traverse_shape_dual<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, decision: TraversalDecision) {
         let node = self.node_mut(idx);
         let mut need_replacement = decision.consume();
@@ -271,9 +277,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             let slots_max_left = Self::pin_stack(&mut self.slots_max);
             let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
 
-            {
-                need_replacement = self.descend_left(drv, idx, need_replacement);
-            }
+            need_replacement = self.descend_left(drv, idx, need_replacement);
 
             let slots_max_left = mem::replace(&mut self.slots_max, slots_max_orig);
             mem::forget(slots_max_left);
@@ -528,6 +532,181 @@ impl <T: Item> Drop for SlotStack<T> {
         unsafe {
             let slots_vec = Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
             // let it drop
+        }
+    }
+}
+
+
+
+// delete_range_recurse2
+impl<'a, T: Item> DeleteRange<'a, T> {
+    //---- traverse_* ---------------------------------------------------------------------
+    #[inline(never)]
+    fn delete_range_recurse2<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize) {
+        let item: &mut Option<T> = &mut self.node_mut(idx).item;
+        let decision = drv.decide(item.as_ref().unwrap());
+        let consumed = decision.consume();
+        if consumed {
+            let item = item.take().unwrap();
+            self.output.push(item);
+        }
+
+        let tr_left = decision.traverse_left || self.slots_min.has_open();
+        let tr_right = decision.traverse_right || self.slots_max.has_open();
+
+
+
+        match (tr_left, tr_right) {
+            (true, false)  => {
+                let has_left = self.tree.has_left(idx);
+                self.traverse_left(drv, idx, consumed, has_left)
+            },
+            (false, true)  => {
+                let has_right = self.tree.has_right(idx);
+                self.traverse_right(drv, idx, consumed, has_right)
+            },
+            (true, true)   =>
+                match (self.tree.has_left(idx), self.tree.has_right(idx)) {
+                    (false, false) => self.traverse_shape_leaf(idx, consumed),
+                    (false, true)  => self.traverse_right(drv, idx, consumed, true),
+                    (true, false)  => self.traverse_left(drv, idx, consumed, true),
+                    (true, true)   => self.traverse_dual(drv, idx, consumed)
+                },
+            (false, false) => unreachable!(),
+        }
+    }
+
+
+    #[inline(always)]
+    fn traverse_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, mut consumed: bool, has_left: bool) {
+        //        debug_assert!(!self.slots_max.has_open());
+        let node = self.node_mut(idx);
+
+        //        if self.tree.has_left(idx) {
+        if has_left {
+            consumed = self.descend_left(drv, idx, consumed);
+        } // else, depending on need_replacement, we might need to traverse the right side, which we do below
+
+        if !consumed && self.slots_min.has_open() {
+            // fill a min_slot with this node's item
+            let item = node.item.take();
+            self.slots_min.fill_slot_opt(item);
+
+            consumed = true;
+        }
+
+        if consumed {
+            if self.tree.has_right(idx) {
+                consumed = self.descend_right(drv, idx, true)
+            } // else nothing to do - this node and all its children are gone
+        } // else (!consumed and !slots_min.open and !slots_max.open) => nothing to do
+
+        // update height
+        if consumed {
+            node.height = 0
+        } else {
+            //            let left = self.node(ImplicitTree::<T>::lefti(idx));
+            //            let right = self.node(ImplicitTree::<T>::righti(idx));
+            //            node.height = 1 + cmp::max(left.height, right.height)
+            self.tree.update_height(idx);
+        };
+    }
+
+
+    #[inline(always)]
+    fn traverse_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, mut consumed: bool, has_right: bool) {
+        //        debug_assert!(!self.slots_min.has_open());
+        let node = self.node_mut(idx);
+
+        if has_right {
+            consumed = self.descend_right(drv, idx, consumed);
+        } // else, depending on need_replacement, we might need to traverse the right side, which we do below
+
+        if !consumed && self.slots_max.has_open() {
+            // fill a min_slot with this node's item
+            let item = node.item.take();
+            self.slots_max.fill_slot_opt(item);
+
+            consumed = true;
+        }
+
+        if consumed {
+            if self.tree.has_left(idx) {
+                consumed = self.descend_left(drv, idx, true)
+            } // else nothing to do - this node and all its children are gone
+        } // else (!consumed and !slots_min.open and !slots_max.open) => nothing to do
+
+        // update height
+        if consumed {
+            node.height = 0
+        } else {
+            //            let left = self.node(ImplicitTree::<T>::lefti(idx));
+            //            let right = self.node(ImplicitTree::<T>::righti(idx));
+            //            node.height = 1 + cmp::max(left.height, right.height)
+            self.tree.update_height(idx);
+        };
+    }
+
+    #[inline(always)]
+    fn traverse_dual<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, mut consumed: bool) {
+        let node = self.node_mut(idx);
+
+        {
+            let slots_max_left = Self::pin_stack(&mut self.slots_max);
+            let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
+
+            {
+                consumed = self.descend_left(drv, idx, consumed);
+            }
+
+            let slots_max_left = mem::replace(&mut self.slots_max, slots_max_orig);
+            mem::forget(slots_max_left);
+        }
+
+        if !consumed && self.open_min_slots() {
+            // this node is the minimum of the tree: use it to fill a slot
+            let item = node.item.take();
+            self.slots_min.fill_slot_opt(item);
+
+            consumed = true;
+        }
+
+        consumed = self.descend_right(drv, idx, consumed);
+
+        //        if !need_replacement && self.open_max_slots() {
+        //            // this node is the minimum of the tree: use it to fill a slot
+        //            let item = node.item.take();
+        //            self.slots_max.fill_slot_opt(item);
+        //
+        //            consumed = true;
+        //        }
+
+        // this node again
+        if consumed {
+            // this node was consumed, and both subtrees are empty now: nothing more to do here
+            debug_assert!(!self.tree.has_left(idx) && !self.tree.has_right(idx));
+            node.height = 0;
+        } else {
+            if self.open_max_slots() {
+                // this node is the maximum of the tree: use it to fulfill a max request
+                let item = node.item.take();
+                self.slots_max.fill_slot_opt(item);
+
+                // fulfill the remaining max requests from the left subtree
+                debug_assert!(self.slots_min.is_empty());
+                consumed = if self.tree.has_left(idx) {
+                    self.descend_left(&mut RejectDriver, idx, true)
+                } else {
+                    true
+                }
+            }
+
+            // update height
+            if consumed {
+                node.height = 0;
+            } else {
+                self.tree.update_height(idx);
+            }
         }
     }
 }

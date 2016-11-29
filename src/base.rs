@@ -78,7 +78,6 @@ impl TraversalDriver<usize> for DriverFromTo {
     fn decide(&mut self, x: &usize) -> TraversalDecision {
         let left = self.from <= *x;
         let right = *x <= self.to;
-        let consume = left && right;
 
         TraversalDecision { traverse_left: left, traverse_right: right }
     }
