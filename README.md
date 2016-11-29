@@ -1,8 +1,9 @@
 A BST (binary search tree) written in Rust that supports efficient **teardown** scenarios, i.e. the typical usage
 pattern is to build a master copy of the tree, then
-    1. **clone** the master copy to a new tree
-    2. tear the tree down with a series of **delete-range** operations
-    3. rinse, repeat
+
+1. **clone** the master copy to a new tree
+2. tear the tree down with a series of **delete-range** operations
+3. rinse, repeat
 
 The tree does not use any kind of self-balancing and does not support insert operation.
 
