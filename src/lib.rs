@@ -229,12 +229,12 @@ mod tests {
         }
     }
 
-    fn delete_range_exhaustive_check(n: usize, i: usize, j: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
-        debug_assert!(output.len() == j-i+1);
+    fn delete_range_exhaustive_check(n: usize, from: usize, to: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
+        debug_assert!(output.len() == to-from+1);
         debug_assert!(tree_mod.size() + output.len() == n);
 
         output.sort();
-        assert_eq!(output, &(i..j+1).collect::<Vec<_>>());
+        assert_eq!(output, &(from..to+1).collect::<Vec<_>>());
         check_bst(&tree_mod, &output, tree_orig, 0);
     }
 
