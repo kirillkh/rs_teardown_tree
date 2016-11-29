@@ -1,10 +1,10 @@
 [package]
-name = "implicit_tree"
-version = "0.2.1"
+name = "teardown_tree"
+version = "0.2.2"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 
 [lib]
-name = "implicit_tree"
+name = "teardown_tree"
 path = "src/lib.rs"
 
 [[bin]]

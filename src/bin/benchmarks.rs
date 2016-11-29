@@ -1,7 +1,7 @@
 #![feature(test)]
 extern crate test;
 extern crate rand;
-extern crate implicit_tree;
+extern crate teardown_tree;
 extern crate wio;
 use std::time;
 
@@ -9,9 +9,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 use rand::{XorShiftRng, SeedableRng, Rng};
 
-use implicit_tree::{ImplicitTree, ImplicitTreeRefill, DriverFromTo, TraversalDecision};
+use teardown_tree::{TeardownTree, TeardownTreeRefill, DriverFromTo, TraversalDecision};
 
-type Tree = ImplicitTree<usize>;
+type Tree = TeardownTree<usize>;
 
 
 
@@ -86,7 +86,7 @@ fn imptree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to delete {} elements from ImplicitTree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete {} elements from TeardownTree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
 
@@ -257,11 +257,11 @@ trait TeardownTreeCopy {
 
 
 
-impl TeardownTreeMaster for ImplicitTree<usize> {
-    type Cpy = ImplicitTree<usize>;
+impl TeardownTreeMaster for TeardownTree<usize> {
+    type Cpy = TeardownTree<usize>;
 
     fn build(elems: Vec<usize>) -> Self {
-        ImplicitTree::new(elems)
+        TeardownTree::new(elems)
     }
 
     fn cpy(&self) -> Self {
@@ -273,12 +273,12 @@ impl TeardownTreeMaster for ImplicitTree<usize> {
     }
 
     fn descr() -> String {
-        "ImplicitTree".to_string()
+        "TeardownTree".to_string()
     }
 }
 
-impl TeardownTreeCopy for ImplicitTree<usize> {
-    type Master = ImplicitTree<usize>;
+impl TeardownTreeCopy for TeardownTree<usize> {
+    type Master = TeardownTree<usize>;
 
     fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
         self.delete_range(&mut DriverFromTo::new(from, to), output);

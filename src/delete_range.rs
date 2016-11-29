@@ -1,4 +1,4 @@
-use base::{ImplicitTree, Item, Node};
+use base::{TeardownTree, Item, Node};
 use std::ptr::Unique;
 
 use std::{mem, ptr};
@@ -130,13 +130,13 @@ impl<T: Item> SlotStack<T> {
 
 pub struct DeleteRange<'a, T: 'a+Item> {
 
-    tree: &'a mut ImplicitTree<T>,
+    tree: &'a mut TeardownTree<T>,
     slots_min: SlotStack<T>, slots_max: SlotStack<T>,
     pub output: &'a mut Vec<T>
 }
 
 impl<'a, T: Item> DeleteRange<'a, T> {
-    pub fn new(tree: &'a mut ImplicitTree<T>, output: &'a mut Vec<T>) -> DeleteRange<'a, T> {
+    pub fn new(tree: &'a mut TeardownTree<T>, output: &'a mut Vec<T>) -> DeleteRange<'a, T> {
         let height = tree.node(0).height as usize;
         let slots_min = SlotStack::new(height);
         let slots_max = SlotStack::new(height);
@@ -221,7 +221,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let height = if need_replacement {
             0
         } else {
-            let left = self.node_mut(ImplicitTree::<T>::lefti(idx));
+            let left = self.node_mut(TeardownTree::<T>::lefti(idx));
             left.height + 1
         };
         node.height = height;
@@ -259,7 +259,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let height = if need_replacement {
             0
         } else {
-            let right = self.node_mut(ImplicitTree::<T>::righti(idx));
+            let right = self.node_mut(TeardownTree::<T>::righti(idx));
             right.height + 1
         };
         node.height = height;
@@ -338,7 +338,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             self.slots_max.push_slot()
         }
 
-        self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx));
+        self.delete_range_recurse(drv, TeardownTree::<T>::lefti(idx));
 
         // TODO: we do not handle correctly the case where after return from recursion there are some open min_reqs.
         // That is because it's a case that doesn't happen with range queries.
@@ -361,7 +361,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 //            debug_assert!(self.node(idx).item.is_none());
 //            self.slots_max.push_slot();
 //
-//            self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx));
+//            self.delete_range_recurse(drv, TeardownTree::<T>::lefti(idx));
 //
 //            // TODO: we do not handle correctly the case where after return from recursion there are some open slots_min.
 //            // That is because it's a case that doesn't happen with range queries.
@@ -375,7 +375,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 //                true
 //            }
 //        } else {
-//            self.delete_range_recurse(drv, ImplicitTree::<T>::lefti(idx));
+//            self.delete_range_recurse(drv, TeardownTree::<T>::lefti(idx));
 //            false
 //        }
     }
@@ -389,7 +389,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             self.slots_min.push_slot()
         }
 
-        self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx));
+        self.delete_range_recurse(drv, TeardownTree::<T>::righti(idx));
 
         if push_slot {
             let slot = self.slots_min.pop();
@@ -409,7 +409,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 //            debug_assert!(self.node(idx).item.is_none());
 //            self.slots_min.push_slot();
 //
-//            self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx));
+//            self.delete_range_recurse(drv, TeardownTree::<T>::righti(idx));
 //
 //            let slot = self.slots_min.pop();
 //
@@ -421,7 +421,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 //                true
 //            }
 //        } else {
-//            self.delete_range_recurse(drv, ImplicitTree::<T>::righti(idx));
+//            self.delete_range_recurse(drv, TeardownTree::<T>::righti(idx));
 //            false
 //        }
     }
@@ -605,8 +605,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if consumed {
             node.height = 0
         } else {
-            //            let left = self.node(ImplicitTree::<T>::lefti(idx));
-            //            let right = self.node(ImplicitTree::<T>::righti(idx));
+            //            let left = self.node(TeardownTree::<T>::lefti(idx));
+            //            let right = self.node(TeardownTree::<T>::righti(idx));
             //            node.height = 1 + cmp::max(left.height, right.height)
             self.tree.update_height(idx);
         };
@@ -640,8 +640,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if consumed {
             node.height = 0
         } else {
-            //            let left = self.node(ImplicitTree::<T>::lefti(idx));
-            //            let right = self.node(ImplicitTree::<T>::righti(idx));
+            //            let left = self.node(TeardownTree::<T>::lefti(idx));
+            //            let right = self.node(TeardownTree::<T>::righti(idx));
             //            node.height = 1 + cmp::max(left.height, right.height)
             self.tree.update_height(idx);
         };

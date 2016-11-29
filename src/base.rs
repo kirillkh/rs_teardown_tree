@@ -43,13 +43,13 @@ impl<T: Item> DeleteRangeCache<T> {
 
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
-pub trait ImplicitTreeRefill<T: Copy+Item> {
-    fn refill(&mut self, master: &ImplicitTree<T>);
+pub trait TeardownTreeRefill<T: Copy+Item> {
+    fn refill(&mut self, master: &TeardownTree<T>);
 }
 
 
-impl<T: Copy+Item> ImplicitTreeRefill<T> for ImplicitTree<T> {
-    fn refill(&mut self, master: &ImplicitTree<T>) {
+impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTree<T> {
+    fn refill(&mut self, master: &TeardownTree<T>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
         self.data.truncate(0);
@@ -89,15 +89,15 @@ impl TraversalDriver<usize> for DriverFromTo {
 
 
 #[derive(Clone)]
-pub struct ImplicitTree<T: Item> {
+pub struct TeardownTree<T: Item> {
     data: Vec<Node<T>>,
     size: usize,
 
     delete_range_cache: DeleteRangeCache<T>,
 }
 
-impl<T: Item> ImplicitTree<T> {
-    pub fn new(sorted: Vec<T>) -> ImplicitTree<T> {
+impl<T: Item> TeardownTree<T> {
+    pub fn new(sorted: Vec<T>) -> TeardownTree<T> {
         let size = sorted.len();
 
         let capacity = Self::row_start(size)*4 + 3;
@@ -110,10 +110,10 @@ impl<T: Item> ImplicitTree<T> {
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
         Self::build(&mut sorted, 0, &mut data);
         let cache = DeleteRangeCache::new(data[0].height as usize);
-        ImplicitTree { data: data, size: size, delete_range_cache: cache }
+        TeardownTree { data: data, size: size, delete_range_cache: cache }
     }
 
-    pub fn with_nodes(nodes: Vec<Node<T>>) -> ImplicitTree<T> {
+    pub fn with_nodes(nodes: Vec<Node<T>>) -> TeardownTree<T> {
         let size = nodes.iter().filter(|x| x.height != 0).count();
         let capacity = Self::row_start(nodes.len())*4 + 3; // allocate enough nodes that righti() is never out of bounds
 
@@ -128,7 +128,7 @@ impl<T: Item> ImplicitTree<T> {
         ::std::mem::forget(nodes);
 
         let cache = DeleteRangeCache::new(data[0].height as usize);
-        ImplicitTree { data: data, size: size, delete_range_cache: cache }
+        TeardownTree { data: data, size: size, delete_range_cache: cache }
     }
 
     pub fn into_node_vec(self) -> Vec<Node<T>> {
@@ -356,7 +356,7 @@ impl<T: Item> ImplicitTree<T> {
 }
 
 
-impl<T: Item> Debug for ImplicitTree<T> {
+impl<T: Item> Debug for TeardownTree<T> {
     fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
         let mut nz: Vec<_> = self.data.iter()
             .rev()

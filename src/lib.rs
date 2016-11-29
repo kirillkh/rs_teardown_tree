@@ -6,7 +6,7 @@ extern crate rand;
 mod base;
 mod delete_range;
 
-pub use base::{Item, ImplicitTree, ImplicitTreeRefill, Node, DriverFromTo};
+pub use base::{Item, TeardownTree, TeardownTreeRefill, Node, DriverFromTo};
 pub use delete_range::TraversalDecision;
 
 
@@ -15,10 +15,10 @@ pub use delete_range::TraversalDecision;
 
 #[cfg(test)]
 mod tests {
-    use base::{Item, ImplicitTree, Node, DriverFromTo, ImplicitTreeRefill};
+    use base::{Item, TeardownTree, Node, DriverFromTo, TeardownTreeRefill};
     use delete_range::{TraversalDecision, TraversalDriver};
 
-    type Tree = ImplicitTree<usize>;
+    type Tree = TeardownTree<usize>;
 
 
     #[test]
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn delete_range_exhaustive() {
-        for i in 1..7 {
+        for i in 1..8 {
             delete_range_exhaustive_n(i);
         }
     }
