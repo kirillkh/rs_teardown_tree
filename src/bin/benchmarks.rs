@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 use rand::{XorShiftRng, SeedableRng, Rng};
 
-use teardown_tree::{TeardownTree, TeardownTreeRefill, DriverFromTo, TraversalDecision};
+use teardown_tree::{TeardownTree, TeardownTreeRefill, DriverFromTo};
 
 type Tree = TeardownTree<usize>;
 
@@ -193,14 +193,16 @@ fn main() {
 //    bench_delete_range_n::<Tree>(100000, 100, 15000);
 //    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
-    bench_clone_teardown_cycle::<Tree>(100, 100, 500000);
-    bench_clone_teardown_cycle::<Tree>(1000, 100, 150000);
-    bench_clone_teardown_cycle::<Tree>(10000, 100, 10000);
-    bench_clone_teardown_cycle::<Tree>(100000, 100, 5000);
+    bench_clone_teardown_cycle::<Tree>(100, 100, 3000000);
+    bench_clone_teardown_cycle::<Tree>(1000, 100, 300000);
+    bench_clone_teardown_cycle::<Tree>(10000, 100, 15000);
+    bench_clone_teardown_cycle::<Tree>(100000, 100, 2000);
+    bench_clone_teardown_cycle::<Tree>(1000000, 100, 200);
 
-    bench_clone_teardown_cycle::<Tree>(1000, 1000, 15000);
-    bench_clone_teardown_cycle::<Tree>(10000, 1000, 5000);
-    bench_clone_teardown_cycle::<Tree>(100000, 1000, 5000);
+    bench_clone_teardown_cycle::<Tree>(1000, 1000, 300000);
+    bench_clone_teardown_cycle::<Tree>(10000, 1000, 15000);
+    bench_clone_teardown_cycle::<Tree>(100000, 1000, 2000);
+    bench_clone_teardown_cycle::<Tree>(1000000, 1000, 200);
 
     bench_delete_range_n::<Tree>(100, 100, 5000000);
     bench_delete_range_n::<Tree>(1000, 100, 800000);
