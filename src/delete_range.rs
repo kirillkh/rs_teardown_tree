@@ -131,7 +131,7 @@ impl<T: Item> SlotStack<T> {
 pub struct DeleteRange<'a, T: 'a+Item> {
     tree: &'a mut TeardownTree<T>,
     slots_min: SlotStack<T>, slots_max: SlotStack<T>,
-    delete_subtree_stack: Vec<usize>,
+    delete_subtree_stack: Vec<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
     pub output: &'a mut Vec<T>
 }
 
