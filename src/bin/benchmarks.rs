@@ -1,7 +1,7 @@
 #![feature(test)]
 extern crate test;
 extern crate rand;
-extern crate implicit_tree;
+extern crate teardown_tree;
 extern crate wio;
 extern crate cpuprofiler;
 use std::time;
@@ -11,9 +11,9 @@ use std::time::Duration;
 use rand::{XorShiftRng, SeedableRng, Rng};
 use cpuprofiler::PROFILER;
 
-use implicit_tree::{ImplicitTree, ImplicitTreeRefill, DriverFromTo, TraversalDecision};
+use teardown_tree::{TeardownTree, TeardownTreeRefill, DriverFromTo};
 
-type Tree = ImplicitTree<usize>;
+type Tree = TeardownTree<usize>;
 
 
 
@@ -88,7 +88,7 @@ fn imptree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to delete {} elements from ImplicitTree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete {} elements from TeardownTree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
 
@@ -197,21 +197,30 @@ fn main() {
 //    bench_delete_range_n::<Tree>(100000, 100, 15000);
 //    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
+    bench_clone_teardown_cycle::<Tree>(100000, 100, 15000);
+    return;
+
     bench_clone_teardown_cycle::<Tree>(100, 100, 500000);
     bench_clone_teardown_cycle::<Tree>(1000, 100, 150000);
     bench_clone_teardown_cycle::<Tree>(10000, 100, 10000);
     bench_clone_teardown_cycle::<Tree>(100000, 100, 5000);
-    return;
 
-    bench_clone_teardown_cycle::<Tree>(1000, 1000, 15000);
-    bench_clone_teardown_cycle::<Tree>(10000, 1000, 5000);
+    bench_clone_teardown_cycle::<Tree>(100, 100, 3000000);
+    bench_clone_teardown_cycle::<Tree>(1000, 100, 300000);
+    bench_clone_teardown_cycle::<Tree>(10000, 100, 15000);
+    bench_clone_teardown_cycle::<Tree>(100000, 100, 2000);
+    bench_clone_teardown_cycle::<Tree>(1000000, 100, 200);
+
+    bench_clone_teardown_cycle::<Tree>(1000, 1000, 1000000);
+    bench_clone_teardown_cycle::<Tree>(10000, 1000, 50000);
     bench_clone_teardown_cycle::<Tree>(100000, 1000, 5000);
+    bench_clone_teardown_cycle::<Tree>(1000000, 1000, 300);
 
     bench_delete_range_n::<Tree>(100, 100, 5000000);
     bench_delete_range_n::<Tree>(1000, 100, 800000);
-    bench_delete_range_n::<Tree>(10000, 100, 170000);
-    bench_delete_range_n::<Tree>(100000, 100, 15000);
-    bench_delete_range_n::<Tree>(1000000, 100, 2000);
+    bench_delete_range_n::<Tree>(10000, 100, 100000);
+    bench_delete_range_n::<Tree>(100000, 100, 10000);
+    bench_delete_range_n::<Tree>(1000000, 100, 1000);
 
     imptree_single_delete_n(100, 100, 100000);
     imptree_single_delete_n(1000, 100, 30000);
@@ -262,11 +271,11 @@ trait TeardownTreeCopy {
 
 
 
-impl TeardownTreeMaster for ImplicitTree<usize> {
-    type Cpy = ImplicitTree<usize>;
+impl TeardownTreeMaster for TeardownTree<usize> {
+    type Cpy = TeardownTree<usize>;
 
     fn build(elems: Vec<usize>) -> Self {
-        ImplicitTree::new(elems)
+        TeardownTree::new(elems)
     }
 
     fn cpy(&self) -> Self {
@@ -278,12 +287,12 @@ impl TeardownTreeMaster for ImplicitTree<usize> {
     }
 
     fn descr() -> String {
-        "ImplicitTree".to_string()
+        "TeardownTree".to_string()
     }
 }
 
-impl TeardownTreeCopy for ImplicitTree<usize> {
-    type Master = ImplicitTree<usize>;
+impl TeardownTreeCopy for TeardownTree<usize> {
+    type Master = TeardownTree<usize>;
 
     fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
         self.delete_range(&mut DriverFromTo::new(from, to), output);

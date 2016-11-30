@@ -6,7 +6,7 @@ extern crate rand;
 mod base;
 mod delete_range;
 
-pub use base::{Item, ImplicitTree, ImplicitTreeRefill, Node, DriverFromTo};
+pub use base::{Item, TeardownTree, TeardownTreeRefill, Node, DriverFromTo};
 pub use delete_range::TraversalDecision;
 
 
@@ -15,10 +15,10 @@ pub use delete_range::TraversalDecision;
 
 #[cfg(test)]
 mod tests {
-    use base::{Item, ImplicitTree, Node, DriverFromTo, ImplicitTreeRefill};
+    use base::{Item, TeardownTree, Node, DriverFromTo, TeardownTreeRefill};
     use delete_range::{TraversalDecision, TraversalDriver};
 
-    type Tree = ImplicitTree<usize>;
+    type Tree = TeardownTree<usize>;
 
 
     #[test]
@@ -54,7 +54,6 @@ mod tests {
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
         assert_eq!(format!("{:?}", &output), format!("{:?}", expect_out));
     }
-
 
     #[test]
     fn delete_range_prebuilt() {
@@ -101,6 +100,9 @@ mod tests {
 
         test_prebuilt(&[1, 0, 3, 0, 0, 2, 4], (1,2),
                       &[(3, 2), (0, 0), (4, 1)], &[1, 2]);
+
+        test_prebuilt(&[6, 4, 0, 1, 5, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], (4,6),
+                      &[(3,3), (2,2), (0,0), (1,1)], &[6,4,5]);
     }
 
 
@@ -163,7 +165,7 @@ mod tests {
 
     #[test]
     fn delete_range_exhaustive() {
-        for i in 1..7 {
+        for i in 1..8 {
             delete_range_exhaustive_n(i);
         }
     }
@@ -221,7 +223,7 @@ mod tests {
             for j in i..n+1 {
                 let mut tree_mod = tree.clone();
                 let mut drv = DriverFromTo::new(i, j);
-//                println!("from={}, to={}", i, j);
+//                println!("tree={:?}, from={}, to={}", &tree, i, j);
                 output.truncate(0);
                 tree_mod.delete_range(&mut drv, &mut output);
                 delete_range_exhaustive_check(n, i, j, &mut output, tree_mod, &tree);
@@ -229,12 +231,12 @@ mod tests {
         }
     }
 
-    fn delete_range_exhaustive_check(n: usize, i: usize, j: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
-        debug_assert!(output.len() == j-i+1);
+    fn delete_range_exhaustive_check(n: usize, from: usize, to: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
+        debug_assert!(output.len() == to-from+1, "tree_orig={:?}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, from, to, to-from+1, output);
         debug_assert!(tree_mod.size() + output.len() == n);
 
         output.sort();
-        assert_eq!(output, &(i..j+1).collect::<Vec<_>>());
+        assert_eq!(output, &(from..to+1).collect::<Vec<_>>());
         check_bst(&tree_mod, &output, tree_orig, 0);
     }
 
