@@ -129,9 +129,9 @@ impl<T: Item> SlotStack<T> {
 
 
 pub struct DeleteRange<'a, T: 'a+Item> {
-
     tree: &'a mut TeardownTree<T>,
     slots_min: SlotStack<T>, slots_max: SlotStack<T>,
+    delete_subtree_stack: Vec<usize>,
     pub output: &'a mut Vec<T>
 }
 
@@ -140,9 +140,11 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let height = tree.node(0).height as usize;
         let slots_min = SlotStack::new(height);
         let slots_max = SlotStack::new(height);
-        DeleteRange { tree: tree, slots_min: slots_min, slots_max: slots_max, output: output }
+        let delete_subtree_stack = Vec::with_capacity(height);
+        DeleteRange { tree: tree, slots_min: slots_min, slots_max: slots_max, output: output, delete_subtree_stack:delete_subtree_stack }
     }
 
+    /// The items are not guaranteed to be returned in any particular order.
     pub fn delete_range<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
 //        // TEST
 //        let orig = self.tree.clone();
@@ -347,26 +349,55 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     //---- delete_subtree_* ---------------------------------------------------------------
     #[inline]
     fn delete_subtree(&mut self, idx: usize) {
-        self.delete_subtree_rec(idx);
+        self.delete_subtree_loop(idx);
         self.node_mut(idx).height = 0;
     }
 
-    // TODO: we might gain a little speed by implementing this with a loop and an explicit "next-node" stack
     #[inline]
-    fn delete_subtree_rec(&mut self, idx: usize) {
-        if !self.tree.is_null(idx) {
-            let item: &mut Option<T> = &mut self.node_mut(idx).item;
-            let item = item.take().unwrap();
-            self.output.push(item);
+    fn delete_subtree_loop(&mut self, root: usize) {
+        debug_assert!(self.delete_subtree_stack.is_empty());
 
-            self.delete_subtree_rec(TeardownTree::<T>::lefti(idx));
-            self.delete_subtree_rec(TeardownTree::<T>::righti(idx));
+        if self.tree.is_null(root) {
+            return;
+        }
 
-            // we don't have to do this (if the rest of the code is correct!)
-//            self.node_mut(idx).height = 0;
+
+        let mut next = root;
+
+        loop {
+            next = {
+                let node = &mut self.node_mut(next);
+                let item: &mut Option<T> = &mut node.item;
+                let item = item.take().unwrap();
+                self.output.push(item);
+
+                match (self.tree.has_left(next), self.tree.has_right(next)) {
+                    (false, false) => {
+                        if let Some(n) = self.delete_subtree_stack.pop() {
+                            n
+                        } else {
+                            break;
+                        }
+                    },
+
+                    (true, false)  => {
+                        TeardownTree::<T>::lefti(next)
+                    },
+
+                    (false, true)  => {
+                        TeardownTree::<T>::righti(next)
+                    },
+
+                    (true, true)   => {
+                        debug_assert!(self.delete_subtree_stack.len() < self.delete_subtree_stack.capacity());
+
+                        self.delete_subtree_stack.push(TeardownTree::<T>::righti(next));
+                        TeardownTree::<T>::lefti(next)
+                    },
+                }
+            };
         }
     }
-
 
 
     //---- fill_slots_* -------------------------------------------------------------------
