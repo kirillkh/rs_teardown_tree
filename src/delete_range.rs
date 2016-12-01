@@ -580,29 +580,34 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         self.consume(node);
         let mut removed = true;
 
-        if self.tree.has_left(idx) {
+        let (lh, rh) = (self.tree.left(idx).height, self.tree.right(idx).height);
+
+        // fill the node with an item from the higher child. doesn't seem to give much benefit
+        // with initially balanced trees, but might have a bigger effect with unbalanced ones
+        if lh < rh {
+            removed = self.delete_range_descend_right(drv, idx, true,
+                                                      true, max_included);
+            if lh != 0 {
+                removed = self.delete_range_descend_left(drv, idx, removed,
+                                                         min_included, true);
+            }
+        } else if lh != 0 { // 0<=rh<=lh
             removed = self.delete_range_descend_left(drv, idx, true,
                                                      min_included, true);
+            if rh != 0 {
+                removed = self.delete_range_descend_right(drv, idx, removed,
+                                                          true, max_included);
+            }
         }
 
-        if self.tree.has_right(idx) {
-            removed = self.delete_range_descend_right(drv, idx, removed,
-                                                      true, max_included);
-        }
-
-        // this node again
+        // update height
         if removed {
             // this node was consumed, and both subtrees are empty now: nothing more to do here
             debug_assert!(!self.tree.has_left(idx));
             debug_assert!(!self.tree.has_right(idx));
             node.height = 0;
         } else {
-            // update height
-            if removed {
-                node.height = 0;
-            } else {
-                self.tree.update_height(idx);
-            }
+            self.tree.update_height(idx);
         }
     }
 }
