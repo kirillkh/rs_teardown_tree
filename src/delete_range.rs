@@ -168,7 +168,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             self.slots_max.push_slot()
         }
 
-        f(self, TeardownTree::<T>::lefti(idx));
+        f(self, Self::lefti(idx));
 
         // TODO: we do not handle correctly the case where after return from recursion there are some open min_reqs.
         // That is because it's a case that doesn't happen with range queries.
@@ -197,7 +197,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             self.slots_min.push_slot()
         }
 
-        f(self, TeardownTree::<T>::righti(idx));
+        f(self, Self::righti(idx));
 
         // TODO: we do not handle correctly the case where after return from recursion there are some open min_reqs.
         // That is because it's a case that doesn't happen with range queries.
@@ -282,6 +282,16 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline(always)]
     fn item_mut(&mut self, idx: usize) -> &mut Option<T> {
         &mut self.node_mut(idx).item
+    }
+
+    #[inline(always)]
+    fn lefti(idx: usize) -> usize {
+        TeardownTree::<T>::lefti(idx)
+    }
+
+    #[inline(always)]
+    fn righti(idx: usize) -> usize {
+        TeardownTree::<T>::righti(idx)
     }
 }
 
@@ -381,18 +391,18 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                     },
 
                     (true, false)  => {
-                        TeardownTree::<T>::lefti(next)
+                        Self::lefti(next)
                     },
 
                     (false, true)  => {
-                        TeardownTree::<T>::righti(next)
+                        Self::righti(next)
                     },
 
                     (true, true)   => {
                         debug_assert!(self.delete_subtree_stack.len() < self.delete_subtree_stack.capacity());
 
-                        self.delete_subtree_stack.push(TeardownTree::<T>::righti(next));
-                        TeardownTree::<T>::lefti(next)
+                        self.delete_subtree_stack.push(Self::righti(next));
+                        Self::lefti(next)
                     },
                 }
             };
@@ -407,7 +417,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             return false;
         }
 
-        let done = self.fill_slots_min(TeardownTree::<T>::lefti(idx));
+        let done = self.fill_slots_min(Self::lefti(idx));
 
         if done {
             self.tree.update_height(idx);
@@ -440,7 +450,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             return false;
         }
 
-        let done = self.fill_slots_max(TeardownTree::<T>::righti(idx));
+        let done = self.fill_slots_max(Self::righti(idx));
 
         if done {
             self.tree.update_height(idx);
@@ -562,16 +572,15 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let mut removed = consumed;
 
         {
-            let slots_max_left = Self::pin_stack(&mut self.slots_max);
-            let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
+            // this is never actually needed in practice because of our traversal order...
+//            let slots_max_left = Self::pin_stack(&mut self.slots_max);
+//            let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
 
-            {
-                removed = self.delete_range_descend_left(drv, idx, removed,
-                                                         min_included, consumed);
-            }
+            removed = self.delete_range_descend_left(drv, idx, removed,
+                                                     min_included, consumed);
 
-            let slots_max_left = mem::replace(&mut self.slots_max, slots_max_orig);
-            mem::forget(slots_max_left);
+//            let slots_max_left = mem::replace(&mut self.slots_max, slots_max_orig);
+//            mem::forget(slots_max_left);
         }
 
         if !removed && self.slots_min.has_open() {
