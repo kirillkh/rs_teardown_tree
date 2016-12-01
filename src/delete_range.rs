@@ -450,16 +450,18 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
 
+    // with the current algorithm, never happens in practice
     #[inline]
     fn fill_slots_minmax(&mut self, idx: usize) {
-        let node = self.node_mut(idx);
-        debug_assert!(node.item.is_some());
-
-        if self.tree.has_left(idx) {
-            self.fill_slots_min(Self::lefti(idx));
-        }
-
-        self.fill_minmax_after_left_traverse(idx);
+        unreachable!();
+//        let node = self.node_mut(idx);
+//        debug_assert!(node.item.is_some());
+//
+//        if self.tree.has_left(idx) {
+//            self.fill_slots_min(Self::lefti(idx));
+//        }
+//
+//        self.fill_minmax_after_left_traverse(idx);
     }
 
 
