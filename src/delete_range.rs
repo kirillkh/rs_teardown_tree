@@ -549,12 +549,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         self.consume(node);
         let mut removed = true;
 
-        if self.tree.right(idx).item.is_some() {
+        if self.tree.has_right(idx) {
             removed = self.delete_range_descend_right(drv, idx, true,
                                                       true, max_included);
         }
 
-        if self.tree.left(idx).item.is_some() {
+        if self.tree.has_left(idx) {
             removed = self.delete_range_descend_left(drv, idx, removed,
                                                      min_included, true);
         }
