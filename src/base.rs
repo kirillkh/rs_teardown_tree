@@ -2,7 +2,7 @@ use std::ptr;
 use std::mem;
 use std::cmp::max;
 use std::fmt::{Debug, Formatter};
-use delete_range::{DeleteRange, TraversalDriver, TraversalDecision};
+use delete_range::{DeleteRange, DeleteRangeCache, TraversalDriver, TraversalDecision};
 
 pub trait Item: Sized+Clone+Debug {
     type Key: Ord+Debug;
@@ -24,21 +24,7 @@ impl Item for usize {
 
 #[derive(Debug, Clone)]
 pub struct Node<T: Item> {
-    pub item: Option<T>,    // TODO we can remove the option and use height==0 as null indicator
-    pub height: u32,
-}
-
-#[derive(Clone)]
-struct DeleteRangeCache<T: Item> {
-    replacements_min: Vec<T>, replacements_max: Vec<T>,
-}
-
-impl<T: Item> DeleteRangeCache<T> {
-    pub fn new(height: usize) -> DeleteRangeCache<T> {
-        let replacements_min = Vec::with_capacity(height);
-        let replacements_max = Vec::with_capacity(height);
-        DeleteRangeCache { replacements_min: replacements_min, replacements_max: replacements_max }
-    }
+    pub item: Option<T>,
 }
 
 
@@ -93,7 +79,7 @@ pub struct TeardownTree<T: Item> {
     data: Vec<Node<T>>,
     size: usize,
 
-    delete_range_cache: DeleteRangeCache<T>,
+    pub delete_range_cache: Option<DeleteRangeCache<T>>,
 }
 
 impl<T: Item> TeardownTree<T> {
@@ -104,22 +90,23 @@ impl<T: Item> TeardownTree<T> {
 
         let mut data = Vec::with_capacity(capacity);
         for _ in 0..capacity {
-            data.push(Node{item: None, height: 0});
+            data.push(Node{item: None});
         }
 
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
-        Self::build(&mut sorted, 0, &mut data);
-        let cache = DeleteRangeCache::new(data[0].height as usize);
-        TeardownTree { data: data, size: size, delete_range_cache: cache }
+        let height = Self::build(&mut sorted, 0, &mut data);
+        let cache = DeleteRangeCache::new(height);
+        TeardownTree { data: data, size: size, delete_range_cache: Some(cache) }
     }
 
     pub fn with_nodes(nodes: Vec<Node<T>>) -> TeardownTree<T> {
-        let size = nodes.iter().filter(|x| x.height != 0).count();
+        let size = nodes.iter().filter(|x| x.item.is_some()).count();
+        let height = Self::calc_height(&nodes, 0);
         let capacity = Self::row_start(nodes.len())*4 + 3; // allocate enough nodes that righti() is never out of bounds
 
         let mut data = Vec::with_capacity(capacity);
         for _ in 0..capacity {
-            data.push(Node{item: None, height: 0});
+            data.push(Node{item: None});
         }
 
         unsafe {
@@ -127,8 +114,8 @@ impl<T: Item> TeardownTree<T> {
         }
         ::std::mem::forget(nodes);
 
-        let cache = DeleteRangeCache::new(data[0].height as usize);
-        TeardownTree { data: data, size: size, delete_range_cache: cache }
+        let cache = DeleteRangeCache::new(height);
+        TeardownTree { data: data, size: size, delete_range_cache: Some(cache) }
     }
 
     pub fn into_node_vec(self) -> Vec<Node<T>> {
@@ -136,17 +123,27 @@ impl<T: Item> TeardownTree<T> {
     }
 
 
-    fn build(sorted: &mut [Option<T>], idx: usize, data: &mut [Node<T>]) {
+    fn calc_height(nodes: &Vec<Node<T>>, idx: usize) -> usize {
+        if idx < nodes.len() && nodes[idx].item.is_some() {
+            1 + max(Self::calc_height(nodes, Self::lefti(idx)),
+                    Self::calc_height(nodes, Self::righti(idx)))
+        } else {
+            0
+        }
+    }
+
+    /// returns the height of the tree
+    fn build(sorted: &mut [Option<T>], idx: usize, data: &mut [Node<T>]) -> usize {
         match sorted.len() {
-            0 => {}
+            0 => 0,
             n => {
                 let mid = n/2;
                 let (lefti, righti) = (Self::lefti(idx), Self::righti(idx));
-                Self::build(&mut sorted[..mid], lefti, data);
-                Self::build(&mut sorted[mid+1..], righti, data);
+                let lh = Self::build(&mut sorted[..mid], lefti, data);
+                let rh = Self::build(&mut sorted[mid+1..], righti, data);
 
-                let height = 1 + max(data[lefti].height, data[righti].height);
-                data[idx] = Node { item: sorted[mid].take(), height: height };
+                data[idx] = Node { item: sorted[mid].take() };
+                1 + max(lh, rh)
             }
         }
     }
@@ -162,8 +159,13 @@ impl<T: Item> TeardownTree<T> {
         debug_assert!(output.is_empty());
         output.truncate(0);
         {
-            let mut d = DeleteRange::new(self, output);
-            d.delete_range(drv);
+            DeleteRange::new(self, output).delete_range(drv);
+            debug_assert!({
+                let cache: DeleteRangeCache<T> = self.delete_range_cache.take().unwrap();
+                let ok = cache.slots_min.is_empty() && cache.slots_max.is_empty() && cache.delete_subtree_stack.is_empty();
+                self.delete_range_cache = Some(cache);
+                ok
+            });
         }
         self.size -= output.len();
     }
@@ -171,16 +173,8 @@ impl<T: Item> TeardownTree<T> {
 
 
 
-    fn delete_idx(&mut self, mut idx: usize) -> T {
-        let removed = self.delete_idx_recursive(idx);
-        // update the parents
-        while idx != 0 {
-            idx = Self::parenti(idx);
-            self.update_height(idx);
-        }
-        self.size -= 1;
-
-        removed
+    fn delete_idx(&mut self, idx: usize) -> T {
+        self.delete_idx_recursive(idx)
     }
 
 
@@ -205,7 +199,6 @@ impl<T: Item> TeardownTree<T> {
 
         if !self.has_left(idx) && !self.has_right(idx) {
             let root = self.node_mut(idx);
-            root.height = 0;
             root.item.take().unwrap()
         } else {
             let removed = if self.has_left(idx) && !self.has_right(idx) {
@@ -215,32 +208,19 @@ impl<T: Item> TeardownTree<T> {
                 let right_min = self.delete_min(Self::righti(idx));
                 mem::replace(self.item_mut_unwrap(idx), right_min)
             } else { // self.has_left(idx) && self.has_right(idx)
-                // TODO: remove from the subtree with bigger height, not always from the left
                 let left_max = self.delete_max(Self::lefti(idx));
                 mem::replace(self.item_mut_unwrap(idx), left_max)
             };
 
-            self.update_height(idx);
             removed
         }
-    }
-
-
-    #[inline]
-    pub fn update_height(&mut self, idx: usize) {
-        let h = max(self.left(idx).height, self.right(idx).height) + 1;
-        let node = self.node_mut(idx);
-        debug_assert!(node.item.is_some());
-        node.height =  h;
     }
 
 
     fn delete_max(&mut self, idx: usize) -> T {
         // TODO: rewrite with loop
         if self.has_right(idx) {
-            let removed = self.delete_max(Self::righti(idx));
-            self.update_height(idx);
-            removed
+            self.delete_max(Self::righti(idx))
         } else {
             // this is the max, now just need to handle the left subtree
             self.delete_idx_recursive(idx)
@@ -250,9 +230,7 @@ impl<T: Item> TeardownTree<T> {
     fn delete_min(&mut self, idx: usize) -> T {
         // TODO: rewrite with loop
         if self.has_left(idx) {
-            let removed = self.delete_min(Self::lefti(idx));
-            self.update_height(idx);
-            removed
+            self.delete_min(Self::lefti(idx))
         } else {
             // this is the min, now just need to handle the right subtree
             self.delete_idx_recursive(idx)
@@ -336,12 +314,12 @@ impl<T: Item> TeardownTree<T> {
 
     #[inline(always)]
     pub fn has_left(&self, idx: usize) -> bool {
-        self.left(idx).height != 0
+        self.left(idx).item.is_some()
     }
 
     #[inline(always)]
     pub fn has_right(&self, idx: usize) -> bool {
-        self.right(idx).height != 0
+        self.right(idx).item.is_some()
     }
 
     #[inline(always)]
@@ -360,20 +338,20 @@ impl<T: Item> Debug for TeardownTree<T> {
     fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
         let mut nz: Vec<_> = self.data.iter()
             .rev()
-            .skip_while(|node| node.item.is_none() && node.height==0)
+            .skip_while(|node| node.item.is_none())
             .map(|node| match node.item {
-                None => (String::from("0"), 0),
-                Some(ref x) => (format!("{:?}", x.ord()), node.height)
+                None => String::from("0"),
+                Some(ref x) => format!("{:?}", x.ord())
             })
             .collect();
         nz.reverse();
 
         let _ = write!(fmt, "[");
         let mut sep = "";
-        for &(ref key, ref height) in nz.iter() {
+        for ref key in nz.iter() {
             let _ = write!(fmt, "{}", sep);
             sep = ", ";
-            let _ = write!(fmt, "({}, {})", key, height);
+            let _ = write!(fmt, "{}", key);
         }
         let _ = write!(fmt, "]");
         Ok(())

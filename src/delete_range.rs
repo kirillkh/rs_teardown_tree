@@ -21,10 +21,33 @@ impl TraversalDecision {
     }
 }
 
+pub struct DeleteRangeCache<T: Item> {
+    pub slots_min: SlotStack<T>, pub slots_max: SlotStack<T>,
+    pub delete_subtree_stack: Vec<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
+}
+
+impl<T: Item> Clone for DeleteRangeCache<T> {
+    fn clone(&self) -> Self {
+        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty());
+        let capacity = self.slots_max.capacity;
+        DeleteRangeCache::new(capacity)
+    }
+}
+
+impl<T: Item> DeleteRangeCache<T> {
+    pub fn new(height: usize) -> DeleteRangeCache<T> {
+        let slots_min = SlotStack::new(height);
+        let slots_max = SlotStack::new(height);
+        let delete_subtree_stack = Vec::with_capacity(height);
+        DeleteRangeCache { slots_min: slots_min, slots_max: slots_max, delete_subtree_stack: delete_subtree_stack }
+    }
+}
+
+
+
 type Slot<T> = Option<T>;
 
-
-struct SlotStack<T: Item> {
+pub struct SlotStack<T: Item> {
     nslots: usize,
     nfilled: usize,
     slots: Unique<T>,
@@ -96,23 +119,32 @@ impl<T: Item> SlotStack<T> {
     }
 
     #[inline(always)]
-    fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.nslots == 0
     }
 
     #[inline(always)]
-    fn nslots(&self) -> usize {
+    pub fn nslots(&self) -> usize {
         self.nslots
     }
 
     #[inline(always)]
-    fn nfilled(&self) -> usize {
+    pub fn nfilled(&self) -> usize {
         self.nfilled
     }
 
     #[inline(always)]
-    fn has_open(&self) -> bool {
+    pub fn has_open(&self) -> bool {
         self.nslots != self.nfilled
+    }
+}
+
+impl <T: Item> Drop for SlotStack<T> {
+    fn drop(&mut self) {
+        unsafe {
+            let slots_vec = Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
+            // let it drop
+        }
     }
 }
 
@@ -128,23 +160,22 @@ pub struct DeleteRange<'a, T: 'a+Item> {
 
 impl<'a, T: Item> DeleteRange<'a, T> {
     pub fn new(tree: &'a mut TeardownTree<T>, output: &'a mut Vec<T>) -> DeleteRange<'a, T> {
-        let height = tree.node(0).height as usize;
-        let slots_min = SlotStack::new(height);
-        let slots_max = SlotStack::new(height);
-        let delete_subtree_stack = Vec::with_capacity(height);
-        DeleteRange { tree: tree, slots_min: slots_min, slots_max: slots_max, output: output, delete_subtree_stack:delete_subtree_stack }
+        let cache = tree.delete_range_cache.take().unwrap();
+        DeleteRange { tree: tree, slots_min: cache.slots_min, slots_max: cache.slots_max, output: output, delete_subtree_stack: cache.delete_subtree_stack }
     }
 
     /// The items are not guaranteed to be returned in any particular order.
-    pub fn delete_range<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
+    pub fn delete_range<D: TraversalDriver<T>>(mut self, drv: &mut D) {
 //        // TEST
 //        let orig = self.tree.clone();
 
         if !self.tree.is_null(0) {
             self.delete_range_rec(drv, 0, false, false);
-            debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty(),
+            debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty(),
                     "tree: {:?}, replacements_min: {}, replacements_max: {}, output: {:?}", self.tree, self.slots_min.to_str(), self.slots_max.to_str(), self.output);
         }
+
+        self.tree.delete_range_cache = Some(DeleteRangeCache { slots_min: self.slots_min, slots_max: self.slots_max, delete_subtree_stack: self.delete_subtree_stack });
     }
 
 
@@ -231,28 +262,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     //---- helpers ---------------------------------------------------------------------------------
-    // Assumes that the returned vec will never be realloc'd!
-    #[inline(always)]
-    fn pin_stack(stack: &mut SlotStack<T>) -> SlotStack<T> {
-        let nslots = stack.nslots;
-        let slots = {
-//            let mut v = &mut stack.slots;
-//            let ptr = (&mut v[nslots..]).as_mut_ptr();
-            let ptr = stack.slot_at(nslots) as *mut T;
-            unsafe {
-//                Vec::from_raw_parts(ptr, v.len()-nslots, v.capacity() - nslots)
-                SlotStack {
-                    nslots: 0,
-                    nfilled: 0,
-                    slots: Unique::new(ptr),
-                    capacity: stack.capacity - nslots
-                }
-            }
-        };
-
-        slots
-    }
-
     #[inline(always)]
     fn node(&self, idx: usize) -> &Node<T> {
         self.tree.node(idx)
@@ -292,15 +301,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 }
 
-
-impl <T: Item> Drop for SlotStack<T> {
-    fn drop(&mut self) {
-        unsafe {
-            let slots_vec = Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
-            // let it drop
-        }
-    }
-}
 
 
 
@@ -342,8 +342,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if self.tree.is_null(root) {
             return;
         }
-
-        self.node_mut(root).height = 0;
 
         let mut next = root;
 
@@ -393,7 +391,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let done = self.fill_slots_min(Self::lefti(idx));
 
         if done {
-            self.tree.update_height(idx);
             true
         } else {
             debug_assert!(self.slots_min.has_open(), "idx={}, slots_min.nfilled={}, slots_min.nslots={}, slots[0]={:?}, slots[1]={:?}", idx, self.slots_min.nfilled, self.slots_min.nslots, self.slots_min.slot_at(0), self.slots_min.slot_at(1));
@@ -407,10 +404,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             });
             let done = node.item.is_some();
             if done {
-                self.tree.update_height(idx);
                 true
             } else {
-                node.height = 0;
                 !self.slots_min.has_open()
             }
         }
@@ -426,7 +421,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let done = self.fill_slots_max(Self::righti(idx));
 
         if done {
-            self.tree.update_height(idx);
             true
         } else {
             debug_assert!(self.slots_max.has_open(), "idx={}, slots_max.nfilled={}, slots_max.nslots={}, slots[0]={:?}, slots[1]={:?}", idx, self.slots_max.nfilled, self.slots_max.nslots, self.slots_max.slot_at(0), self.slots_max.slot_at(1));
@@ -440,10 +434,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             });
             let done = node.item.is_some();
             if done {
-                self.tree.update_height(idx);
                 true
             } else {
-                node.height = 0;
                 !self.slots_max.has_open()
             }
         }
@@ -467,15 +459,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
 
     //---- traverse_* ---------------------------------------------------------------------
-    #[inline(always)]
-    fn traverse_leaf(&mut self, idx: usize) {
-        let node = self.node_mut(idx);
-        debug_assert!(node.height == 1);
-        node.height = 0;
-        self.consume(node);
-    }
-
-
     #[inline(always)]
     fn traverse_left<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
                                             min_included: bool, max_included: bool) {
@@ -523,15 +506,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             }
 
             if removed && self.slots_max.has_open() && self.tree.has_left(idx) {
-                removed = self.descend_left(idx, true, |this, child_idx| { this.fill_slots_max(child_idx); } );
+                self.descend_left(idx, true, |this, child_idx| { this.fill_slots_max(child_idx); } );
             }
-        }
-
-        // update height
-        if removed {
-            node.height = 0;
-        } else {
-            self.tree.update_height(idx);
         }
     }
 
@@ -560,15 +536,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             }
 
             if removed && self.slots_min.has_open() && self.tree.has_right(idx) {
-                removed = self.descend_right(idx, true, |this, child_idx| { this.fill_slots_min(child_idx); } );
+                self.descend_right(idx, true, |this, child_idx| { this.fill_slots_min(child_idx); } );
             }
-        }
-
-        // update height
-        if removed {
-            node.height = 0;
-        } else {
-            self.tree.update_height(idx);
         }
     }
 
@@ -580,34 +549,20 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         self.consume(node);
         let mut removed = true;
 
-        let (lh, rh) = (self.tree.left(idx).height, self.tree.right(idx).height);
-
-        // fill the node with an item from the higher child. doesn't seem to give much benefit
-        // with initially balanced trees, but might have a bigger effect with unbalanced ones
-        if lh < rh {
+        if self.tree.right(idx).item.is_some() {
             removed = self.delete_range_descend_right(drv, idx, true,
                                                       true, max_included);
-            if lh != 0 {
-                removed = self.delete_range_descend_left(drv, idx, removed,
-                                                         min_included, true);
-            }
-        } else if lh != 0 { // 0<=rh<=lh
-            removed = self.delete_range_descend_left(drv, idx, true,
-                                                     min_included, true);
-            if rh != 0 {
-                removed = self.delete_range_descend_right(drv, idx, removed,
-                                                          true, max_included);
-            }
         }
 
-        // update height
+        if self.tree.left(idx).item.is_some() {
+            removed = self.delete_range_descend_left(drv, idx, removed,
+                                                     min_included, true);
+        }
+
         if removed {
-            // this node was consumed, and both subtrees are empty now: nothing more to do here
+            // this node was consumed, and both subtrees are empty now
             debug_assert!(!self.tree.has_left(idx));
             debug_assert!(!self.tree.has_right(idx));
-            node.height = 0;
-        } else {
-            self.tree.update_height(idx);
         }
     }
 }

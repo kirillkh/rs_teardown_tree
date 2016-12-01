@@ -1,5 +1,4 @@
 
-1. specialize the delete_recurse function to 2 cases: height(left)<height(right) and the opposite
 1. implement the DSW algorithm (for building the master tree)
 1. try to use two arrays (Vec<T> and Vec<bool>) instead of Vec<Option<T>>
 1. try to remove height entirely
