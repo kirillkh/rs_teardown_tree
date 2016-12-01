@@ -15,8 +15,7 @@ pub use delete_range::TraversalDecision;
 
 #[cfg(test)]
 mod tests {
-    use base::{Item, TeardownTree, Node, DriverFromTo, TeardownTreeRefill};
-    use delete_range::{TraversalDecision, TraversalDriver};
+    use base::{TeardownTree, Node, DriverFromTo, TeardownTreeRefill};
 
     type Tree = TeardownTree<usize>;
 
@@ -43,7 +42,7 @@ mod tests {
 
 
     fn test_prebuilt(items: &[usize], from_to: (usize, usize),
-                     expect_tree: &[(usize, usize)], expect_out: &[usize]) {
+                     expect_tree: &[usize], expect_out: &[usize]) {
 
         let nodes: Vec<Node<usize>> = mk_prebuilt(items);
         let mut tree = Tree::with_nodes(nodes);
@@ -61,64 +60,57 @@ mod tests {
                       &[], &[1]);
 
         test_prebuilt(&[1, 0, 2], (1,1),
-                      &[(2,1)], &[1]);
+                      &[2], &[1]);
 
         test_prebuilt(&[1, 0, 2], (2,2),
-                      &[(1,1)], &[2]);
+                      &[1], &[2]);
 
         test_prebuilt(&[3, 1, 4, 0, 2], (2,4),
-                      &[(1, 1)], &[3,2,4]);
+                      &[1], &[3,4,2]);
 
         test_prebuilt(&[4, 2, 0, 1, 3], (3,4),
-                      &[(2, 2), (1,1)], &[4,3]);
+                      &[2, 1], &[4,3]);
 
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (1,1),
-                      &[(2, 3), (0, 0), (3, 2), (0, 0), (0, 0), (0, 0), (4, 1)], &[1]);
+                      &[2, 0, 3, 0, 0, 0, 4], &[1]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (2,2),
-                      &[(1, 3), (0, 0), (3, 2), (0, 0), (0, 0), (0, 0), (4, 1)], &[2]);
+                      &[1, 0, 3, 0, 0, 0, 4], &[2]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (3,3),
-                      &[(1, 3), (0, 0), (2, 2), (0, 0), (0, 0), (0, 0), (4, 1)], &[3]);
+                      &[1, 0, 2, 0, 0, 0, 4], &[3]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (4,4),
-                      &[(1, 3), (0, 0), (2, 2), (0, 0), (0, 0), (0, 0), (3, 1)], &[4]);
+                      &[1, 0, 2, 0, 0, 0, 3], &[4]);
 
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (1,1),
-                      &[(4, 3), (3, 2), (0, 0), (2, 1)], &[1]);
+                      &[4, 3, 0, 2], &[1]);
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (2,2),
-                      &[(4, 3), (3, 2), (0, 0), (1, 1)], &[2]);
+                      &[4, 3, 0, 1], &[2]);
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (3,3),
-                      &[(4, 3), (2, 2), (0, 0), (1, 1)], &[3]);
+                      &[4, 2, 0, 1], &[3]);
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (4,4),
-                      &[(3, 3), (2, 2), (0, 0), (1, 1)], &[4]);
+                      &[3, 2, 0, 1], &[4]);
 
         test_prebuilt(&[1, 0, 3, 0, 0, 2, 4], (1,2),
-                      &[(3, 2), (0, 0), (4, 1)], &[1, 2]);
+                      &[3, 0, 4], &[1, 2]);
 
         test_prebuilt(&[6, 4, 0, 1, 5, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], (4,6),
-                      &[(3,3), (2,2), (0,0), (1,1)], &[6,4,5]);
+                      &[3, 2, 0, 1], &[6,4,5]);
     }
 
 
     fn mk_prebuilt(items: &[usize]) -> Vec<Node<usize>> {
-        let mut nodes: Vec<_> = items.iter().map(|&x| if x==0 {
-            Node { item:None, height: 0 }
+        let nodes: Vec<_> = items.iter().map(|&x| if x==0 {
+            Node { item:None }
         } else {
-            Node { item: Some(x), height: 1}
+            Node { item: Some(x) }
         }).collect();
-
-        for i in (1..items.len()).rev() {
-            if nodes[i].height != 0 {
-                let pari = Tree::parenti(i);
-                nodes[pari].height = ::std::cmp::max(nodes[pari].height, 1 + nodes[i].height);
-            }
-        }
 
         nodes
     }
@@ -246,8 +238,7 @@ mod tests {
         }
 
         let node = tree.node(idx);
-        if node.height == 0 || node.item.is_none() {
-            debug_assert!(node.height == 0 && node.item.is_none());
+        if node.item.is_none() {
             return None;
         } else {
             let item = node.item.unwrap();
