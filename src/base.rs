@@ -95,6 +95,9 @@ impl<T: Item> TeardownTree<T> {
 
         let mut sorted: Vec<Option<T>> = sorted.into_iter().map(|x| Some(x)).collect();
         let height = Self::build(&mut sorted, 0, &mut data);
+        debug_assert!({ // we assert that the tree is nearly complete
+            data.iter().take(sorted.len()).filter(|x| x.item.is_none()).count() == 0
+        });
         let cache = DeleteRangeCache::new(height);
         TeardownTree { data: data, size: size, delete_range_cache: Some(cache) }
     }
@@ -132,18 +135,35 @@ impl<T: Item> TeardownTree<T> {
         }
     }
 
+
+    /// finds the point to partition n keys for a nearly-complete binary tree
+    /// http://stackoverflow.com/a/26896494/3646645
+    fn build_select_root(n: usize) -> usize {
+        // the highest power of two <= n
+        let x = if n.is_power_of_two() { n }
+                else { n.next_power_of_two() / 2 };
+
+        if x/2 <= (n-x) + 1 {
+            debug_assert!(x >= 1, "x={}, n={}", x, n);
+            x - 1
+        } else {
+            n - x / 2
+        }
+    }
+
     /// returns the height of the tree
     fn build(sorted: &mut [Option<T>], idx: usize, data: &mut [Node<T>]) -> usize {
         match sorted.len() {
             0 => 0,
             n => {
-                let mid = n/2;
+                let mid = Self::build_select_root(n);
                 let (lefti, righti) = (Self::lefti(idx), Self::righti(idx));
                 let lh = Self::build(&mut sorted[..mid], lefti, data);
                 let rh = Self::build(&mut sorted[mid+1..], righti, data);
 
                 data[idx] = Node { item: sorted[mid].take() };
-                1 + max(lh, rh)
+                debug_assert!(rh <= lh);
+                1 + lh
             }
         }
     }
