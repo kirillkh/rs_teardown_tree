@@ -396,7 +396,7 @@ mod tests {
         };
 
 
-        let mut tree = Tree::new(elems);
+        let tree = Tree::new(elems);
         let mut copy = tree.clone();
         let mut output = Vec::with_capacity(tree.size());
 
