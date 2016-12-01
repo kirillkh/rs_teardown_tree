@@ -581,27 +581,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let mut removed = true;
 
         if self.tree.has_left(idx) {
-            if true {
-                removed = self.delete_range_descend_left(drv, idx, true,
-                                                         min_included, true);
-            } else {
-                let slots_max_left = Self::pin_stack(&mut self.slots_max);
-                let slots_max_orig = mem::replace(&mut self.slots_max, slots_max_left);
-
-                removed = self.delete_range_descend_left(drv, idx, true,
-                                                         min_included, true);
-
-                let slots_max_left = mem::replace(&mut self.slots_max, slots_max_orig);
-                mem::forget(slots_max_left);
-            }
-
-            if !removed && self.slots_min.has_open() {
-                // this node is the minimum of the tree: use it to fill a slot
-                let item = node.item.take();
-                self.slots_min.fill_slot_opt(item);
-
-                removed = true;
-            }
+            removed = self.delete_range_descend_left(drv, idx, true,
+                                                     min_included, true);
         }
 
         if self.tree.has_right(idx) {
@@ -616,20 +597,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             debug_assert!(!self.tree.has_right(idx));
             node.height = 0;
         } else {
-            if self.slots_max.has_open() {
-                // this node is the maximum of the tree: use it to fulfill a max request
-                let item = node.item.take();
-                self.slots_max.fill_slot_opt(item);
-
-                // fulfill the remaining max requests from the left subtree
-                debug_assert!(self.slots_min.is_empty());
-                removed = if self.tree.has_left(idx) {
-                    self.descend_left(idx, true, |this, child_idx| { this.fill_slots_max(child_idx); } )
-                } else {
-                    true
-                }
-            }
-
             // update height
             if removed {
                 node.height = 0;
