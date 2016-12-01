@@ -30,14 +30,29 @@ mod tests {
     }
 
     #[test]
+    fn delete_range1() {
+        delete_range_n(1);
+    }
+
+    #[test]
+    fn delete_range2() {
+        delete_range_n(1);
+    }
+
+    #[test]
+    fn delete_range3() {
+        delete_range_n(1);
+    }
+
+    #[test]
     fn delete_range4() {
-        let mut tree = Tree::new(vec![1, 2, 3, 4]);
-        let mut drv = DriverFromTo::new(2,2);
-        let mut output = Vec::with_capacity(tree.size());
-        tree.delete_range(&mut drv, &mut output);
-        println!("tree: {:?}", &tree);
-        println!("output: {:?}", &output);
-//        panic!();
+        delete_range_n(4);
+    }
+
+
+    fn delete_range_n(n: usize) {
+        let mut tree = Tree::new((1..n+1).collect::<Vec<_>>());
+        delete_range_exhaustive_with_tree(tree);
     }
 
 
@@ -218,12 +233,12 @@ mod tests {
 //                println!("tree={:?}, from={}, to={}", &tree, i, j);
                 output.truncate(0);
                 tree_mod.delete_range(&mut drv, &mut output);
-                delete_range_exhaustive_check(n, i, j, &mut output, tree_mod, &tree);
+                delete_range_check(n, i, j, &mut output, tree_mod, &tree);
             }
         }
     }
 
-    fn delete_range_exhaustive_check(n: usize, from: usize, to: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
+    fn delete_range_check(n: usize, from: usize, to: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
         debug_assert!(output.len() == to-from+1, "tree_orig={:?}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, from, to, to-from+1, output);
         debug_assert!(tree_mod.size() + output.len() == n);
 
@@ -233,7 +248,7 @@ mod tests {
     }
 
     fn check_bst(tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, idx: usize) -> Option<(usize, usize)> {
-        if tree.size() == 0 {
+        if tree.size() == 0 || !tree.is_null(idx) {
             return None;
         }
 

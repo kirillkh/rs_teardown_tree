@@ -1,6 +1,6 @@
 [package]
 name = "teardown_tree"
-version = "0.2.7"
+version = "0.2.8"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 
 [lib]

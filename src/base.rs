@@ -86,7 +86,7 @@ impl<T: Item> TeardownTree<T> {
     pub fn new(sorted: Vec<T>) -> TeardownTree<T> {
         let size = sorted.len();
 
-        let capacity = Self::row_start(size)*4 + 3;
+        let capacity = size;
 
         let mut data = Vec::with_capacity(capacity);
         for _ in 0..capacity {
@@ -305,13 +305,23 @@ impl<T: Item> TeardownTree<T> {
     }
 
     #[inline(always)]
-    pub fn left(&self, idx: usize) -> &Node<T> {
-        &self.data[Self::lefti(idx)]
+    pub fn left(&self, idx: usize) -> Option<&Node<T>> {
+        let lefti = Self::lefti(idx);
+        if lefti < self.data.len() {
+            Some(&self.data[lefti])
+        } else {
+            None
+        }
     }
 
     #[inline(always)]
-    pub fn right(&self, idx: usize) -> &Node<T> {
-        &self.data[Self::righti(idx)]
+    pub fn right(&self, idx: usize) -> Option<&Node<T>> {
+        let righti = Self::righti(idx);
+        if righti < self.data.len() {
+            Some(&self.data[righti])
+        } else {
+            None
+        }
     }
 
 
@@ -334,17 +344,17 @@ impl<T: Item> TeardownTree<T> {
 
     #[inline(always)]
     pub fn has_left(&self, idx: usize) -> bool {
-        self.left(idx).item.is_some()
+        self.left(idx).and_then(|nd| nd.item.as_ref()).is_some()
     }
 
     #[inline(always)]
     pub fn has_right(&self, idx: usize) -> bool {
-        self.right(idx).item.is_some()
+        self.right(idx).and_then(|nd| nd.item.as_ref()).is_some()
     }
 
     #[inline(always)]
     pub fn is_null(&self, idx: usize) -> bool {
-        self.data[idx].item.is_none()
+        idx >= self.data.len() || self.data[idx].item.is_none()
     }
 
     #[inline(always)]
