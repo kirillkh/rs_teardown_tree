@@ -58,7 +58,7 @@ e.g., the top slot on the `slots_max` stack is intended to be filled with
 `max(X)`, not `max(left(X))`. However, it can be shown that in this case
 all items in the right subtree are inside the query range and will be removed,
 so the remaining maximum item in `left(X)` is the correct item to replace
-the top slot on `slots_max`.*
+the bottom empty slot in `slots_max`.*
 
 Another important case is when the node `X` is **not** inside the query
 range. In this case, the idea is to determine whether `item(X) = min(X)`.
