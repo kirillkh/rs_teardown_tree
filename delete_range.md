@@ -107,7 +107,8 @@ Benchmarks
 I have so far only performed a very limited set of benchmarks, comparing
 my own implementation (which is geared for a very specialized use case)
 against the BTree in Rust's standard library. However, the comparison is
-unfair, considering that BTree lacks `delete_range` functionality. That
+unfair, considering that BTree lacks a way to efficiently delete ranges
+(it has an `O(log n)` `split`, but not `merge`, see [Rust #34666][3]). That
 said, with a tree of 1,000,000 items and a request to delete a range of
 100 items, my `delete_range` implementation outperforms BTree by a factor
 of ~4. And if you consider the whole clone/teardown sequence of a tree
@@ -124,3 +125,4 @@ the `benchmarks` binary.
 
 [1]: https://github.com/ocaml/ocaml/blob/trunk/stdlib/set.ml
 [2]: https://github.com/kirillkh/rs_teardown_tree/blob/master/src/delete_range.rs
+[3]: https://github.com/rust-lang/rust/issues/34666
