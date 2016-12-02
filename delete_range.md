@@ -67,17 +67,16 @@ to the deepest open slot. Otherwise, we try with `max(X)` and `slots_max`.
 Algorithm:
 
 1. Recursively call `delete_range(left(X))`.
-2. If `slots_min` is empty, we know that the left subtree is now empty,
+2. If `slots_min` has an empty slot, we know that the left subtree is now empty,
    and `item(X) = min(X)`. So we fill a slot in `slots_min` with `item(X)`.
 3. If `item(X)` is empty (i.e. was removed in the previous step), we push
    `Empty` on top of `slots_min`.
 4. Recursively call `delete_range(right(X))`.
 5. If we pushed a slot in the step `(3)`, pop a slot and use its content
    (if non-`Empty`) to replace `item(X)`.
-6. If `slots_max` is empty, we know that the right subtree is now empty,
-   and `item(X) = max(X)`. However, the left subtree might be non-empty,
-   so we proceed to fill the remaining open `slots_max` with items from
-   the left subtree:
+6. If `slots_max` has an empty slot, we know that the right subtree is now 
+   empty. However, the left subtree might be non-empty, so we proceed to fill
+   the remaining open `slots_max` with items from the left subtree:
    1. if `item(X)` is non-`Empty`, we use it to fill a slot in `slots_max`
       and push `Empty` onto `slots_max`
    1. call `delete_range(left(X))` again
