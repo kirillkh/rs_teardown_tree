@@ -45,7 +45,7 @@ do the following:
 3. Push an `Empty` slot on top of `slots_max`.
 4. Recursively call `delete_range(left(X))`.
 5. let `slot := slots_max.pop()`
-6. <strike>Restore `slots_max` from `slots_max_orig`.
+6. <strike>Restore `slots_max` from `slots_max_orig`.</strike>
 7. If `slot` is `Filled(W)`, then replace `V` with `W`.
 8. otherwise, push `Empty` on top of `slots_min` and process the right
    subtree in a similar manner.
