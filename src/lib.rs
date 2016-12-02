@@ -143,54 +143,43 @@ mod tests {
 
 
     #[test]
-    fn delete_range_exhaustive1() {
-        for i in 1..2 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
-    fn delete_range_exhaustive2() {
-        for i in 2..3 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
-    fn delete_range_exhaustive3() {
-        for i in 3..4 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
-    fn delete_range_exhaustive4() {
-        for i in 4..5 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
     fn delete_range_exhaustive() {
         for i in 1..8 {
             delete_range_exhaustive_n(i);
         }
     }
 
+    #[test]
+    fn delete_single_exhaustive() {
+        for i in 1..9 {
+            delete_single_exhaustive_n(i);
+        }
+    }
+
+    fn delete_single_exhaustive_n(n: usize) {
+        test_exhaustive_n(n, &|tree| delete_single_exhaustive_with_tree(tree));
+    }
+
     fn delete_range_exhaustive_n(n: usize) {
+        test_exhaustive_n(n, &|tree| delete_range_exhaustive_with_tree(tree));
+    }
+
+    fn test_exhaustive_n<F>(n: usize, check: &F)
+                        where F: Fn(Tree) -> () {
         let elems: Vec<_> = (1..n+1).collect();
         println!("exhaustive {}: elems={:?} ------------------------", n, &elems);
 
         let mut stack = vec![TreeRangeInfo { range: (1..n+1), root_idx: 0 }];
         let mut items: Vec<usize> = vec![0; 1 << n];
-        delete_range_exhaustive_rec(&mut stack, &mut items);
+        test_exhaustive_rec(&mut stack, &mut items, check);
     }
 
-    fn delete_range_exhaustive_rec(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>) {
+    fn test_exhaustive_rec<F>(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>, check: &F)
+                                                            where F: Fn(Tree) -> () {
         if stack.is_empty() {
             let nodes: Vec<Node<usize>> = mk_prebuilt(items);
             let tree = Tree::with_nodes(nodes);
-            delete_range_exhaustive_with_tree(tree);
+            check(tree);
         } else {
             let info = stack.pop().unwrap();
             let (lefti, righti) = (Tree::lefti(info.root_idx), Tree::righti(info.root_idx));
@@ -210,7 +199,7 @@ mod tests {
                     pushed += 1;
                 }
 
-                delete_range_exhaustive_rec(stack, items);
+                test_exhaustive_rec(stack, items, check);
 
                 for _ in 0..pushed {
                     stack.pop();
@@ -222,6 +211,19 @@ mod tests {
         }
     }
 
+
+    fn delete_single_exhaustive_with_tree(tree: Tree) {
+        let n = tree.size();
+        let mut output = Vec::with_capacity(n);
+        for i in 1..n+1 {
+            output.truncate(0);
+            let mut tree_mod = tree.clone();
+//                println!("tree={:?}, from={}, to={}", &tree, i, j);
+            let x = tree_mod.delete(&i);
+            output.push(i);
+            delete_range_check(n, i, i, &mut output, tree_mod, &tree);
+        }
+    }
 
     fn delete_range_exhaustive_with_tree(tree: Tree) {
         let n = tree.size();
@@ -240,7 +242,7 @@ mod tests {
 
     fn delete_range_check(n: usize, from: usize, to: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
         debug_assert!(output.len() == to-from+1, "tree_orig={:?}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, from, to, to-from+1, output);
-        debug_assert!(tree_mod.size() + output.len() == n);
+        debug_assert!(tree_mod.size() + output.len() == n, "tree={:?}, tree_mod={:?}, sz={}, output={:?}, n={}", tree_orig, tree_mod, tree_mod.size(), output, n);
 
         output.sort();
         assert_eq!(output, &(from..to+1).collect::<Vec<_>>());

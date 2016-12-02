@@ -1,6 +1,6 @@
 use std::ptr;
 use std::mem;
-use std::cmp::max;
+use std::cmp::{max, Ordering};
 use std::fmt::{Debug, Formatter};
 use delete_range::{DeleteRange, DeleteRangeCache, TraversalDriver, TraversalDecision};
 
@@ -193,11 +193,6 @@ impl<T: Item> TeardownTree<T> {
 
 
 
-    fn delete_idx(&mut self, idx: usize) -> T {
-        self.delete_idx_recursive(idx)
-    }
-
-
     #[inline(always)]
     pub fn node(&self, idx: usize) -> &Node<T> {
         &self.data[idx]
@@ -208,64 +203,126 @@ impl<T: Item> TeardownTree<T> {
         &mut self.data[idx]
     }
 
+    #[inline(always)]
+    fn node_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut Node<T> {
+        unsafe {
+            mem::transmute(&mut self.data[idx])
+        }
+    }
+
+
 
     pub fn item_mut_unwrap(&mut self, idx: usize) -> &mut T {
         self.node_mut(idx).item.as_mut().unwrap()
     }
 
 
-    fn delete_idx_recursive(&mut self, idx: usize) -> T {
-        debug_assert!(!self.is_null(idx));
+    pub fn delete(&mut self, search: &T) -> bool {
+        let mut idx = 0;
+        if idx >= self.data.len() {
+            return false;
+        }
 
-        if !self.has_left(idx) && !self.has_right(idx) {
-            let root = self.node_mut(idx);
-            root.item.take().unwrap()
-        } else {
-            let removed = if self.has_left(idx) && !self.has_right(idx) {
-                let left_max = self.delete_max(Self::lefti(idx));
-                mem::replace(self.item_mut_unwrap(idx), left_max)
-            } else if !self.has_left(idx) && self.has_right(idx) {
-                let right_min = self.delete_min(Self::righti(idx));
-                mem::replace(self.item_mut_unwrap(idx), right_min)
-            } else { // self.has_left(idx) && self.has_right(idx)
-                let left_max = self.delete_max(Self::lefti(idx));
-                mem::replace(self.item_mut_unwrap(idx), left_max)
+        let mut ord =
+            if let Some(ref it) = self.node_mut_unsafe(idx).item {
+                it.ord()
+            } else {
+                return false;
             };
 
-            removed
+        loop {
+            let ordering = search.ord().cmp(&ord);
+
+            idx = match ordering {
+                Ordering::Equal   => {
+                    self.size -= 1;
+                    self.delete_idx(idx);
+                    return true
+                },
+                Ordering::Less    => Self::lefti(idx),
+                Ordering::Greater => Self::righti(idx),
+            };
+
+            if idx >= self.data.len() {
+                return false;
+            }
+
+            if let Some(ref it) = self.node_mut_unsafe(idx).item {
+                ord = it.ord();
+            } else {
+                return false;
+            }
         }
     }
 
 
-    fn delete_max(&mut self, idx: usize) -> T {
-        // TODO: rewrite with loop
-        if self.has_right(idx) {
-            self.delete_max(Self::righti(idx))
-        } else {
-            // this is the max, now just need to handle the left subtree
-            self.delete_idx_recursive(idx)
+
+    #[inline]
+    fn delete_idx(&mut self, idx: usize) -> T {
+        debug_assert!(!self.is_null(idx));
+
+        match (self.has_left(idx), self.has_right(idx)) {
+            (false, false) => {
+                let root = self.node_mut(idx);
+                root.item.take().unwrap()
+            },
+
+            (true, false)  => {
+                let left_max = self.delete_max(Self::lefti(idx));
+                mem::replace(self.item_mut_unwrap(idx), left_max)
+            },
+
+            (false, true)  => {
+                let right_min = self.delete_min(Self::righti(idx));
+                mem::replace(self.item_mut_unwrap(idx), right_min)
+            },
+
+            (true, true)   => {
+                let left_max = self.delete_max(Self::lefti(idx));
+                mem::replace(self.item_mut_unwrap(idx), left_max)
+            },
         }
     }
 
-    fn delete_min(&mut self, idx: usize) -> T {
-        // TODO: rewrite with loop
+    #[inline]
+    fn delete_max(&mut self, mut idx: usize) -> T {
+        while self.has_right(idx) {
+            idx = Self::righti(idx);
+        }
+
         if self.has_left(idx) {
-            self.delete_min(Self::lefti(idx))
+            let left_max = self.delete_max(Self::lefti(idx));
+            mem::replace(self.item_mut_unwrap(idx), left_max)
         } else {
-            // this is the min, now just need to handle the right subtree
-            self.delete_idx_recursive(idx)
+            let root = self.node_mut(idx);
+            root.item.take().unwrap()
+        }
+    }
+
+    #[inline]
+    fn delete_min(&mut self, mut idx: usize) -> T {
+        while self.has_left(idx) {
+            idx = Self::lefti(idx);
+        }
+
+        if self.has_right(idx) {
+            let right_min = self.delete_min(Self::righti(idx));
+            mem::replace(self.item_mut_unwrap(idx), right_min)
+        } else {
+            let root = self.node_mut(idx);
+            root.item.take().unwrap()
         }
     }
 
 
-    //    #[inline]
-    //    fn levels_count(&self) -> usize {
-    //        if self.data.is_empty() {
-    //            0
-    //        } else {
-    //            Self::level_of(self.data.len()-1) + 1
-    //        }
-    //    }
+//    #[inline]
+//    fn levels_count(&self) -> usize {
+//        if self.data.is_empty() {
+//            0
+//        } else {
+//            Self::level_of(self.data.len()-1) + 1
+//        }
+//    }
 
     #[inline]
     fn level_from(level: usize) -> usize {
