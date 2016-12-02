@@ -1,3 +1,6 @@
+`delete_range`
+--------------
+
 There are many cases where we might wish to delete (and return) a consecutive
 range of values from a binary search tree (BST), but somehow it seems to
 be overlooked in the literature. I was able to find a single reference
@@ -17,8 +20,8 @@ This document describes a `delete_range` algorithm that can be used in
 any BST, not just in the implicit variant. It is quite a simple idea, really.
 Can I be the first one to think of it?
 
-`delete_range`
---------------
+Algorithm
+---------
 
 We approach the problem in a direct manner. The algorithm is an extension
 of the standard BST `delete` operation. We navigate the tree looking for
@@ -50,7 +53,7 @@ do the following:
 8. otherwise, push `Empty` on top of `slots_min` and process the right
    subtree in a similar manner.
 
-*<a name="foot1">(1)</a>: This step superficially looks to be necessary because,
+*<a name="foot1">**(1)**</a>: This step superficially looks to be necessary because,
 e.g., the top slot on the `slots_max` stack is intended to be filled with
 `max(X)`, not `max(left(X))`. However, it can be shown that in this case
 all items in the right subtree are inside the query range and will be removed,

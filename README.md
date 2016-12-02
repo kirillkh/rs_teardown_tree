@@ -19,7 +19,9 @@ copying each node individually, we are able to allocate the whole array in a sin
 content.
 
 As to **delete-range** operation, we use a custom algorithm running in `O(k + log n)` time, where k is the number of 
-items deleted (and returned) and n is the initial size of the tree.
+items deleted (and returned) and n is the initial size of the tree. [Detailed description][1].
  
 An exhaustive automated test for **delete-range** has been written and is found in `lib.rs`. I have tested all trees up 
 to the size n=10.
+
+[1]: https://github.com/kirillkh/rs_teardown_tree/blob/master/delete_range.md
