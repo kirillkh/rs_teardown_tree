@@ -6,8 +6,8 @@ description = "A binary search tree that supports fast clone and delete-range op
 readme = "README.md"
 license-file = "LICENSE-MIT"
 homepage = "https://github.com/kirillkh/rs_teardown_tree"
-repository = "git@github.com:kirillkh/rs_teardown_tree.git"
-keywords = ["BST", "tree", "search tree", "teardown"]
+repository = "https://github.com/kirillkh/rs_teardown_tree.git"
+keywords = ["BST", "tree", "teardown"]
 
 [lib]
 name = "teardown_tree"
