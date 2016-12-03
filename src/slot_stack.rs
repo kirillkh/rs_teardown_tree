@@ -99,8 +99,8 @@ impl <T: Item+Debug> Debug for SlotStack<T> {
     fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
         unsafe {
             let ptr: *mut Slot<T> = mem::transmute(self.slots.get());
-            let slots_vec = Vec::from_raw_parts(ptr, self.capacity, self.capacity);
-            let result = write!(fmt, "SlotStack: nslots={}, nfilled={}, slots={:?}", self.nslots, self.nfilled, slots_vec);
+            let slots_vec = Vec::from_raw_parts(ptr, self.nfilled, self.capacity);
+            let result = write!(fmt, "SlotStack: nslots={}, nfilled={}, slots={:?}", self.nslots, self.nfilled, &slots_vec);
             mem::forget(slots_vec);
             result
         }
