@@ -95,4 +95,3 @@ following cases:
 
 [1]: https://github.com/ocaml/ocaml/blob/trunk/stdlib/set.ml
 [2]: https://github.com/kirillkh/rs_teardown_tree/blob/master/src/delete_range.rs
-[3]: https://github.com/rust-lang/rust/issues/34666

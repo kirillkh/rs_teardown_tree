@@ -32,7 +32,7 @@ I have so far only performed a very limited set of benchmarks, comparing
 my own implementation (which is geared for a very specialized use case)
 against the BTreeSet in Rust's standard library. Truth be told, the comparison
 is unfair, considering that BTreeSet lacks a way to efficiently delete ranges
-(it has an `O(log n)` `split`, but not `merge`, see [Rust #34666][3]). That
+(it has an `O(log n)` `split`, but not `merge`, see [Rust #34666][2]). That
 said, on my machine the whole clone/teardown sequence on a tree of 1,000,000
 items (we clone the tree, then delete 1000 items at a time until the tree
 is empty), is ~10 times faster with `delete_range` implementation than with
@@ -43,3 +43,4 @@ the `benchmarks` binary.
 
 
 [1]: https://github.com/kirillkh/rs_teardown_tree/blob/master/delete_range.md
+[2]: https://github.com/rust-lang/rust/issues/34666
