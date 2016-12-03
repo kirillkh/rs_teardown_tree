@@ -1,5 +1,5 @@
 use base::Item;
-use std::ptr::Unique;
+//use std::ptr::Unique;
 use std::{mem, ptr};
 use std::fmt::{Debug, Formatter};
 
@@ -9,7 +9,8 @@ type Slot<T> = Option<T>;
 pub struct SlotStack<T: Item> {
     pub nslots: usize,
     pub nfilled: usize,
-    pub slots: Unique<T>,
+//    pub slots: Unique<T>, // uncomment when Unique is stabilized
+    pub slots: *mut T,
     pub capacity: usize
 }
 
@@ -19,7 +20,7 @@ impl<T: Item> SlotStack<T> {
             let mut slots = vec![mem::uninitialized(); capacity];
             let ptr: *mut T = slots.as_mut_ptr();
             mem::forget(slots);
-            SlotStack { nslots: 0, nfilled: 0, slots: Unique::new(ptr), capacity: capacity }
+            SlotStack { nslots: 0, nfilled: 0, slots: ptr, capacity: capacity }
         }
     }
 
@@ -89,28 +90,29 @@ impl<T: Item> SlotStack<T> {
 }
 
 impl <T: Item> Debug for SlotStack<T> {
-    default fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
         let result = write!(fmt, "SlotStack: {{nslots={}, nfilled={}}}", self.nslots, self.nfilled);
         result
     }
 }
 
-impl <T: Item+Debug> Debug for SlotStack<T> {
-    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
-        unsafe {
-            let ptr: *mut Slot<T> = mem::transmute(self.slots.get());
-            let slots_vec = Vec::from_raw_parts(ptr, self.nfilled, self.capacity);
-            let result = write!(fmt, "SlotStack: nslots={}, nfilled={}, slots={:?}", self.nslots, self.nfilled, &slots_vec);
-            mem::forget(slots_vec);
-            result
-        }
-    }
-}
+// Uncomment when Specialization is stabilized.
+//impl <T: Item+Debug> Debug for SlotStack<T> {
+//    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
+//        unsafe {
+//            let ptr: *mut Slot<T> = mem::transmute(self.slots.get());
+//            let slots_vec = Vec::from_raw_parts(ptr, self.nfilled, self.capacity);
+//            let result = write!(fmt, "SlotStack: nslots={}, nfilled={}, slots={:?}", self.nslots, self.nfilled, &slots_vec);
+//            mem::forget(slots_vec);
+//            result
+//        }
+//    }
+//}
 
 impl <T: Item> Drop for SlotStack<T> {
     fn drop(&mut self) {
         unsafe {
-            Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
+            Vec::from_raw_parts(self.slots, self.nfilled, self.capacity);
             // let it drop
         }
     }

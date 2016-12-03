@@ -2,7 +2,7 @@
 extern crate test;
 extern crate rand;
 extern crate teardown_tree;
-extern crate wio;
+//extern crate wio;
 use std::time;
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -174,12 +174,12 @@ fn nanos(d: Duration) -> u64 {
     d.as_secs()*1000000000 + d.subsec_nanos() as u64
 }
 
-#[cfg(target_os = "windows")]
-fn set_affinity() {
-    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
-}
+//#[cfg(all(feature = "unstable", target_os = "windows"))]
+//fn set_affinity() {
+//    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
+//}
 
-#[cfg(not(target_os = "windows"))]
+//#[cfg(not(target_os = "windows"))]
 fn set_affinity() {
 }
 
