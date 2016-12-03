@@ -1,6 +1,7 @@
 use std::ptr;
 use std::mem;
 use std::cmp::{max, Ordering};
+use std::fmt;
 use std::fmt::{Debug, Formatter};
 use delete_range::{DeleteRange, DeleteRangeCache, TraversalDriver, TraversalDecision};
 
@@ -214,6 +215,10 @@ impl<T: Item> TeardownTree<T> {
         self.node_mut(idx).item.as_mut().unwrap()
     }
 
+    pub fn item_unwrap(&self, idx: usize) -> &T {
+        self.node(idx).item.as_ref().unwrap()
+    }
+
 
     pub fn delete(&mut self, search: &T) -> bool {
         let mut idx = 0;
@@ -420,7 +425,7 @@ impl<T: Item> TeardownTree<T> {
 
 
 impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
-    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         let mut nz: Vec<_> = self.data.iter()
             .rev()
             .skip_while(|node| node.item.is_none())
@@ -439,6 +444,57 @@ impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
             let _ = write!(fmt, "{}", key);
         }
         let _ = write!(fmt, "]");
+        Ok(())
+    }
+}
+
+
+
+impl<K: Ord+Debug, T: Item<Key=K>> fmt::Display for TeardownTree<T> {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        let mut ancestors = vec![];
+        self.fmt_subtree(fmt, 0, &mut ancestors)
+    }
+}
+
+impl<K: Ord+Debug, T: Item<Key=K>> TeardownTree<T> {
+    fn fmt_branch(&self, fmt: &mut Formatter, ancestors: &Vec<bool>) -> fmt::Result {
+        for (i, c) in ancestors.iter().enumerate() {
+            if i == ancestors.len() - 1 {
+                write!(fmt, "|--")?;
+            } else {
+                if *c {
+                    write!(fmt, "|")?;
+                } else {
+                    write!(fmt, " ")?;
+                }
+                write!(fmt, "  ")?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn fmt_subtree(&self, fmt: &mut Formatter, idx: usize, ancestors: &mut Vec<bool>) -> fmt::Result {
+        self.fmt_branch(fmt, ancestors)?;
+
+        if !self.is_null(idx) {
+            writeln!(fmt, "{:?}", self.item_unwrap(idx).ord())?;
+
+            if idx%2 == 0 && !ancestors.is_empty() {
+                *ancestors.last_mut().unwrap() = false;
+            }
+
+            if self.has_left(idx) || self.has_right(idx) {
+                ancestors.push(true);
+                self.fmt_subtree(fmt, Self::lefti(idx), ancestors)?;
+                self.fmt_subtree(fmt, Self::righti(idx), ancestors)?;
+                ancestors.pop();
+            }
+        } else {
+            writeln!(fmt, "X")?;
+        }
+
         Ok(())
     }
 }
