@@ -1,5 +1,3 @@
-#![feature(test)]
-extern crate test;
 extern crate rand;
 extern crate teardown_tree;
 //extern crate wio;
@@ -41,7 +39,6 @@ fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
         let start = time::SystemTime::now();
         for i in 0..rm_items {
             let x = btmap.remove(&keys[i]);
-            test::black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
@@ -81,7 +78,6 @@ fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
         for i in 0..rm_items {
             output.truncate(0);
             let x = copy.0.delete_range(&mut DriverFromTo::new(keys[i], keys[i]), &mut output);
-            test::black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
@@ -111,7 +107,6 @@ fn bench_delete_range_n<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters:
 
         let start = time::SystemTime::now();
         copy.del_range(from, from+rm_items-1, &mut output);
-        test::black_box(output.len());
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
     }
@@ -157,7 +152,6 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
             output.truncate(0);
             let (ref from, ref to) = ranges[i];
             copy.del_range(*from, *to, &mut output);
-            test::black_box(output.len());
         }
         debug_assert!(copy.sz() == 0);
     }
@@ -198,8 +192,8 @@ fn main() {
     bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
 
-    bench_delete_range_n::<TreeBulk>(1000000, 1000, 1000);
-    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 300);
+    bench_delete_range_n::<TreeBulk>(1000000, 1000, 3000);
+    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 600);
 
 
     bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
