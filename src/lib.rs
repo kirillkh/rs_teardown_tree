@@ -8,10 +8,12 @@ extern crate rand;
 mod base;
 mod slot_stack;
 mod delete_range;
+mod drivers;
 
 mod rust_bench;
 
-pub use base::{Item, TeardownTree, TeardownTreeRefill, Node, DriverFromTo};
+pub use base::{Item, TeardownTree, TeardownTreeRefill, Node};
+pub use drivers::{DriverFromToRef, DriverFromTo};
 pub use delete_range::TraversalDecision;
 
 
@@ -20,7 +22,7 @@ pub use delete_range::TraversalDecision;
 
 #[cfg(test)]
 mod tests {
-    use base::{TeardownTree, Node, DriverFromTo, TeardownTreeRefill};
+    use base::{TeardownTree, TeardownTreeInternal, Node};
 
     type Tree = TeardownTree<usize>;
 
@@ -67,14 +69,13 @@ mod tests {
         let nodes: Vec<Node<usize>> = mk_prebuilt(items);
         let mut tree = Tree::with_nodes(nodes);
         let (from, to) = from_to;
-        let mut drv = DriverFromTo::new(from, to);
 
         let mut output = Vec::with_capacity(tree.size());
 
         let mut expect = expect_out.to_vec();
         expect.sort();
 
-        tree.delete_range(&mut drv, &mut output);
+        tree.delete_range(from, to, &mut output);
         let mut sorted_out = output.clone();
         sorted_out.sort();
 
@@ -236,7 +237,7 @@ mod tests {
             let mut tree_mod = tree.clone();
 //                println!("tree={:?}, from={}, to={}", &tree, i, j);
             let deleted = tree_mod.delete(&i);
-            debug_assert!(deleted);
+            debug_assert!(deleted.is_some());
             output.push(i);
             delete_range_check(n, i, i, &mut output, tree_mod, &tree);
         }
@@ -248,10 +249,9 @@ mod tests {
         for i in 1..n+1 {
             for j in i..n+1 {
                 let mut tree_mod = tree.clone();
-                let mut drv = DriverFromTo::new(i, j);
 //                println!("tree={:?}, from={}, to={}", &tree, i, j);
                 output.truncate(0);
-                tree_mod.delete_range(&mut drv, &mut output);
+                tree_mod.delete_range(i, j, &mut output);
                 delete_range_check(n, i, j, &mut output, tree_mod, &tree);
             }
         }

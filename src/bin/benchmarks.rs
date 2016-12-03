@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 use rand::{XorShiftRng, SeedableRng, Rng};
 
-use teardown_tree::{TeardownTree, TeardownTreeRefill, DriverFromTo};
+use teardown_tree::{TeardownTree, TeardownTreeRefill};
 
 type Tree = TeardownTree<usize>;
 type TreeBulk = TeardownTreeBulk;
@@ -39,6 +39,7 @@ fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
         let start = time::SystemTime::now();
         for i in 0..rm_items {
             let x = btmap.remove(&keys[i]);
+            black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
@@ -77,7 +78,8 @@ fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
         let start = time::SystemTime::now();
         for i in 0..rm_items {
             output.truncate(0);
-            let x = copy.0.delete_range(&mut DriverFromTo::new(keys[i], keys[i]), &mut output);
+            let x = copy.0.delete_range(keys[i], keys[i], &mut output);
+            black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
@@ -107,6 +109,7 @@ fn bench_delete_range_n<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters:
 
         let start = time::SystemTime::now();
         copy.del_range(from, from+rm_items-1, &mut output);
+        black_box(output.len());
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
     }
@@ -152,6 +155,7 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
             output.truncate(0);
             let (ref from, ref to) = ranges[i];
             copy.del_range(*from, *to, &mut output);
+            black_box(output.len());
         }
         debug_assert!(copy.sz() == 0);
     }
@@ -172,10 +176,10 @@ fn nanos(d: Duration) -> u64 {
 //fn set_affinity() {
 //    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
 //}
-
+//
 //#[cfg(not(target_os = "windows"))]
-fn set_affinity() {
-}
+//fn set_affinity() {
+//}
 
 fn main() {
 //    imptree_delete_range_n(100, 100, 10000000);
@@ -183,17 +187,19 @@ fn main() {
 //    // TEST
 //    bench_delete_range_n::<Tree>(1000000, 100, 10000);
 //    return;
-    set_affinity();
+
+//    set_affinity();
 
 //    bench_delete_range_n::<Tree>(100000, 100, 15000);
 //    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
     // the most interesting comparisons
-    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
-    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
+//    bench_delete_range_n::<TreeBulk>(1000000, 1000, 3000);
+//    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 1000);
+//
+//    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
+//    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
 
-    bench_delete_range_n::<TreeBulk>(1000000, 1000, 3000);
-    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 600);
 
 
     bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
@@ -310,7 +316,7 @@ impl TeardownTreeCopy for TeardownTreeBulk {
     type Master = TeardownTreeBulk;
 
     fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-        self.0.delete_range(&mut DriverFromTo::new(from, to), output);
+        self.0.delete_range(from, to, output);
     }
 
     fn rfill(&mut self, master: &Self::Master) {
@@ -352,11 +358,10 @@ impl TeardownTreeCopy for TeardownTreeSingle {
 
     fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
         for i in from..to+1 {
-            if self.0.delete(&i) {
-                output.push(i);
+            if let Some(x) = self.0.delete(&i) {
+                output.push(x);
             }
         }
-
     }
 
     fn rfill(&mut self, master: &Self::Master) {
@@ -418,5 +423,17 @@ impl TeardownTreeCopy for BTreeSetCopy {
 
     fn sz(&self) -> usize {
         self.set.len()
+    }
+}
+
+
+fn black_box<T>(dummy: T) -> T {
+    use std::ptr;
+    use std::mem::forget;
+
+    unsafe {
+        let ret = ptr::read_volatile(&dummy as *const T);
+        forget(dummy);
+        ret
     }
 }

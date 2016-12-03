@@ -1,11 +1,11 @@
-use base::{TeardownTree, Item, Node};
+use base::{TeardownTree, TeardownTreeInternal, Item, Node};
 use slot_stack::SlotStack;
 
 use std::mem;
 
 pub trait TraversalDriver<T: Item> {
     #[inline(always)]
-    fn decide(&self, node: &T) -> TraversalDecision;
+    fn decide(&self, key: &T::Key) -> TraversalDecision;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -173,7 +173,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         }
 
         let node = self.node_mut(idx);
-        let decision = drv.decide(node.item.as_ref().unwrap());
+        let decision = drv.decide(node.item.as_ref().unwrap().key());
 
         if self.slots_min.has_open() {
             debug_assert!(decision.left);

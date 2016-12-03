@@ -89,25 +89,6 @@ following cases:
    and `fill_slots_max` for this task.
 1. Use the general algorithm in the other cases.
 
-
-Benchmarks
-----------
-
-I have so far only performed a very limited set of benchmarks, comparing
-my own implementation (which is geared for a very specialized use case)
-against the BTree in Rust's standard library. However, the comparison is
-unfair, considering that BTree lacks a way to efficiently delete ranges
-(it has an `O(log n)` `split`, but not `merge`, see [Rust #34666][3]). That
-said, with a tree of 1,000,000 items and a request to delete a range of
-1000 items, my `delete_range` implementation outperforms BTree by a factor
-of 10. And when comparing the whole clone/teardown sequence of a tree with
-1,000,000 items, 1000 items at a time, we obtain a speedup of 11. You can
-see the rest of the benchmarks by compiling the project and running the
-`benchmarks` binary.
-
-
-**TODO**: add the comparison table.
-
 **TODO**: implement the algorithm for a normal BST with explicit representation
 (child node pointers) and compare against split/merge.
 

@@ -8,8 +8,8 @@ pattern is to build a master copy of the tree, then
 The tree does not use any kind of self-balancing and does not support insert operation.
 
 
+Details
 -------
-### Details
 
 The tree is implicit -- meaning that nodes do not store explicit pointers to their children. This is similar to how
 binary heaps work: all nodes in the tree reside in an array, the root always at index 0, and given a node with index i,
@@ -23,5 +23,23 @@ items deleted (and returned) and n is the initial size of the tree. [Detailed de
  
 An exhaustive automated test for **delete-range** has been written and is found in `lib.rs`. I have tested all trees up 
 to the size n=10.
+
+
+Benchmarks
+-------
+
+I have so far only performed a very limited set of benchmarks, comparing
+my own implementation (which is geared for a very specialized use case)
+against the BTreeSet in Rust's standard library. Truth be told, the comparison
+is unfair, considering that BTreeSet lacks a way to efficiently delete ranges
+(it has an `O(log n)` `split`, but not `merge`, see [Rust #34666][3]). That
+said, on my machine the whole clone/teardown sequence on a tree of 1,000,000
+items (we clone the tree, then delete 1000 items at a time until the tree
+is empty), is ~10 times faster with `delete_range` implementation than with
+BTreeSet. It also uses 20% less memory (39 vs 50 MB for 1,000,000 u64 items).
+You can see the rest of the benchmarks by compiling the project and running
+the `benchmarks` binary.
+
+
 
 [1]: https://github.com/kirillkh/rs_teardown_tree/blob/master/delete_range.md
