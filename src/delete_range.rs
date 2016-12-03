@@ -206,7 +206,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             return;
         }
 
-        debug_assert!(!self.slots_max.has_open() || !self.slots_min.has_open(), "max={:?}, min={:?}", self.slots_max, self.slots_min);
+        debug_assert!(self.slots_max.is_empty() || self.slots_min.is_empty(), "max={:?}, min={:?}", self.slots_max, self.slots_min);
 
         let item: &mut Option<T> = &mut self.node_mut(idx).item;
         let decision = drv.decide(item.as_ref().unwrap());
