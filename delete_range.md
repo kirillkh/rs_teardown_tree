@@ -43,22 +43,12 @@ Both stacks are initially empty. For node `X` above, we would
 do the following:
 
 1. Move `V` from `X` to the output.
-2. <strike>Assign the current value of `slots_max` to `slots_max_orig` and replace
-   `slots_max` with an empty stack.</strike> <sup>[(1)](#foot1)</sup>
-3. Push an `Empty` slot on top of `slots_max`.
-4. Recursively call `delete_range(left(X))`.
-5. let `slot := slots_max.pop()`
-6. <strike>Restore `slots_max` from `slots_max_orig`.</strike>
-7. If `slot` is `Filled(W)`, then replace `V` with `W`.
-8. otherwise, push `Empty` on top of `slots_min` and process the right
+1. Push an `Empty` slot on top of `slots_max`.
+1. Recursively call `delete_range(left(X))`.
+1. let `slot := slots_max.pop()`
+1. If `slot` is `Filled(W)`, then replace `V` with `W`.
+1. otherwise, push `Empty` on top of `slots_min` and process the right
    subtree in a similar manner.
-
-*<a name="foot1">**(1)**</a>: This step superficially looks to be necessary
-because, e.g., the top slot on the `slots_max` stack is intended to be filled
-with `max(X)`, not `max(left(X))`. However, it can be shown that in this
-case all items in the right subtree are inside the query range and will
-be removed, so the remaining maximum item in `left(X)` is the correct item
-to fill the bottom empty slot in `slots_max`.*
 
 Another important case is when the node `X` is **not** inside the query
 range. In this case, the idea is to determine whether `item(X) = min(X)`.
@@ -109,11 +99,11 @@ against the BTree in Rust's standard library. However, the comparison is
 unfair, considering that BTree lacks a way to efficiently delete ranges
 (it has an `O(log n)` `split`, but not `merge`, see [Rust #34666][3]). That
 said, with a tree of 1,000,000 items and a request to delete a range of
-100 items, my `delete_range` implementation outperforms BTree by a factor
-of ~4. And if you consider the whole clone/teardown sequence of a tree
-with 1,000,000 items, 100 items at a time, we obtain a speedup of ~7. You
-can see the rest of the benchmarks by compiling the project and running
-the `benchmarks` binary.
+1000 items, my `delete_range` implementation outperforms BTree by a factor
+of 10. And when comparing the whole clone/teardown sequence of a tree with
+1,000,000 items, 1000 items at a time, we obtain a speedup of 11. You can
+see the rest of the benchmarks by compiling the project and running the
+`benchmarks` binary.
 
 
 **TODO**: add the comparison table.

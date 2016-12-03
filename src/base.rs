@@ -452,6 +452,7 @@ impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
 
 impl<K: Ord+Debug, T: Item<Key=K>> fmt::Display for TeardownTree<T> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        writeln!(fmt, "")?;
         let mut ancestors = vec![];
         self.fmt_subtree(fmt, 0, &mut ancestors)
     }

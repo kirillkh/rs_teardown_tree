@@ -63,7 +63,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 //        let orig = self.tree.clone();
 
         if !self.tree.is_null(0) {
-            self.delete_range_rec(drv, 0, false, false);
+            self.delete_range_rec(drv, 0);
             debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty());
         }
 
@@ -79,15 +79,10 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         where F: Fn(&mut Self, usize) {
         if push_slot {
             debug_assert!(self.node(idx).item.is_none());
-            self.slots_max.push()
-        }
+            self.slots_max.push();
 
-        f(self, Self::lefti(idx));
+            f(self, Self::lefti(idx));
 
-        // TODO: we do not handle correctly the case where after return from recursion there are some open min_reqs.
-        // That is because it's a case that doesn't happen with range queries.
-
-        if push_slot {
             let slot = self.slots_max.pop();
 
             if slot.is_some() {
@@ -98,6 +93,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                 true
             }
         } else {
+            f(self, Self::lefti(idx));
             false
         }
     }
@@ -108,15 +104,10 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                                                         where F: Fn(&mut Self, usize) {
         if push_slot {
             debug_assert!(self.node(idx).item.is_none());
-            self.slots_min.push()
-        }
+            self.slots_min.push();
 
-        f(self, Self::righti(idx));
+            f(self, Self::righti(idx));
 
-        // TODO: we do not handle correctly the case where after return from recursion there are some open min_reqs.
-        // That is because it's a case that doesn't happen with range queries.
-
-        if push_slot {
             let slot = self.slots_min.pop();
 
             if slot.is_some() {
@@ -127,30 +118,9 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                 true
             }
         } else {
+            f(self, Self::righti(idx));
             false
         }
-    }
-
-    /// Returns true if the item is removed after recursive call, false otherwise.
-    #[inline(always)]
-    fn delete_range_descend_left<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
-                                                        push_slot: bool,
-                                                        min_included: bool, max_included: bool) -> bool {
-        self.descend_left(idx, push_slot,
-                          |this, child_idx| this.delete_range_rec(drv, child_idx, min_included, max_included)
-        )
-    }
-
-
-
-    /// Returns true if the item is removed after recursive call, false otherwise.
-    #[inline(always)]
-    fn delete_range_descend_right<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
-                                                         push_slot: bool,
-                                                         min_included: bool, max_included: bool) -> bool {
-        self.descend_right(idx, push_slot,
-                           |this, child_idx| this.delete_range_rec(drv, child_idx, min_included, max_included)
-        )
     }
 
     //---- helpers ---------------------------------------------------------------------------------
@@ -194,43 +164,103 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 }
 
 
-
-
-// delete_range_recurse 3
+// v4
 impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline(never)]
-    fn delete_range_rec<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
-                                               min_included: bool, max_included: bool) {
-        if min_included && max_included {
-            self.delete_subtree(idx);
+    fn delete_range_rec<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize) {
+        if self.tree.is_null(idx) {
             return;
         }
 
-        debug_assert!(self.slots_max.is_empty() || self.slots_min.is_empty(), "max={:?}, min={:?}", self.slots_max, self.slots_min);
+        let node = self.node_mut(idx);
+        let decision = drv.decide(node.item.as_ref().unwrap());
 
-        let item: &mut Option<T> = &mut self.node_mut(idx).item;
-        let decision = drv.decide(item.as_ref().unwrap());
-        match (decision.left, decision.right) {
-            (true, false)  => self.traverse_left(drv, idx,
-                                                 min_included, max_included),
-            (false, true)  => self.traverse_right(drv, idx,
-                                                  min_included, max_included),
-            (true, true)   => self.traverse_dual(drv, idx,
-                                                 min_included, max_included),
-            (false, false) =>
-                if self.slots_min.has_open() {
-                    self.fill_slots_min(idx);
-                } else {
-                    debug_assert!(self.slots_max.has_open());
-                    self.fill_slots_max(idx);
-                }
+        if self.slots_min.has_open() {
+            debug_assert!(decision.left);
+            self.delete_range_left(drv, idx, decision.right);
+        } else if self.slots_max.has_open() {
+            debug_assert!(decision.right);
+            self.delete_range_right(drv, idx, decision.left);
+        } else if decision.left && decision.right {
+            self.consume(node);
+            let removed = self.delete_range_descend_left(drv, idx, true);
+            self.delete_range_descend_right(drv, idx, removed);
+        } else if decision.left {
+            self.delete_range_rec(drv, Self::lefti(idx));
+        } else {
+            debug_assert!(decision.right);
+            self.delete_range_rec(drv, Self::righti(idx));
         }
+    }
+
+    #[inline(always)]
+    fn delete_range_left<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize, traverse_right: bool) {
+        let node = self.node_mut(idx);
+        if traverse_right {
+            // the root and the whole left subtree are inside the range
+            self.consume(node);
+            self.consume_subtree(Self::lefti(idx));
+            self.delete_range_descend_right(drv, idx, true);
+        } else {
+            // the root and the right subtree are outside the range
+            self.delete_range_rec(drv, Self::lefti(idx));
+            if self.slots_min.has_open() {
+                self.slots_min.fill(node.item.take().unwrap());
+
+                self.descend_right(idx, true, |this, child_idx| {
+                    this.fill_slots_min(child_idx);
+                });
+            }
+        }
+    }
+
+
+    #[inline(always)]
+    fn delete_range_right<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize, traverse_left: bool) {
+        let node = self.node_mut(idx);
+        if traverse_left {
+            // the root and the whole right subtree are inside the range
+            self.consume(node);
+            self.consume_subtree(Self::righti(idx));
+            self.delete_range_descend_left(drv, idx, true);
+        } else {
+            // the root and the right subtree are outside the range
+            self.delete_range_rec(drv, Self::righti(idx));
+            if self.slots_max.has_open() {
+                self.slots_max.fill(node.item.take().unwrap());
+
+                self.descend_left(idx, true, |this, child_idx| {
+                    this.fill_slots_max(child_idx);
+                });
+            }
+        }
+    }
+
+
+    /// Returns true if the item is removed after recursive call, false otherwise.
+    #[inline(always)]
+    fn delete_range_descend_left<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
+                                                        push_slot: bool) -> bool {
+        self.descend_left(idx, push_slot,
+                          |this, child_idx| this.delete_range_rec(drv, child_idx)
+        )
+    }
+
+
+
+    /// Returns true if the item is removed after recursive call, false otherwise.
+    #[inline(always)]
+    fn delete_range_descend_right<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
+                                                         push_slot: bool) -> bool {
+        self.descend_right(idx, push_slot,
+                           |this, child_idx| this.delete_range_rec(drv, child_idx)
+        )
     }
 
 
     //---- delete_subtree_* ---------------------------------------------------------------
     #[inline]
-    fn delete_subtree(&mut self, root: usize) {
+    fn consume_subtree(&mut self, root: usize) {
         debug_assert!(self.delete_subtree_stack.is_empty());
 
         if self.tree.is_null(root) {
@@ -332,105 +362,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             } else {
                 !self.slots_max.has_open()
             }
-        }
-    }
-
-
-    //---- traverse_* ---------------------------------------------------------------------
-    #[inline(always)]
-    fn traverse_left<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
-                                            min_included: bool, max_included: bool) {
-        if self.tree.has_left(idx) {
-            self.delete_range_rec(drv, Self::lefti(idx), min_included, max_included);
-        }
-
-        self.fill_minmax_after_left_traverse(idx);
-    }
-
-
-    /// mirrors traverse_left()
-    #[inline(always)]
-    fn traverse_right<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
-                                             min_included: bool, max_included: bool) {
-        if self.tree.has_right(idx) {
-            self.delete_range_rec(drv, Self::righti(idx), min_included, max_included);
-        }
-
-        self.fill_minmax_after_right_traverse(idx);
-    }
-
-
-    #[inline(always)]
-    fn fill_minmax_after_left_traverse(&mut self, idx: usize) {
-        let node = self.node_mut(idx);
-        let mut removed = false;
-
-        if self.slots_min.has_open() {
-            // fill a slot_min with this node's item
-            let item = node.item.take();
-            self.slots_min.fill_opt(item);
-            removed = true;
-        }
-
-        let (min_open, max_open) = (removed, self.slots_max.has_open());
-        if min_open || max_open {
-            if self.tree.has_right(idx) {
-                removed = self.descend_right(idx, min_open, |this, child_idx| { this.fill_slots_min(child_idx); } );
-            }
-
-            if removed && self.slots_max.has_open() && self.tree.has_left(idx) {
-                self.descend_left(idx, true, |this, child_idx| { this.fill_slots_max(child_idx); } );
-            }
-        }
-    }
-
-
-    #[inline(always)]
-    fn fill_minmax_after_right_traverse(&mut self, idx: usize) {
-        let node = self.node_mut(idx);
-        let mut removed = false;
-
-        if self.slots_max.has_open() {
-            // fill a slot_max with this node's item
-            let item = node.item.take();
-            self.slots_max.fill_opt(item);
-            removed = true;
-        }
-
-        let (max_open, min_open) = (removed, self.slots_min.has_open());
-        if min_open || max_open {
-            if self.tree.has_left(idx) {
-                removed = self.descend_left(idx, max_open, |this, child_idx| { this.fill_slots_max(child_idx); } );
-            }
-
-            if removed && self.slots_min.has_open() && self.tree.has_right(idx) {
-                self.descend_right(idx, true, |this, child_idx| { this.fill_slots_min(child_idx); } );
-            }
-        }
-    }
-
-
-    #[inline(always)]
-    fn traverse_dual<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
-                                            min_included: bool, max_included: bool) {
-        let node = self.node_mut(idx);
-        self.consume(node);
-        let mut removed = true;
-
-        if self.tree.has_right(idx) {
-            removed = self.delete_range_descend_right(drv, idx, true,
-                                                      true, max_included);
-        }
-
-        if self.tree.has_left(idx) {
-            removed = self.delete_range_descend_left(drv, idx, removed,
-                                                     min_included, true);
-        }
-
-        if removed {
-            // this node was consumed, and both subtrees are empty now
-            debug_assert!(!self.tree.has_left(idx));
-            debug_assert!(!self.tree.has_right(idx));
         }
     }
 }

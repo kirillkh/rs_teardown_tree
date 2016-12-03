@@ -66,10 +66,18 @@ mod tests {
         let mut tree = Tree::with_nodes(nodes);
         let (from, to) = from_to;
         let mut drv = DriverFromTo::new(from, to);
+
         let mut output = Vec::with_capacity(tree.size());
+
+        let mut expect = expect_out.to_vec();
+        expect.sort();
+
         tree.delete_range(&mut drv, &mut output);
+        let mut sorted_out = output.clone();
+        sorted_out.sort();
+
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
-        assert_eq!(format!("{:?}", &output), format!("{:?}", expect_out));
+        assert_eq!(format!("{:?}", &sorted_out), format!("{:?}", expect));
     }
 
     #[test]
@@ -82,6 +90,9 @@ mod tests {
 
         test_prebuilt(&[1, 0, 2], (2,2),
                       &[1], &[2]);
+
+        test_prebuilt(&[3, 2, 4, 1], (1,3),
+                      &[4], &[3,2,1]);
 
         test_prebuilt(&[3, 1, 4, 0, 2], (2,4),
                       &[1], &[3,4,2]);
@@ -245,8 +256,8 @@ mod tests {
     }
 
     fn delete_range_check(n: usize, from: usize, to: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
-        debug_assert!(output.len() == to-from+1, "tree_orig={:?}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, from, to, to-from+1, output);
-        debug_assert!(tree_mod.size() + output.len() == n, "tree={:?}, tree_mod={:?}, sz={}, output={:?}, n={}", tree_orig, tree_mod, tree_mod.size(), output, n);
+        debug_assert!(output.len() == to-from+1, "tree'={:?}, tree={}, tree_mod={}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, tree_orig, tree_mod, from, to, to-from+1, output);
+        debug_assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
 
         output.sort();
         assert_eq!(output, &(from..to+1).collect::<Vec<_>>());

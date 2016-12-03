@@ -194,6 +194,14 @@ fn main() {
 //    bench_delete_range_n::<Tree>(100000, 100, 15000);
 //    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
+    // the most interesting comparisons
+    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
+
+    bench_delete_range_n::<TreeBulk>(1000000, 1000, 1000);
+    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 300);
+
+
     bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
     bench_clone_teardown_cycle::<TreeBulk>(1000, 100, 300000);
     bench_clone_teardown_cycle::<TreeBulk>(10000, 100, 15000);
@@ -210,6 +218,7 @@ fn main() {
     bench_delete_range_n::<TreeBulk>(10000, 100, 100000);
     bench_delete_range_n::<TreeBulk>(100000, 100, 10000);
     bench_delete_range_n::<TreeBulk>(1000000, 100, 1000);
+    bench_delete_range_n::<TreeBulk>(1000000, 1000, 1000);
 
     bench_clone_teardown_cycle::<BTreeSet<usize>>(100, 100, 50000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 100, 15000);
@@ -227,6 +236,7 @@ fn main() {
     bench_delete_range_n::<BTreeSet<usize>>(10000, 100, 20000);
     bench_delete_range_n::<BTreeSet<usize>>(100000, 100, 5000);
     bench_delete_range_n::<BTreeSet<usize>>(1000000, 100, 300);
+    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 300);
 
 
     bench_clone_teardown_cycle::<TeardownTreeSingle>(100, 100, 50000);
