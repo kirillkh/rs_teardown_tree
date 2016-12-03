@@ -219,7 +219,8 @@ mod tests {
             output.truncate(0);
             let mut tree_mod = tree.clone();
 //                println!("tree={:?}, from={}, to={}", &tree, i, j);
-            let x = tree_mod.delete(&i);
+            let deleted = tree_mod.delete(&i);
+            debug_assert!(deleted);
             output.push(i);
             delete_range_check(n, i, i, &mut output, tree_mod, &tree);
         }

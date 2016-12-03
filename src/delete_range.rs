@@ -2,6 +2,7 @@ use base::{TeardownTree, Item, Node};
 use std::ptr::Unique;
 
 use std::{mem, ptr};
+use std::fmt::{Debug, Formatter};
 
 pub trait TraversalDriver<T: Item> {
     #[inline(always)]
@@ -10,14 +11,14 @@ pub trait TraversalDriver<T: Item> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct TraversalDecision {
-    pub traverse_left: bool,
-    pub traverse_right: bool,
+    pub left: bool,
+    pub right: bool,
 }
 
 impl TraversalDecision {
     #[inline(always)]
     pub fn consume(&self) -> bool {
-        self.traverse_left && self.traverse_right
+        self.left && self.right
     }
 }
 
@@ -108,16 +109,6 @@ impl<T: Item> SlotStack<T> {
         }
     }
 
-    fn to_str(&self) -> String {
-        unsafe {
-            let ptr: *mut Slot<T> = mem::transmute(self.slots.get());
-            let slots_vec = Vec::from_raw_parts(ptr, self.capacity, self.capacity);
-            let str = format!("{:?}", slots_vec);
-            mem::forget(slots_vec);
-            str
-        }
-    }
-
     #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.nslots == 0
@@ -139,10 +130,22 @@ impl<T: Item> SlotStack<T> {
     }
 }
 
+impl <T: Item+Debug> Debug for SlotStack<T> {
+    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
+        unsafe {
+            let ptr: *mut Slot<T> = mem::transmute(self.slots.get());
+            let slots_vec = Vec::from_raw_parts(ptr, self.capacity, self.capacity);
+            let result = write!(fmt, "SlotStack: nslots={}, nfilled={}, slots={:?}", self.nslots, self.nfilled, slots_vec);
+            mem::forget(slots_vec);
+            result
+        }
+    }
+}
+
 impl <T: Item> Drop for SlotStack<T> {
     fn drop(&mut self) {
         unsafe {
-            let slots_vec = Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
+            Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
             // let it drop
         }
     }
@@ -171,8 +174,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         if !self.tree.is_null(0) {
             self.delete_range_rec(drv, 0, false, false);
-            debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty(),
-                    "tree: {:?}, replacements_min: {}, replacements_max: {}, output: {:?}", self.tree, self.slots_min.to_str(), self.slots_max.to_str(), self.output);
+            debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty());
         }
 
         self.tree.delete_range_cache = Some(DeleteRangeCache { slots_min: self.slots_min, slots_max: self.slots_max, delete_subtree_stack: self.delete_subtree_stack });
@@ -316,7 +318,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         let item: &mut Option<T> = &mut self.node_mut(idx).item;
         let decision = drv.decide(item.as_ref().unwrap());
-        match (decision.traverse_left, decision.traverse_right) {
+        match (decision.left, decision.right) {
             (true, false)  => self.traverse_left(drv, idx,
                                                  min_included, max_included),
             (false, true)  => self.traverse_right(drv, idx,
@@ -393,7 +395,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if done {
             true
         } else {
-            debug_assert!(self.slots_min.has_open(), "idx={}, slots_min.nfilled={}, slots_min.nslots={}, slots[0]={:?}, slots[1]={:?}", idx, self.slots_min.nfilled, self.slots_min.nslots, self.slots_min.slot_at(0), self.slots_min.slot_at(1));
+            debug_assert!(self.slots_min.has_open());
 
             let node = self.node_mut(idx);
             let item = node.item.take().unwrap();
@@ -423,7 +425,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if done {
             true
         } else {
-            debug_assert!(self.slots_max.has_open(), "idx={}, slots_max.nfilled={}, slots_max.nslots={}, slots[0]={:?}, slots[1]={:?}", idx, self.slots_max.nfilled, self.slots_max.nslots, self.slots_max.slot_at(0), self.slots_max.slot_at(1));
+            debug_assert!(self.slots_max.has_open());
 
             let node = self.node_mut(idx);
             let item = node.item.take().unwrap();

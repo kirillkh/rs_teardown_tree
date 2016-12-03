@@ -4,8 +4,8 @@ use std::cmp::{max, Ordering};
 use std::fmt::{Debug, Formatter};
 use delete_range::{DeleteRange, DeleteRangeCache, TraversalDriver, TraversalDecision};
 
-pub trait Item: Sized+Clone+Debug {
-    type Key: Ord+Debug;
+pub trait Item: Sized+Clone {
+    type Key: Ord;
 
     fn ord(&self) -> Self::Key;
 }
@@ -19,8 +19,6 @@ impl Item for usize {
     }
 }
 
-
-//pub type Item = Sized+Ord;
 
 #[derive(Debug, Clone)]
 pub struct Node<T: Item> {
@@ -65,7 +63,7 @@ impl TraversalDriver<usize> for DriverFromTo {
         let left = self.from <= *x;
         let right = *x <= self.to;
 
-        TraversalDecision { traverse_left: left, traverse_right: right }
+        TraversalDecision { left: left, right: right }
     }
 }
 
@@ -421,7 +419,7 @@ impl<T: Item> TeardownTree<T> {
 }
 
 
-impl<T: Item> Debug for TeardownTree<T> {
+impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
     fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
         let mut nz: Vec<_> = self.data.iter()
             .rev()
