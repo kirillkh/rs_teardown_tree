@@ -27,11 +27,20 @@ to the size n=10.
 
 Running instructions
 --------------------
+##### Cargo.toml:
 
+```
+[dependencies]
+rand = "0.3.14"
+```
+
+
+##### To run the benchmarks:
 1. Install Rust and Cargo (any recent version will do, stable or nightly).
 2. `git clone https://github.com/kirillkh/rs_teardown_tree.git`
 3. `cd rs_teardown_tree`
 4. `cargo run --release` to run benchmarks
+
 
 
 
