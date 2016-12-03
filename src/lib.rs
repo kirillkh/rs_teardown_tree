@@ -1,9 +1,12 @@
 #![feature(test)]
 #![feature(unique)]
+#![feature(specialization)]
+
 extern crate test;
 extern crate rand;
 
 mod base;
+mod slot_stack;
 mod delete_range;
 
 pub use base::{Item, TeardownTree, TeardownTreeRefill, Node, DriverFromTo};
@@ -51,7 +54,7 @@ mod tests {
 
 
     fn delete_range_n(n: usize) {
-        let mut tree = Tree::new((1..n+1).collect::<Vec<_>>());
+        let tree = Tree::new((1..n+1).collect::<Vec<_>>());
         delete_range_exhaustive_with_tree(tree);
     }
 

@@ -1,8 +1,7 @@
 use base::{TeardownTree, Item, Node};
-use std::ptr::Unique;
+use slot_stack::SlotStack;
 
-use std::{mem, ptr};
-use std::fmt::{Debug, Formatter};
+use std::mem;
 
 pub trait TraversalDriver<T: Item> {
     #[inline(always)]
@@ -45,115 +44,6 @@ impl<T: Item> DeleteRangeCache<T> {
 }
 
 
-
-type Slot<T> = Option<T>;
-
-pub struct SlotStack<T: Item> {
-    nslots: usize,
-    nfilled: usize,
-    slots: Unique<T>,
-    capacity: usize
-}
-
-impl<T: Item> SlotStack<T> {
-    fn new(capacity: usize) -> SlotStack<T> {
-        unsafe {
-            let mut slots = vec![mem::uninitialized(); capacity];
-            let ptr: *mut T = slots.as_mut_ptr();
-            mem::forget(slots);
-            SlotStack { nslots: 0, nfilled: 0, slots: Unique::new(ptr), capacity: capacity }
-        }
-    }
-
-    #[inline(always)]
-    fn push_slot(&mut self) {
-        debug_assert!(self.nslots < self.capacity);
-        self.nslots += 1;
-    }
-
-    #[inline(always)]
-    fn pop(&mut self) -> Slot<T> {
-        debug_assert!(self.nslots > 0);
-        if self.nfilled == self.nslots {
-            self.nfilled -= 1;
-            self.nslots -= 1;
-            unsafe {
-                Some(ptr::read(self.slot_at(self.nslots) as *const T))
-            }
-        } else {
-            self.nslots -= 1;
-            None
-        }
-    }
-
-    #[inline(always)]
-    fn fill_slot(&mut self, item: T) {
-        debug_assert!(self.nfilled < self.nslots);
-        *self.slot_at(self.nfilled) = item;
-        self.nfilled += 1;
-    }
-
-    #[inline(always)]
-    fn fill_slot_opt(&mut self, item: Option<T>) {
-        debug_assert!(item.is_some());
-        debug_assert!(self.nfilled < self.nslots);
-        *self.slot_at(self.nfilled) = item.unwrap();
-        self.nfilled += 1;
-    }
-
-
-    #[inline(always)]
-    fn slot_at(&self, idx: usize) -> &mut T {
-        unsafe {
-            mem::transmute(self.slots.offset(idx as isize))
-        }
-    }
-
-    #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        self.nslots == 0
-    }
-
-    #[inline(always)]
-    pub fn nslots(&self) -> usize {
-        self.nslots
-    }
-
-    #[inline(always)]
-    pub fn nfilled(&self) -> usize {
-        self.nfilled
-    }
-
-    #[inline(always)]
-    pub fn has_open(&self) -> bool {
-        self.nslots != self.nfilled
-    }
-}
-
-impl <T: Item+Debug> Debug for SlotStack<T> {
-    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
-        unsafe {
-            let ptr: *mut Slot<T> = mem::transmute(self.slots.get());
-            let slots_vec = Vec::from_raw_parts(ptr, self.capacity, self.capacity);
-            let result = write!(fmt, "SlotStack: nslots={}, nfilled={}, slots={:?}", self.nslots, self.nfilled, slots_vec);
-            mem::forget(slots_vec);
-            result
-        }
-    }
-}
-
-impl <T: Item> Drop for SlotStack<T> {
-    fn drop(&mut self) {
-        unsafe {
-            Vec::from_raw_parts(self.slots.get_mut(), self.nfilled, self.capacity);
-            // let it drop
-        }
-    }
-}
-
-
-
-
 pub struct DeleteRange<'a, T: 'a+Item> {
     tree: &'a mut TeardownTree<T>,
     slots_min: SlotStack<T>, slots_max: SlotStack<T>,
@@ -189,7 +79,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         where F: Fn(&mut Self, usize) {
         if push_slot {
             debug_assert!(self.node(idx).item.is_none());
-            self.slots_max.push_slot()
+            self.slots_max.push()
         }
 
         f(self, Self::lefti(idx));
@@ -218,7 +108,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                                                         where F: Fn(&mut Self, usize) {
         if push_slot {
             debug_assert!(self.node(idx).item.is_none());
-            self.slots_min.push_slot()
+            self.slots_min.push()
         }
 
         f(self, Self::righti(idx));
@@ -316,6 +206,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             return;
         }
 
+        debug_assert!(!self.slots_max.has_open() || !self.slots_min.has_open(), "max={:?}, min={:?}", self.slots_max, self.slots_min);
+
         let item: &mut Option<T> = &mut self.node_mut(idx).item;
         let decision = drv.decide(item.as_ref().unwrap());
         match (decision.left, decision.right) {
@@ -399,7 +291,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
             let node = self.node_mut(idx);
             let item = node.item.take().unwrap();
-            self.slots_min.fill_slot(item);
+            self.slots_min.fill(item);
 
             self.descend_right(idx, true, |this, child_idx| {
                 this.fill_slots_min(child_idx);
@@ -429,7 +321,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
             let node = self.node_mut(idx);
             let item = node.item.take().unwrap();
-            self.slots_max.fill_slot(item);
+            self.slots_max.fill(item);
 
             self.descend_left(idx, true, |this, child_idx| {
                 this.fill_slots_max(child_idx);
@@ -476,7 +368,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if self.slots_min.has_open() {
             // fill a slot_min with this node's item
             let item = node.item.take();
-            self.slots_min.fill_slot_opt(item);
+            self.slots_min.fill_opt(item);
             removed = true;
         }
 
@@ -501,7 +393,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         if self.slots_max.has_open() {
             // fill a slot_max with this node's item
             let item = node.item.take();
-            self.slots_max.fill_slot_opt(item);
+            self.slots_max.fill_opt(item);
             removed = true;
         }
 
