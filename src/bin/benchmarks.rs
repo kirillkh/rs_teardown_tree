@@ -194,23 +194,22 @@ fn main() {
 //    bench_delete_range_n::<Tree>(100000, 100, 15000);
 //    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(100, 100, 50000);
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000, 100, 15000);
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(10000, 100, 8000);
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(100000, 100, 2000);
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000000, 100, 200);
+    bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
+    bench_clone_teardown_cycle::<TreeBulk>(1000, 100, 300000);
+    bench_clone_teardown_cycle::<TreeBulk>(10000, 100, 15000);
+    bench_clone_teardown_cycle::<TreeBulk>(100000, 100, 2000);
+    bench_clone_teardown_cycle::<TreeBulk>(1000000, 100, 200);
 
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000, 1000, 15000);
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(10000, 1000, 8000);
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(100000, 1000, 2000);
-    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000000, 1000, 300);
+    bench_clone_teardown_cycle::<TreeBulk>(1000, 1000, 1000000);
+    bench_clone_teardown_cycle::<TreeBulk>(10000, 1000, 50000);
+    bench_clone_teardown_cycle::<TreeBulk>(100000, 1000, 5000);
+    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
 
-    bench_delete_range_n::<TeardownTreeSingle>(100, 100, 600000);
-    bench_delete_range_n::<TeardownTreeSingle>(1000, 100, 600000);
-    bench_delete_range_n::<TeardownTreeSingle>(10000, 100, 20000);
-    bench_delete_range_n::<TeardownTreeSingle>(100000, 100, 5000);
-    bench_delete_range_n::<TeardownTreeSingle>(1000000, 100, 300);
-
+    bench_delete_range_n::<TreeBulk>(100, 100, 5000000);
+    bench_delete_range_n::<TreeBulk>(1000, 100, 800000);
+    bench_delete_range_n::<TreeBulk>(10000, 100, 100000);
+    bench_delete_range_n::<TreeBulk>(100000, 100, 10000);
+    bench_delete_range_n::<TreeBulk>(1000000, 100, 1000);
 
     bench_clone_teardown_cycle::<BTreeSet<usize>>(100, 100, 50000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 100, 15000);
@@ -230,22 +229,22 @@ fn main() {
     bench_delete_range_n::<BTreeSet<usize>>(1000000, 100, 300);
 
 
-    bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
-    bench_clone_teardown_cycle::<TreeBulk>(1000, 100, 300000);
-    bench_clone_teardown_cycle::<TreeBulk>(10000, 100, 15000);
-    bench_clone_teardown_cycle::<TreeBulk>(100000, 100, 2000);
-    bench_clone_teardown_cycle::<TreeBulk>(1000000, 100, 200);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(100, 100, 50000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000, 100, 15000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(10000, 100, 8000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(100000, 100, 2000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000000, 100, 200);
 
-    bench_clone_teardown_cycle::<TreeBulk>(1000, 1000, 1000000);
-    bench_clone_teardown_cycle::<TreeBulk>(10000, 1000, 50000);
-    bench_clone_teardown_cycle::<TreeBulk>(100000, 1000, 5000);
-    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000, 1000, 15000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(10000, 1000, 8000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(100000, 1000, 2000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000000, 1000, 300);
 
-    bench_delete_range_n::<TreeBulk>(100, 100, 5000000);
-    bench_delete_range_n::<TreeBulk>(1000, 100, 800000);
-    bench_delete_range_n::<TreeBulk>(10000, 100, 100000);
-    bench_delete_range_n::<TreeBulk>(100000, 100, 10000);
-    bench_delete_range_n::<TreeBulk>(1000000, 100, 1000);
+    bench_delete_range_n::<TeardownTreeSingle>(100, 100, 600000);
+    bench_delete_range_n::<TeardownTreeSingle>(1000, 100, 600000);
+    bench_delete_range_n::<TeardownTreeSingle>(10000, 100, 20000);
+    bench_delete_range_n::<TeardownTreeSingle>(100000, 100, 5000);
+    bench_delete_range_n::<TeardownTreeSingle>(1000000, 100, 300);
 
     imptree_single_elem_range_n(100, 100, 100000);
     imptree_single_elem_range_n(1000, 100, 30000);

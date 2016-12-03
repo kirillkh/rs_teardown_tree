@@ -326,12 +326,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             (true, true)   => self.traverse_dual(drv, idx,
                                                  min_included, max_included),
             (false, false) =>
-                match (self.slots_min.has_open(), self.slots_max.has_open()) {
-                    (true, false)  => { self.fill_slots_min(idx); },
-                    (false, true)  => { self.fill_slots_max(idx); },
-                    (true, true)   => { self.fill_slots_minmax(idx); }, // TODO: can we do this more efficiently in two traversals?
-                    (false, false) => unreachable!(),
-                },
+                if self.slots_min.has_open() {
+                    self.fill_slots_min(idx);
+                } else {
+                    debug_assert!(self.slots_max.has_open());
+                    self.fill_slots_max(idx);
+                }
         }
     }
 
@@ -444,22 +444,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
 
-    // with the current algorithm, never happens in practice
-    #[inline]
-    fn fill_slots_minmax(&mut self, idx: usize) {
-        unreachable!();
-//        let node = self.node_mut(idx);
-//        debug_assert!(node.item.is_some());
-//
-//        if self.tree.has_left(idx) {
-//            self.fill_slots_min(Self::lefti(idx));
-//        }
-//
-//        self.fill_minmax_after_left_traverse(idx);
-    }
-
-
-
     //---- traverse_* ---------------------------------------------------------------------
     #[inline(always)]
     fn traverse_left<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize,
@@ -490,7 +474,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let mut removed = false;
 
         if self.slots_min.has_open() {
-            // fill a min_slot with this node's item
+            // fill a slot_min with this node's item
             let item = node.item.take();
             self.slots_min.fill_slot_opt(item);
             removed = true;
@@ -499,12 +483,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let (min_open, max_open) = (removed, self.slots_max.has_open());
         if min_open || max_open {
             if self.tree.has_right(idx) {
-                removed = match (min_open, max_open) {
-                    (true, false)  => self.descend_right(idx, true, |this, child_idx| { this.fill_slots_min(child_idx); } ),
-                    (false, true)  => self.descend_right(idx, false, |this, child_idx| { this.fill_slots_max(child_idx); } ),
-                    (true, true)   => self.descend_right(idx, true, |this, child_idx| { this.fill_slots_minmax(child_idx); } ),
-                    (false, false) => unreachable!(),
-                };
+                removed = self.descend_right(idx, min_open, |this, child_idx| { this.fill_slots_min(child_idx); } );
             }
 
             if removed && self.slots_max.has_open() && self.tree.has_left(idx) {
@@ -520,7 +499,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let mut removed = false;
 
         if self.slots_max.has_open() {
-            // fill a max_slot with this node's item
+            // fill a slot_max with this node's item
             let item = node.item.take();
             self.slots_max.fill_slot_opt(item);
             removed = true;
@@ -529,12 +508,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         let (max_open, min_open) = (removed, self.slots_min.has_open());
         if min_open || max_open {
             if self.tree.has_left(idx) {
-                removed = match (max_open, min_open) {
-                    (true, false)  => self.descend_left(idx, true, |this, child_idx| { this.fill_slots_max(child_idx); } ),
-                    (false, true)  => self.descend_left(idx, false, |this, child_idx| { this.fill_slots_min(child_idx); } ),
-                    (true, true)   => self.descend_left(idx, true, |this, child_idx| { this.fill_slots_minmax(child_idx); } ),
-                    (false, false) => unreachable!(),
-                };
+                removed = self.descend_left(idx, max_open, |this, child_idx| { this.fill_slots_max(child_idx); } );
             }
 
             if removed && self.slots_min.has_open() && self.tree.has_right(idx) {
