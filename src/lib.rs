@@ -1,12 +1,19 @@
-#![feature(test)]
-#![feature(unique)]
-extern crate test;
+//#![feature(specialization)]
+//#![feature(unique)]
+#![cfg_attr(feature = "unstable", feature(test))]
+
+//extern crate test;
 extern crate rand;
 
 mod base;
+mod slot_stack;
 mod delete_range;
+mod drivers;
 
-pub use base::{Item, TeardownTree, TeardownTreeRefill, Node, DriverFromTo};
+mod rust_bench;
+
+pub use base::{Item, TeardownTree, TeardownTreeRefill, Node};
+pub use drivers::{DriverFromToRef, DriverFromTo};
 pub use delete_range::TraversalDecision;
 
 
@@ -15,7 +22,7 @@ pub use delete_range::TraversalDecision;
 
 #[cfg(test)]
 mod tests {
-    use base::{TeardownTree, Node, DriverFromTo, TeardownTreeRefill};
+    use base::{TeardownTree, TeardownTreeInternal, Node};
 
     type Tree = TeardownTree<usize>;
 
@@ -51,7 +58,7 @@ mod tests {
 
 
     fn delete_range_n(n: usize) {
-        let mut tree = Tree::new((1..n+1).collect::<Vec<_>>());
+        let tree = Tree::new((1..n+1).collect::<Vec<_>>());
         delete_range_exhaustive_with_tree(tree);
     }
 
@@ -62,11 +69,18 @@ mod tests {
         let nodes: Vec<Node<usize>> = mk_prebuilt(items);
         let mut tree = Tree::with_nodes(nodes);
         let (from, to) = from_to;
-        let mut drv = DriverFromTo::new(from, to);
+
         let mut output = Vec::with_capacity(tree.size());
-        tree.delete_range(&mut drv, &mut output);
+
+        let mut expect = expect_out.to_vec();
+        expect.sort();
+
+        tree.delete_range(from, to, &mut output);
+        let mut sorted_out = output.clone();
+        sorted_out.sort();
+
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
-        assert_eq!(format!("{:?}", &output), format!("{:?}", expect_out));
+        assert_eq!(format!("{:?}", &sorted_out), format!("{:?}", expect));
     }
 
     #[test]
@@ -79,6 +93,9 @@ mod tests {
 
         test_prebuilt(&[1, 0, 2], (2,2),
                       &[1], &[2]);
+
+        test_prebuilt(&[3, 2, 4, 1], (1,3),
+                      &[4], &[3,2,1]);
 
         test_prebuilt(&[3, 1, 4, 0, 2], (2,4),
                       &[1], &[3,4,2]);
@@ -143,54 +160,43 @@ mod tests {
 
 
     #[test]
-    fn delete_range_exhaustive1() {
-        for i in 1..2 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
-    fn delete_range_exhaustive2() {
-        for i in 2..3 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
-    fn delete_range_exhaustive3() {
-        for i in 3..4 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
-    fn delete_range_exhaustive4() {
-        for i in 4..5 {
-            delete_range_exhaustive_n(i);
-        }
-    }
-
-    #[test]
     fn delete_range_exhaustive() {
         for i in 1..8 {
             delete_range_exhaustive_n(i);
         }
     }
 
+    #[test]
+    fn delete_single_exhaustive() {
+        for i in 1..9 {
+            delete_single_exhaustive_n(i);
+        }
+    }
+
+    fn delete_single_exhaustive_n(n: usize) {
+        test_exhaustive_n(n, &|tree| delete_single_exhaustive_with_tree(tree));
+    }
+
     fn delete_range_exhaustive_n(n: usize) {
+        test_exhaustive_n(n, &|tree| delete_range_exhaustive_with_tree(tree));
+    }
+
+    fn test_exhaustive_n<F>(n: usize, check: &F)
+                        where F: Fn(Tree) -> () {
         let elems: Vec<_> = (1..n+1).collect();
         println!("exhaustive {}: elems={:?} ------------------------", n, &elems);
 
         let mut stack = vec![TreeRangeInfo { range: (1..n+1), root_idx: 0 }];
         let mut items: Vec<usize> = vec![0; 1 << n];
-        delete_range_exhaustive_rec(&mut stack, &mut items);
+        test_exhaustive_rec(&mut stack, &mut items, check);
     }
 
-    fn delete_range_exhaustive_rec(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>) {
+    fn test_exhaustive_rec<F>(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>, check: &F)
+                                                            where F: Fn(Tree) -> () {
         if stack.is_empty() {
             let nodes: Vec<Node<usize>> = mk_prebuilt(items);
             let tree = Tree::with_nodes(nodes);
-            delete_range_exhaustive_with_tree(tree);
+            check(tree);
         } else {
             let info = stack.pop().unwrap();
             let (lefti, righti) = (Tree::lefti(info.root_idx), Tree::righti(info.root_idx));
@@ -210,7 +216,7 @@ mod tests {
                     pushed += 1;
                 }
 
-                delete_range_exhaustive_rec(stack, items);
+                test_exhaustive_rec(stack, items, check);
 
                 for _ in 0..pushed {
                     stack.pop();
@@ -223,24 +229,37 @@ mod tests {
     }
 
 
+    fn delete_single_exhaustive_with_tree(tree: Tree) {
+        let n = tree.size();
+        let mut output = Vec::with_capacity(n);
+        for i in 1..n+1 {
+            output.truncate(0);
+            let mut tree_mod = tree.clone();
+//                println!("tree={:?}, from={}, to={}", &tree, i, j);
+            let deleted = tree_mod.delete(&i);
+            debug_assert!(deleted.is_some());
+            output.push(i);
+            delete_range_check(n, i, i, &mut output, tree_mod, &tree);
+        }
+    }
+
     fn delete_range_exhaustive_with_tree(tree: Tree) {
         let n = tree.size();
         let mut output = Vec::with_capacity(n);
         for i in 1..n+1 {
             for j in i..n+1 {
                 let mut tree_mod = tree.clone();
-                let mut drv = DriverFromTo::new(i, j);
 //                println!("tree={:?}, from={}, to={}", &tree, i, j);
                 output.truncate(0);
-                tree_mod.delete_range(&mut drv, &mut output);
+                tree_mod.delete_range(i, j, &mut output);
                 delete_range_check(n, i, j, &mut output, tree_mod, &tree);
             }
         }
     }
 
     fn delete_range_check(n: usize, from: usize, to: usize, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
-        debug_assert!(output.len() == to-from+1, "tree_orig={:?}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, from, to, to-from+1, output);
-        debug_assert!(tree_mod.size() + output.len() == n);
+        debug_assert!(output.len() == to-from+1, "tree'={:?}, tree={}, tree_mod={}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, tree_orig, tree_mod, from, to, to-from+1, output);
+        debug_assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
 
         output.sort();
         assert_eq!(output, &(from..to+1).collect::<Vec<_>>());
@@ -277,143 +296,5 @@ mod tests {
 
             return Some((min, max));
         }
-    }
-
-
-    //---- benchmarks ------------------------------------------------------------------------------
-    use test::Bencher;
-    use test;
-
-    #[bench]
-    fn bench_delete_range_00100(bencher: &mut Bencher) {
-        bench_delete_range_n(100, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_01022(bencher: &mut Bencher) {
-        bench_delete_range_n(1022, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_01023(bencher: &mut Bencher) {
-        bench_delete_range_n(1023, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_02046(bencher: &mut Bencher) {
-        bench_delete_range_n(2046, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_02047(bencher: &mut Bencher) {
-        bench_delete_range_n(2047, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_04094(bencher: &mut Bencher) {
-        bench_delete_range_n(4094, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_04095(bencher: &mut Bencher) {
-        bench_delete_range_n(4095, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_05000(bencher: &mut Bencher) {
-        bench_delete_range_n(5000, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_08190(bencher: &mut Bencher) {
-        bench_delete_range_n(8190, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_08191(bencher: &mut Bencher) {
-        bench_delete_range_n(8191, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_10000(bencher: &mut Bencher) {
-        bench_delete_range_n(10000, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_16000(bencher: &mut Bencher) {
-        bench_delete_range_n(16000, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_16381(bencher: &mut Bencher) {
-        bench_delete_range_n(16381, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_16382(bencher: &mut Bencher) {
-        bench_delete_range_n(test::black_box(16382), bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_16383(bencher: &mut Bencher) {
-        bench_delete_range_n(test::black_box(16383), bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_25000(bencher: &mut Bencher) {
-        bench_delete_range_n(25000, bencher);
-    }
-
-    #[bench]
-    fn bench_delete_range_50000(bencher: &mut Bencher) {
-        bench_delete_range_n(50000, bencher);
-    }
-
-//    #[bench]
-//    fn bench_delete_range_100000(bencher: &mut Bencher) {
-//        bench_delete_range_n(100000, bencher);
-//    }
-//
-//    #[bench]
-//    fn bench_delete_range_10000000(bencher: &mut Bencher) {
-//        bench_delete_range_n(10000000, bencher);
-//    }
-
-    #[inline(never)]
-    fn bench_delete_range_n(n: usize, bencher: &mut Bencher) {
-        let elems: Vec<_> = (1..n+1).collect();
-
-        let perm = {
-            // generate a random permutation
-            let mut pool: Vec<_> = (1..101).collect();
-            let mut perm = vec![];
-
-            use rand::{XorShiftRng, SeedableRng, Rng};
-
-            let mut rng = XorShiftRng::from_seed([1,2,3,4]);
-
-            for i in 0..100 {
-                let n: u32 = rng.gen_range(0, 100-i);
-                let next = pool.swap_remove(n as usize);
-                perm.push(next);
-            }
-
-            perm
-        };
-
-
-        let tree = Tree::new(elems);
-        let mut copy = tree.clone();
-        let mut output = Vec::with_capacity(tree.size());
-
-        bencher.iter(|| {
-            copy.refill(&tree);
-            for i in 0..100 {
-                output.truncate(0);
-                let x = perm[i];
-                copy.delete_range(&mut DriverFromTo::new((x-1)*n/100, x*n/100), &mut output);
-                test::black_box(output.len());
-            }
-        });
     }
 }

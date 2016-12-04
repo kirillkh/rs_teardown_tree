@@ -1,8 +1,6 @@
-#![feature(test)]
-extern crate test;
 extern crate rand;
 extern crate teardown_tree;
-extern crate wio;
+//extern crate wio;
 extern crate cpuprofiler;
 use std::time;
 
@@ -11,9 +9,10 @@ use std::time::Duration;
 use rand::{XorShiftRng, SeedableRng, Rng};
 use cpuprofiler::PROFILER;
 
-use teardown_tree::{TeardownTree, TeardownTreeRefill, DriverFromTo};
+use teardown_tree::{TeardownTree, TeardownTreeRefill};
 
 type Tree = TeardownTree<usize>;
+type TreeBulk = TeardownTreeBulk;
 
 
 
@@ -42,24 +41,24 @@ fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
         let start = time::SystemTime::now();
         for i in 0..rm_items {
             let x = btmap.remove(&keys[i]);
-            test::black_box(x);
+            black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to delete {} elements from BTreeMap of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete {} random elements from BTreeMap of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
-fn imptree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
+fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
     let mut rng = XorShiftRng::from_seed([1,2,3,4]);
     let mut elapsed_nanos = 0;
 
     let elems: Vec<_> = (1..n+1).collect();
 
-    let tree = Tree::new(elems);
+    let tree = TeardownTreeBulk(Tree::new(elems));
     let mut copy = tree.clone();
-    let mut output = Vec::with_capacity(tree.size());
+    let mut output = Vec::with_capacity(tree.0.size());
 
     for _ in 0..iters {
         let keys = {
@@ -75,20 +74,20 @@ fn imptree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
             keys
         };
 
-        copy.refill(&tree);
+        copy.rfill(&tree);
 
 
         let start = time::SystemTime::now();
         for i in 0..rm_items {
             output.truncate(0);
-            let x = copy.delete_range(&mut DriverFromTo::new(keys[i], keys[i]), &mut output);
-            test::black_box(x);
+            let x = copy.0.delete_range(keys[i], keys[i], &mut output);
+            black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to delete {} elements from TeardownTree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete {} random elements from TeardownTree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
 
@@ -112,7 +111,7 @@ fn bench_delete_range_n<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters:
 
         let start = time::SystemTime::now();
         copy.del_range(from, from+rm_items-1, &mut output);
-        test::black_box(output.len());
+        black_box(output.len());
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
     }
@@ -159,7 +158,7 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
             output.truncate(0);
             let (ref from, ref to) = ranges[i];
             copy.del_range(*from, *to, &mut output);
-            test::black_box(output.len());
+            black_box(output.len());
         }
         debug_assert!(copy.sz() == 0);
     }
@@ -177,14 +176,14 @@ fn nanos(d: Duration) -> u64 {
     d.as_secs()*1000000000 + d.subsec_nanos() as u64
 }
 
-#[cfg(target_os = "windows")]
-fn set_affinity() {
-    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
-}
-
-#[cfg(not(target_os = "windows"))]
-fn set_affinity() {
-}
+//#[cfg(all(feature = "unstable", target_os = "windows"))]
+//fn set_affinity() {
+//    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
+//}
+//
+//#[cfg(not(target_os = "windows"))]
+//fn set_affinity() {
+//}
 
 fn main() {
 //    imptree_delete_range_n(100, 100, 10000000);
@@ -192,55 +191,80 @@ fn main() {
 //    // TEST
 //    bench_delete_range_n::<Tree>(1000000, 100, 10000);
 //    return;
-    set_affinity();
+
+//    set_affinity();
 
 //    bench_delete_range_n::<Tree>(100000, 100, 15000);
 //    bench_delete_range_n::<Tree>(1000000, 100, 2000);
 
-    bench_clone_teardown_cycle::<Tree>(100000, 100, 15000);
+    // the most interesting comparisons
+//    bench_delete_range_n::<TreeBulk>(1000000, 1000, 3000);
+//    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 1000);
+//
+    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
+//    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
     return;
 
-    bench_clone_teardown_cycle::<Tree>(100, 100, 500000);
-    bench_clone_teardown_cycle::<Tree>(1000, 100, 150000);
-    bench_clone_teardown_cycle::<Tree>(10000, 100, 10000);
-    bench_clone_teardown_cycle::<Tree>(100000, 100, 5000);
 
-    bench_clone_teardown_cycle::<Tree>(100, 100, 3000000);
-    bench_clone_teardown_cycle::<Tree>(1000, 100, 300000);
-    bench_clone_teardown_cycle::<Tree>(10000, 100, 15000);
-    bench_clone_teardown_cycle::<Tree>(100000, 100, 2000);
-    bench_clone_teardown_cycle::<Tree>(1000000, 100, 200);
 
-    bench_clone_teardown_cycle::<Tree>(1000, 1000, 1000000);
-    bench_clone_teardown_cycle::<Tree>(10000, 1000, 50000);
-    bench_clone_teardown_cycle::<Tree>(100000, 1000, 5000);
-    bench_clone_teardown_cycle::<Tree>(1000000, 1000, 300);
+    bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
+    bench_clone_teardown_cycle::<TreeBulk>(1000, 100, 300000);
+    bench_clone_teardown_cycle::<TreeBulk>(10000, 100, 15000);
+    bench_clone_teardown_cycle::<TreeBulk>(100000, 100, 2000);
+    bench_clone_teardown_cycle::<TreeBulk>(1000000, 100, 200);
 
-    bench_delete_range_n::<Tree>(100, 100, 5000000);
-    bench_delete_range_n::<Tree>(1000, 100, 800000);
-    bench_delete_range_n::<Tree>(10000, 100, 100000);
-    bench_delete_range_n::<Tree>(100000, 100, 10000);
-    bench_delete_range_n::<Tree>(1000000, 100, 1000);
+    bench_clone_teardown_cycle::<TreeBulk>(1000, 1000, 1000000);
+    bench_clone_teardown_cycle::<TreeBulk>(10000, 1000, 50000);
+    bench_clone_teardown_cycle::<TreeBulk>(100000, 1000, 5000);
+    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
 
-    imptree_single_delete_n(100, 100, 100000);
-    imptree_single_delete_n(1000, 100, 30000);
-    imptree_single_delete_n(10000, 100, 10000);
-    imptree_single_delete_n(100000, 100, 800);
+    bench_delete_range_n::<TreeBulk>(100, 100, 5000000);
+    bench_delete_range_n::<TreeBulk>(1000, 100, 800000);
+    bench_delete_range_n::<TreeBulk>(10000, 100, 100000);
+    bench_delete_range_n::<TreeBulk>(100000, 100, 10000);
+    bench_delete_range_n::<TreeBulk>(1000000, 100, 1000);
+    bench_delete_range_n::<TreeBulk>(1000000, 1000, 1000);
 
     bench_clone_teardown_cycle::<BTreeSet<usize>>(100, 100, 50000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 100, 15000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(10000, 100, 8000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(100000, 100, 2000);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 100, 200);
 
     bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 1000, 15000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(10000, 1000, 8000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(100000, 1000, 2000);
+    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
 
     bench_delete_range_n::<BTreeSet<usize>>(100, 100, 600000);
     bench_delete_range_n::<BTreeSet<usize>>(1000, 100, 600000);
     bench_delete_range_n::<BTreeSet<usize>>(10000, 100, 20000);
     bench_delete_range_n::<BTreeSet<usize>>(100000, 100, 5000);
-    bench_delete_range_n::<BTreeSet<usize>>(1000000, 100, 1000);
+    bench_delete_range_n::<BTreeSet<usize>>(1000000, 100, 300);
+    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 300);
+
+
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(100, 100, 50000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000, 100, 15000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(10000, 100, 8000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(100000, 100, 2000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000000, 100, 200);
+
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000, 1000, 15000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(10000, 1000, 8000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(100000, 1000, 2000);
+    bench_clone_teardown_cycle::<TeardownTreeSingle>(1000000, 1000, 300);
+
+    bench_delete_range_n::<TeardownTreeSingle>(100, 100, 600000);
+    bench_delete_range_n::<TeardownTreeSingle>(1000, 100, 600000);
+    bench_delete_range_n::<TeardownTreeSingle>(10000, 100, 20000);
+    bench_delete_range_n::<TeardownTreeSingle>(100000, 100, 5000);
+    bench_delete_range_n::<TeardownTreeSingle>(1000000, 100, 300);
+
+    imptree_single_elem_range_n(100, 100, 100000);
+    imptree_single_elem_range_n(1000, 100, 30000);
+    imptree_single_elem_range_n(10000, 100, 10000);
+    imptree_single_elem_range_n(100000, 100, 800);
 
     btree_single_delete_n(100, 100, 100000);
     btree_single_delete_n(1000, 100, 30000);
@@ -270,12 +294,14 @@ trait TeardownTreeCopy {
 }
 
 
+#[derive(Clone, Debug)]
+struct TeardownTreeBulk(TeardownTree<usize>);
 
-impl TeardownTreeMaster for TeardownTree<usize> {
-    type Cpy = TeardownTree<usize>;
+impl TeardownTreeMaster for TeardownTreeBulk {
+    type Cpy = TeardownTreeBulk;
 
     fn build(elems: Vec<usize>) -> Self {
-        TeardownTree::new(elems)
+        TeardownTreeBulk(TeardownTree::new(elems))
     }
 
     fn cpy(&self) -> Self {
@@ -283,27 +309,72 @@ impl TeardownTreeMaster for TeardownTree<usize> {
     }
 
     fn sz(&self) -> usize {
-        self.size()
+        self.0.size()
     }
 
     fn descr() -> String {
-        "TeardownTree".to_string()
+        "TeardownTreeBulk".to_string()
     }
 }
 
-impl TeardownTreeCopy for TeardownTree<usize> {
-    type Master = TeardownTree<usize>;
+impl TeardownTreeCopy for TeardownTreeBulk {
+    type Master = TeardownTreeBulk;
 
     fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-        self.delete_range(&mut DriverFromTo::new(from, to), output);
+        self.0.delete_range(from, to, output);
     }
 
     fn rfill(&mut self, master: &Self::Master) {
-        self.refill(master)
+        self.0.refill(&master.0)
     }
 
     fn sz(&self) -> usize {
-        self.size()
+        self.0.size()
+    }
+}
+
+
+
+#[derive(Clone, Debug)]
+struct TeardownTreeSingle(TeardownTree<usize>);
+
+impl TeardownTreeMaster for TeardownTreeSingle {
+    type Cpy = TeardownTreeSingle;
+
+    fn build(elems: Vec<usize>) -> Self {
+        TeardownTreeSingle(TeardownTree::new(elems))
+    }
+
+    fn cpy(&self) -> Self {
+        self.clone()
+    }
+
+    fn sz(&self) -> usize {
+        self.0.size()
+    }
+
+    fn descr() -> String {
+        "TeardownTreeSingle".to_string()
+    }
+}
+
+impl TeardownTreeCopy for TeardownTreeSingle {
+    type Master = TeardownTreeSingle;
+
+    fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
+        for i in from..to+1 {
+            if let Some(x) = self.0.delete(&i) {
+                output.push(x);
+            }
+        }
+    }
+
+    fn rfill(&mut self, master: &Self::Master) {
+        self.0.refill(&master.0)
+    }
+
+    fn sz(&self) -> usize {
+        self.0.size()
     }
 }
 
@@ -357,5 +428,17 @@ impl TeardownTreeCopy for BTreeSetCopy {
 
     fn sz(&self) -> usize {
         self.set.len()
+    }
+}
+
+
+fn black_box<T>(dummy: T) -> T {
+    use std::ptr;
+    use std::mem::forget;
+
+    unsafe {
+        let ret = ptr::read_volatile(&dummy as *const T);
+        forget(dummy);
+        ret
     }
 }
