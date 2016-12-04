@@ -4,7 +4,7 @@ extern crate teardown_tree;
 extern crate cpuprofiler;
 use std::time;
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::time::Duration;
 use rand::{XorShiftRng, SeedableRng, Rng};
 use cpuprofiler::PROFILER;
@@ -20,9 +20,9 @@ fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
     let mut rng = XorShiftRng::from_seed([1,2,3,4]);
     let mut elapsed_nanos = 0;
     for _ in 0..iters {
-        let mut btmap = BTreeMap::new();
+        let mut btset = BTreeSet::new();
         for i in 0..n {
-            btmap.insert(i, i);
+            btset.insert(i);
         }
 
         let keys = {
@@ -40,7 +40,7 @@ fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
 
         let start = time::SystemTime::now();
         for i in 0..rm_items {
-            let x = btmap.remove(&keys[i]);
+            let x = btset.remove(&keys[i]);
             black_box(x);
         }
         let elapsed = start.elapsed().unwrap();
@@ -87,7 +87,7 @@ fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to delete {} random elements from TeardownTree of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete {} random elements from TeardownTreeBulk of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
 

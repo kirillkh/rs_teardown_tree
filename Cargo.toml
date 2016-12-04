@@ -1,9 +1,9 @@
 [package]
 name = "teardown_tree"
-version = "0.4.2"
+version = "0.4.4"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 description = "A binary search tree that supports fast clone and delete-range operations"
-readme = "README.md"
+readme = "README.rst"
 license-file = "LICENSE-MIT"
 homepage = "https://github.com/kirillkh/rs_teardown_tree"
 repository = "https://github.com/kirillkh/rs_teardown_tree.git"
