@@ -31,7 +31,7 @@ Running instructions
 
 ```
 [dependencies]
-rand = "0.3.14"
+teardown_tree = "0.4.2"
 ```
 
 
