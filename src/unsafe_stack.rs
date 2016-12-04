@@ -1,4 +1,3 @@
-use base::Item;
 //use std::ptr::Unique;
 use std::{mem, ptr};
 use std::fmt::{Debug, Formatter};
@@ -55,7 +54,7 @@ impl<T: Sized+Clone> UnsafeStack<T> {
     }
 }
 
-impl <T: Item> Debug for UnsafeStack<T> {
+impl <T> Debug for UnsafeStack<T> {
     fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
         let result = write!(fmt, "UnsafeStack: {{size={}}}", self.size);
         result

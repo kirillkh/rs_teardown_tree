@@ -81,12 +81,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     #[inline(always)]
-    fn item(&mut self, idx: usize) -> &Option<T> {
+    fn item(&mut self, idx: usize) -> &T {
         &self.node(idx).item
     }
 
     #[inline(always)]
-    fn item_mut(&mut self, idx: usize) -> &mut Option<T> {
+    fn item_mut(&mut self, idx: usize) -> &mut T {
         &mut self.node_mut(idx).item
     }
 
@@ -101,8 +101,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     #[inline(always)]
-    fn consume(&mut self, node: &mut Node<T>) {
-        let item = node.item.take().unwrap();
+    fn consume(&mut self, idx: usize) {
+        let item = self.tree.take(idx);
         self.output.push(item);
     }
 }
@@ -117,11 +117,10 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                 return;
             }
 
-            let node = self.node_mut(idx);
-            let decision = drv.decide(node.item.as_ref().unwrap().key());
+            let decision = drv.decide(&self.item(idx).key());
 
             if decision.left && decision.right {
-                self.consume(node);
+                self.consume(idx);
                 let removed = self.descend_delete_left(drv, idx, true);
                 self.descend_delete_right(drv, idx, removed);
             } else if decision.left {
@@ -135,13 +134,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
     #[inline(never)]
     fn delete_range_min<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize) {
-        let node = self.node_mut(idx);
-        let decision = drv.decide(node.item.as_ref().unwrap().key());
+        let decision = drv.decide(&self.item(idx).key());
         debug_assert!(decision.left);
 
         if decision.right {
             // the root and the whole left subtree are inside the range
-            self.consume(node);
+            self.consume(idx);
             self.consume_subtree(Self::lefti(idx));
             self.descend_delete_right(drv, idx, true);
         } else {
@@ -151,7 +149,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             );
 
             if self.slots_min.has_open() {
-                self.slots_min.fill(node.item.take().unwrap());
+                self.slots_min.fill(self.tree.take(idx));
                 self.descend_fill_right(idx);
             }
         }
@@ -159,13 +157,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
     #[inline(never)]
     fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize) {
-        let node = self.node_mut(idx);
-        let decision = drv.decide(node.item.as_ref().unwrap().key());
+        let decision = drv.decide(&self.item(idx).key());
         debug_assert!(decision.right);
 
         if decision.left {
             // the root and the whole right subtree are inside the range
-            self.consume(node);
+            self.consume(idx);
             self.consume_subtree(Self::righti(idx));
             self.descend_delete_left(drv, idx, true);
         } else {
@@ -175,7 +172,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             );
 
             if self.slots_max.has_open() {
-                self.slots_max.fill(node.item.take().unwrap());
+                self.slots_max.fill(self.tree.take(idx));
                 self.descend_fill_left(idx);
             }
         }
@@ -195,9 +192,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         loop {
             next = {
-                let node = &mut self.node_mut(next);
-                let item: &mut Option<T> = &mut node.item;
-                let item = item.take().unwrap();
+                let item = self.tree.take(next);
                 self.output.push(item);
 
                 match (self.tree.has_left(next), self.tree.has_right(next)) {
@@ -243,13 +238,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         } else {
             debug_assert!(self.slots_min.has_open());
 
-            let node = self.node_mut(idx);
-            let item = node.item.take().unwrap();
+            let item = self.tree.take(idx);
             self.slots_min.fill(item);
 
             self.descend_fill_right(idx);
 
-            let done = node.item.is_some();
+            let done = !self.tree.is_null(idx);
             if done {
                 true
             } else {
@@ -272,13 +266,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         } else {
             debug_assert!(self.slots_max.has_open());
 
-            let node = self.node_mut(idx);
-            let item = node.item.take().unwrap();
+            let item = self.tree.take(idx);
             self.slots_max.fill(item);
 
             self.descend_fill_left(idx);
 
-            let done = node.item.is_some();
+            let done = !self.tree.is_null(idx);
             if done {
                 true
             } else {
@@ -314,7 +307,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline(always)]
     fn descend_left_with_slot<F>(&mut self, idx: usize, f: F) -> bool
                                                         where F: Fn(&mut Self, usize) {
-        debug_assert!(self.node(idx).item.is_none());
+        debug_assert!(self.tree.is_null(idx));
 
         let child_idx = Self::lefti(idx);
         if self.tree.is_null(child_idx) {
@@ -327,9 +320,9 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         let slot = self.slots_max.pop();
 
-        if slot.is_some() {
-            debug_assert!(self.node(idx).item.is_none());
-            self.node_mut(idx).item = slot;
+        if let Some(item) = slot {
+            debug_assert!(self.tree.is_null(idx));
+            self.tree.place(idx, item);
             false
         } else {
             true
@@ -340,7 +333,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline(always)]
     fn descend_right_with_slot<F>(&mut self, idx: usize, f: F) -> bool
                                                         where F: Fn(&mut Self, usize) {
-        debug_assert!(self.node(idx).item.is_none());
+        debug_assert!(self.tree.is_null(idx));
 
         let child_idx = Self::righti(idx);
         if self.tree.is_null(child_idx) {
@@ -353,9 +346,9 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         let slot = self.slots_min.pop();
 
-        if slot.is_some() {
-            debug_assert!(self.node(idx).item.is_none());
-            self.node_mut(idx).item = slot;
+        if let Some(item) = slot {
+            debug_assert!(self.tree.is_null(idx));
+            self.tree.place(idx, item);
             false
         } else {
             true
