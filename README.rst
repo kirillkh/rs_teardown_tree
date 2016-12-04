@@ -45,8 +45,9 @@ As a library
 ------------
 Add to your Cargo.toml::
 
-    [dependencies]
-    teardown_tree = "0.4.2"
+|
+|     ``[dependencies]``
+|     ``teardown_tree = "0.4.2"``
 
 
 
