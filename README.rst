@@ -37,8 +37,9 @@ An exhaustive automated test for **delete-range** has been written and is found 
 to the size n=10.
 
 
+-----
 Usage
-=====
+-----
 
 As a library
 ------------
@@ -58,9 +59,9 @@ To run the benchmarks
 
 
 
-
+----------
 Benchmarks
-==========
+----------
 
 I have so far only performed a very limited set of benchmarks, comparing
 my own implementation (which is geared for a very specialized use case)
