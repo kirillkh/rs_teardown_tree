@@ -1,5 +1,6 @@
 use base::{TeardownTree, TeardownTreeInternal, Item, Node};
 use slot_stack::SlotStack;
+use unsafe_stack::UnsafeStack;
 
 use std::mem;
 
@@ -22,8 +23,8 @@ impl TraversalDecision {
 }
 
 pub struct DeleteRangeCache<T: Item> {
-    pub slots_min: SlotStack<T>, pub slots_max: SlotStack<T>,
-    pub delete_subtree_stack: Vec<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
+    pub slots_min: SlotStack<T>, pub slots_max: SlotStack<T>,   // TODO: we no longer need both stacks, one is enough... but removing one causes 3% performance regression
+    pub delete_subtree_stack: UnsafeStack<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
 }
 
 impl<T: Item> Clone for DeleteRangeCache<T> {
@@ -38,7 +39,7 @@ impl<T: Item> DeleteRangeCache<T> {
     pub fn new(height: usize) -> DeleteRangeCache<T> {
         let slots_min = SlotStack::new(height);
         let slots_max = SlotStack::new(height);
-        let delete_subtree_stack = Vec::with_capacity(height);
+        let delete_subtree_stack = UnsafeStack::new(height);
         DeleteRangeCache { slots_min: slots_min, slots_max: slots_max, delete_subtree_stack: delete_subtree_stack }
     }
 }
@@ -47,7 +48,7 @@ impl<T: Item> DeleteRangeCache<T> {
 pub struct DeleteRange<'a, T: 'a+Item> {
     tree: &'a mut TeardownTree<T>,
     slots_min: SlotStack<T>, slots_max: SlotStack<T>,
-    delete_subtree_stack: Vec<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
+    delete_subtree_stack: UnsafeStack<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
     pub output: &'a mut Vec<T>
 }
 
@@ -201,11 +202,11 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
                 match (self.tree.has_left(next), self.tree.has_right(next)) {
                     (false, false) => {
-                        if let Some(n) = self.delete_subtree_stack.pop() {
-                            n
-                        } else {
+                        if self.delete_subtree_stack.is_empty() {
                             break;
                         }
+
+                        self.delete_subtree_stack.pop()
                     },
 
                     (true, false)  => {
@@ -217,7 +218,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                     },
 
                     (true, true)   => {
-                        debug_assert!(self.delete_subtree_stack.len() < self.delete_subtree_stack.capacity());
+                        debug_assert!(self.delete_subtree_stack.size() < self.delete_subtree_stack.capacity());
 
                         self.delete_subtree_stack.push(Self::righti(next));
                         Self::lefti(next)
