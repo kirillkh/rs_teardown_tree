@@ -201,7 +201,7 @@ fn main() {
 //    bench_delete_range_n::<TreeBulk>(1000000, 1000, 3000);
 //    bench_delete_range_n::<BTreeSet<usize>>(1000000, 1000, 1000);
 //
-    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
+    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 3000);
 //    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
     return;
 
