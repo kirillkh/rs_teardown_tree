@@ -6,7 +6,7 @@ teardown_tree
 
 |crates|_
 
-.. |crates| image:: http://meritbadge.herokuapp.com/teardown_tree
+.. |crates| image:: http://meritbadge.herokuapp.com/teardown_tree 
 .. _crates: https://crates.io/crates/teardown_tree
 
 A BST (binary search tree) written in Rust that supports efficient **teardown** scenarios, i.e. the typical usage
