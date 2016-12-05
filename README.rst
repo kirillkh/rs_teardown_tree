@@ -70,8 +70,8 @@ is unfair, considering that BTreeSet lacks a way to efficiently delete ranges
 (it has an ``O(log n)`` ``split``, but not ``merge``, see `Rust #34666 <https://github.com/rust-lang/rust/issues/34666>`_). That
 said, on my machine the whole clone/teardown sequence on a tree of 1,000,000
 items (we clone the tree, then delete 1000 items at a time until the tree
-is empty), is ~10 times faster with ``delete_range`` implementation than with
-BTreeSet. It also uses 20% less memory (39 vs 50 MB for 1,000,000 u64 items).
+is empty), is ~14 times faster with ``delete_range`` implementation than with
+BTreeSet. It also uses 45% less memory (u64 items).
 You can see the rest of the benchmarks by compiling the project and running
 the ``benchmarks`` binary.
 
