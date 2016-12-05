@@ -98,6 +98,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                 self.consume(idx);
                 let removed = self.descend_delete_left(drv, idx, true);
                 self.descend_delete_right(drv, idx, removed);
+                return;
             } else if decision.left {
                 idx = Self::lefti(idx);
             } else {
