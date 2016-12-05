@@ -12,13 +12,6 @@ pub struct TraversalDecision {
     pub right: bool,
 }
 
-impl TraversalDecision {
-    #[inline(always)]
-    pub fn consume(&self) -> bool {
-        self.left && self.right
-    }
-}
-
 pub struct DeleteRangeCache<T: Item> {
     pub slots_min: SlotStack<T>, pub slots_max: SlotStack<T>,   // TODO: we no longer need both stacks, one is enough... but removing one causes 3% performance regression
 }
