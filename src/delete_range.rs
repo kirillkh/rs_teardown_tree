@@ -24,12 +24,11 @@ impl TraversalDecision {
 
 pub struct DeleteRangeCache<T: Item> {
     pub slots_min: SlotStack<T>, pub slots_max: SlotStack<T>,   // TODO: we no longer need both stacks, one is enough... but removing one causes 3% performance regression
-    pub delete_subtree_stack: UnsafeStack<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
 }
 
 impl<T: Item> Clone for DeleteRangeCache<T> {
     fn clone(&self) -> Self {
-        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty());
+        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty());
         let capacity = self.slots_max.capacity;
         DeleteRangeCache::new(capacity)
     }
@@ -39,8 +38,7 @@ impl<T: Item> DeleteRangeCache<T> {
     pub fn new(height: usize) -> DeleteRangeCache<T> {
         let slots_min = SlotStack::new(height);
         let slots_max = SlotStack::new(height);
-        let delete_subtree_stack = UnsafeStack::new(height);
-        DeleteRangeCache { slots_min: slots_min, slots_max: slots_max, delete_subtree_stack: delete_subtree_stack }
+        DeleteRangeCache { slots_min: slots_min, slots_max: slots_max }
     }
 }
 
@@ -48,22 +46,21 @@ impl<T: Item> DeleteRangeCache<T> {
 pub struct DeleteRange<'a, T: 'a+Item> {
     tree: &'a mut TeardownTree<T>,
     slots_min: SlotStack<T>, slots_max: SlotStack<T>,
-    delete_subtree_stack: UnsafeStack<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
     pub output: &'a mut Vec<T>
 }
 
 impl<'a, T: Item> DeleteRange<'a, T> {
     pub fn new(tree: &'a mut TeardownTree<T>, output: &'a mut Vec<T>) -> DeleteRange<'a, T> {
         let cache = tree.delete_range_cache.take().unwrap();
-        DeleteRange { tree: tree, slots_min: cache.slots_min, slots_max: cache.slots_max, output: output, delete_subtree_stack: cache.delete_subtree_stack }
+        DeleteRange { tree: tree, slots_min: cache.slots_min, slots_max: cache.slots_max, output: output }
     }
 
     /// The items are not guaranteed to be returned in any particular order.
     pub fn delete_range<D: TraversalDriver<T>>(mut self, drv: &mut D) {
         self.delete_range_loop(drv, 0);
-        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty());
+        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.tree.traversal_stack.is_empty());
 
-        self.tree.delete_range_cache = Some(DeleteRangeCache { slots_min: self.slots_min, slots_max: self.slots_max, delete_subtree_stack: self.delete_subtree_stack });
+        self.tree.delete_range_cache = Some(DeleteRangeCache { slots_min: self.slots_min, slots_max: self.slots_max });
     }
 
 
@@ -182,45 +179,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     //---- delete_subtree_* ---------------------------------------------------------------
     #[inline]
     fn consume_subtree(&mut self, root: usize) {
-        debug_assert!(self.delete_subtree_stack.is_empty());
+        debug_assert!(self.tree.traversal_stack.is_empty());
 
-        if self.tree.is_null(root) {
-            return;
-        }
-
-        let mut next = root;
-
-        loop {
-            next = {
-                let item = self.tree.take(next);
-                self.output.push(item);
-
-                match (self.tree.has_left(next), self.tree.has_right(next)) {
-                    (false, false) => {
-                        if self.delete_subtree_stack.is_empty() {
-                            break;
-                        }
-
-                        self.delete_subtree_stack.pop()
-                    },
-
-                    (true, false)  => {
-                        Self::lefti(next)
-                    },
-
-                    (false, true)  => {
-                        Self::righti(next)
-                    },
-
-                    (true, true)   => {
-                        debug_assert!(self.delete_subtree_stack.size() < self.delete_subtree_stack.capacity());
-
-                        self.delete_subtree_stack.push(Self::righti(next));
-                        Self::lefti(next)
-                    },
-                }
-            };
-        }
+        self.tree.traverse_preorder(root, self.output, |this, output, idx| {
+            let item = this.take(idx);
+            output.push(item);
+        });
     }
 
 

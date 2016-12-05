@@ -5,6 +5,7 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 use delete_range::{DeleteRange, DeleteRangeCache, TraversalDriver};
 use drivers::{DriverFromToRef, DriverFromTo};
+use unsafe_stack::UnsafeStack;
 
 pub trait Item: Sized+Clone {
     type Key: Ord;
@@ -46,7 +47,6 @@ impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTree<T> {
     fn refill(&mut self, master: &TeardownTree<T>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
-        self.drop_items();
         unsafe {
             ptr::copy_nonoverlapping(master.data.as_ptr(), self.data.as_mut_ptr(), len);
             ptr::copy_nonoverlapping(master.mask.as_ptr(), self.mask.as_mut_ptr(), len);
@@ -71,14 +71,29 @@ impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTree<T> {
 //}
 
 
-#[derive(Clone)]
 pub struct TeardownTree<T: Item> {
     data: Vec<Node<T>>,
     mask: Vec<bool>,
     size: usize,
 
+    pub traversal_stack: UnsafeStack<usize>,
     pub delete_range_cache: Option<DeleteRangeCache<T>>,
 }
+
+impl<T: Item> Clone for TeardownTree<T> {
+    fn clone(&self) -> Self {
+        debug_assert!(self.traversal_stack.is_empty());
+
+        TeardownTree {
+            data: self.data.clone(),
+            mask: self.mask.clone(),
+            size: self.size,
+            traversal_stack: UnsafeStack::new(self.traversal_stack.capacity()),
+            delete_range_cache: self.delete_range_cache.clone()
+        }
+    }
+}
+
 
 impl<T: Item> TeardownTree<T> {
     /// Constructs a new TeardownTree<T>
@@ -95,7 +110,7 @@ impl<T: Item> TeardownTree<T> {
         let height = Self::build(&mut sorted, 0, &mut data);
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
-        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache) }
+        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache), traversal_stack: UnsafeStack::new(capacity) }
     }
 
     fn calc_height(nodes: &Vec<Option<Node<T>>>, idx: usize) -> usize {
@@ -165,7 +180,7 @@ impl<T: Item> TeardownTree<T> {
             DeleteRange::new(self, output).delete_range(drv);
             debug_assert!({
                 let cache: DeleteRangeCache<T> = self.delete_range_cache.take().unwrap();
-                let ok = cache.slots_min.is_empty() && cache.slots_max.is_empty() && cache.delete_subtree_stack.is_empty();
+                let ok = cache.slots_min.is_empty() && cache.slots_max.is_empty() && self.traversal_stack.is_empty();
                 self.delete_range_cache = Some(cache);
                 ok
             });
@@ -347,6 +362,8 @@ pub trait TeardownTreeInternal<T: Item> {
 
     fn drop_items(&mut self);
 
+    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F) where F: FnMut(&mut Self, &mut A, usize);
+
     fn take(&mut self, idx: usize) -> T;
     fn place(&mut self, idx: usize, item: T);
 }
@@ -373,7 +390,7 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
         }
 
         let cache = DeleteRangeCache::new(height);
-        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache) }
+        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache), traversal_stack: UnsafeStack::new(capacity) }
     }
 
 
@@ -489,15 +506,68 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
     }
 
 
+    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F) where F: FnMut(&mut Self, &mut A, usize) {
+        debug_assert!(self.traversal_stack.is_empty());
+
+        if self.is_null(root) {
+            return;
+        }
+
+        let mut next = root;
+
+        loop {
+            next = {
+                f(self, a, next);
+
+                match (self.has_left(next), self.has_right(next)) {
+                    (false, false) => {
+                        if self.traversal_stack.is_empty() {
+                            break;
+                        }
+
+                        self.traversal_stack.pop()
+                    },
+
+                    (true, false)  => {
+                        Self::lefti(next)
+                    },
+
+                    (false, true)  => {
+                        Self::righti(next)
+                    },
+
+                    (true, true)   => {
+                        debug_assert!(self.traversal_stack.size() < self.traversal_stack.capacity());
+
+                        self.traversal_stack.push(Self::righti(next));
+                        Self::lefti(next)
+                    },
+                }
+            };
+        }
+    }
+
+
     fn drop_items(&mut self) {
-        let p = self.data.as_mut_ptr();
-        for i in 0..self.size() {
-            if self.mask[i] {
+        if self.size*2 <= self.data.len() {
+            self.traverse_preorder(0, &mut 0, |this: &mut Self, _, idx| {
                 unsafe {
-                    ptr::drop_in_place(p.offset(i as isize));
+                    let p = this.data.as_mut_ptr();
+                    ptr::drop_in_place(p.offset(idx as isize));
                 }
 
-                self.mask[i] = false;
+                this.mask[idx] = false;
+            })
+        } else {
+            let p = self.data.as_mut_ptr();
+            for i in 0..self.size() {
+                if self.mask[i] {
+                    unsafe {
+                        ptr::drop_in_place(p.offset(i as isize));
+                    }
+
+                    self.mask[i] = false;
+                }
             }
         }
     }
