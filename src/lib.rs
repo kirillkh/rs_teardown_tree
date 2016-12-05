@@ -14,7 +14,6 @@ mod unsafe_stack;
 mod rust_bench;
 
 pub use base::{Item, TeardownTree, TeardownTreeRefill, Node};
-pub use drivers::{DriverFromToRef, DriverFromTo};
 pub use delete_range::TraversalDecision;
 
 

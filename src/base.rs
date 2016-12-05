@@ -304,22 +304,6 @@ impl<T: Item> TeardownTree<T> {
         }
     }
 
-
-//    #[inline]
-//    fn level_from(level: usize) -> usize {
-//        (1 << level) - 1
-//    }
-//
-//    #[inline]
-//    fn level_of(idx: usize) -> usize {
-//        mem::size_of::<usize>()*8 - ((idx+1).leading_zeros() as usize) - 1
-//    }
-//
-//    #[inline]
-//    fn row_start(idx: usize) -> usize {
-//        Self::level_from(Self::level_of(idx))
-//    }
-
     #[inline(always)]
     pub fn size(&self) -> usize {
         self.size
