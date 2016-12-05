@@ -87,7 +87,7 @@ fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to delete {} random elements from TeardownTreeBulk of {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+    println!("average time to delete {} random elements from TeardownTreeBulk, {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
 }
 
 
@@ -106,17 +106,19 @@ fn bench_delete_range_n<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters:
             else { 0 };
         output.truncate(0);
         copy.del_range(0, n+1, &mut output);
+        output = black_box(output);
         output.truncate(0);
         copy.rfill(&tree);
 
         let start = time::SystemTime::now();
         copy.del_range(from, from+rm_items-1, &mut output);
-        black_box(output.len());
+        output = black_box(output);
+        assert!(output.len() == rm_items);
         let elapsed = start.elapsed().unwrap();
         elapsed_nanos += nanos(elapsed);
     }
 
-    println!("average time to delete range of {} elements from {} of {} elements: {}ns", rm_items, M::descr(), n, elapsed_nanos/iters)
+    println!("average time to delete range of {} elements from {}, {} elements: {}ns", rm_items, M::descr(), n, elapsed_nanos/iters)
 }
 
 #[inline(never)]
@@ -136,7 +138,7 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
             let k = rng.gen_range(0, nranges-i);
             let range_idx = pool.swap_remove(k);
             let from = range_idx * rm_items;
-            let to = ::std::cmp::min(from + rm_items, n);
+            let to = ::std::cmp::min(from + rm_items-1, n-1);
             ranges.push((from, to));
         }
 
@@ -158,14 +160,15 @@ fn bench_clone_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, 
             output.truncate(0);
             let (ref from, ref to) = ranges[i];
             copy.del_range(*from, *to, &mut output);
-            black_box(output.len());
+            output = black_box(output);
+            assert!(output.len() == *to  - *from + 1, "from={}, to={}, expected: {}, len: {}", *from, *to, *to  - *from + 1, output.len());
         }
-        debug_assert!(copy.sz() == 0);
+        assert!(copy.sz() == 0);
     }
     let elapsed = start.elapsed().unwrap();
     let avg_nanos = nanos(elapsed) / iters;
     PROFILER.lock().unwrap().stop().unwrap();
-    println!("average time to clone/tear down {} of {} elements in bulks of {} elements: {}ns", M::descr(), n, rm_items, avg_nanos)
+    println!("average time to clone/tear down {}, {} elements in bulks of {} elements: {}ns", M::descr(), n, rm_items, avg_nanos)
 }
 
 
@@ -205,19 +208,6 @@ fn main() {
 //    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
     return;
 
-    imptree_single_elem_range_n(100, 100,       200000);
-    imptree_single_elem_range_n(1000, 100,      150000);
-    imptree_single_elem_range_n(10000, 100,     100000);
-    imptree_single_elem_range_n(100000, 100,     40000);
-    imptree_single_elem_range_n(1000000, 100,     6000);
-
-    btree_single_delete_n(100, 100, 100000);
-    btree_single_delete_n(1000, 100, 30000);
-    btree_single_delete_n(10000, 100, 10000);
-    btree_single_delete_n(100000, 100, 800);
-    btree_single_delete_n(1000000, 100, 300);
-
-
     bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
     bench_clone_teardown_cycle::<TreeBulk>(1000, 100, 300000);
     bench_clone_teardown_cycle::<TreeBulk>(10000, 100, 15000);
@@ -235,6 +225,7 @@ fn main() {
     bench_delete_range_n::<TreeBulk>(100000, 100, 10000);
     bench_delete_range_n::<TreeBulk>(1000000, 100, 1000);
     bench_delete_range_n::<TreeBulk>(1000000, 1000, 1000);
+
 
     bench_clone_teardown_cycle::<BTreeSet<usize>>(100, 100, 50000);
     bench_clone_teardown_cycle::<BTreeSet<usize>>(1000, 100, 15000);
@@ -272,20 +263,25 @@ fn main() {
     bench_delete_range_n::<TeardownTreeSingle>(100000, 100, 5000);
     bench_delete_range_n::<TeardownTreeSingle>(1000000, 100, 300);
 
-    imptree_single_elem_range_n(100, 100, 100000);
-    imptree_single_elem_range_n(1000, 100, 30000);
-    imptree_single_elem_range_n(10000, 100, 10000);
-    imptree_single_elem_range_n(100000, 100, 800);
+
+    imptree_single_elem_range_n(100, 100,    200000);
+    imptree_single_elem_range_n(1000, 100,   150000);
+    imptree_single_elem_range_n(10000, 100,  100000);
+    imptree_single_elem_range_n(100000, 100,  40000);
+    imptree_single_elem_range_n(1000000, 100,  6000);
 
     btree_single_delete_n(100, 100, 100000);
     btree_single_delete_n(1000, 100, 30000);
     btree_single_delete_n(10000, 100, 10000);
     btree_single_delete_n(100000, 100, 800);
+    btree_single_delete_n(1000000, 100, 300);
+
+
 }
 
 
 
-//---- TeardownTree and impls ----------------------------------------------------------------------
+//---- unifying interfaces used in above benchmarks and its impls for 1) TeardownTree delete_range, 2) TeardownTree delete(), BTreeSet
 
 trait TeardownTreeMaster: Sized {
     type Cpy: TeardownTreeCopy<Master=Self>;
@@ -305,6 +301,7 @@ trait TeardownTreeCopy {
 }
 
 
+/// for benchmarking TeardownTree delete_range()
 #[derive(Clone, Debug)]
 struct TeardownTreeBulk(TeardownTree<usize>);
 
@@ -324,7 +321,7 @@ impl TeardownTreeMaster for TeardownTreeBulk {
     }
 
     fn descr() -> String {
-        "TeardownTreeBulk".to_string()
+        "TeardownTree using delete_range()".to_string()
     }
 }
 
@@ -346,6 +343,7 @@ impl TeardownTreeCopy for TeardownTreeBulk {
 
 
 
+/// for benchmarking TeardownTree delete()
 #[derive(Clone, Debug)]
 struct TeardownTreeSingle(TeardownTree<usize>);
 
@@ -365,7 +363,7 @@ impl TeardownTreeMaster for TeardownTreeSingle {
     }
 
     fn descr() -> String {
-        "TeardownTreeSingle".to_string()
+        "TeardownTree using delete()".to_string()
     }
 }
 
@@ -391,6 +389,7 @@ impl TeardownTreeCopy for TeardownTreeSingle {
 
 
 
+/// for benchmarking BTreeSet remove()
 impl TeardownTreeMaster for BTreeSet<usize> {
     type Cpy = BTreeSetCopy;
 
@@ -413,7 +412,7 @@ impl TeardownTreeMaster for BTreeSet<usize> {
     }
 
     fn descr() -> String {
-        "BTreeSet".to_string()
+        "BTreeSet using remove()".to_string()
     }
 }
 
@@ -433,7 +432,7 @@ impl TeardownTreeCopy for BTreeSetCopy {
     }
 
     fn rfill(&mut self, master: &Self::Master) {
-        debug_assert!(self.set.is_empty(), "size={}", self.set.len());
+        assert!(self.set.is_empty(), "size={}", self.set.len());
         self.set = master.clone();
     }
 

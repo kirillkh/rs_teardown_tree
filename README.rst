@@ -25,7 +25,7 @@ Details
 
 The tree is implicit -- meaning that nodes do not store explicit pointers to their children. This is similar to how
 binary heaps work: all nodes in the tree reside in an array, the root always at index 0, and given a node with index i,
-its left/right children are found at indices ``2*i`` and ``2*i+1``. Thus no dynamic memory allocation or deallocation is
+its left/right children are found at indices ``2*i+1`` and ``2*i+2``. Thus no dynamic memory allocation or deallocation is
 done. This makes it possible to implement a fast **clone** operation: instead of traversing the tree, allocating and
 copying each node individually, we are able to allocate the whole array in a single call and efficiently copy the entire
 content.
@@ -46,7 +46,7 @@ As a library
 | Add to your Cargo.toml:
 |
 |     ``[dependencies]``
-|     ``teardown_tree = "0.4.2"``
+|     ``teardown_tree = "0.4.5"``
 
 
 

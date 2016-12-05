@@ -1,8 +1,5 @@
 use base::{TeardownTree, TeardownTreeInternal, Item, Node};
 use slot_stack::SlotStack;
-use unsafe_stack::UnsafeStack;
-
-use std::mem;
 
 pub trait TraversalDriver<T: Item> {
     #[inline(always)]
@@ -71,20 +68,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     #[inline(always)]
-    fn node_mut<'b>(&mut self, idx: usize) -> &'b mut Node<T> {
-        unsafe {
-            mem::transmute(self.tree.node_mut(idx))
-        }
-    }
-
-    #[inline(always)]
     fn item(&mut self, idx: usize) -> &T {
         &self.node(idx).item
-    }
-
-    #[inline(always)]
-    fn item_mut(&mut self, idx: usize) -> &mut T {
-        &mut self.node_mut(idx).item
     }
 
     #[inline(always)]
@@ -181,9 +166,14 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     fn consume_subtree(&mut self, root: usize) {
         debug_assert!(self.tree.traversal_stack.is_empty());
 
-        self.tree.traverse_preorder(root, self.output, |this, output, idx| {
-            let item = this.take(idx);
-            output.push(item);
+        self.tree.traverse_preorder(root, self.output, |tree, output, idx| {
+            unsafe {
+                let len = output.len();
+                debug_assert!(len < output.capacity());
+                let p = output.as_mut_ptr().offset(len as isize);
+                output.set_len(len + 1);
+                tree.move_to(idx, p)
+            }
         });
     }
 
