@@ -200,6 +200,17 @@ fn main() {
 //    bench_clone_teardown_cycle::<TreeBulk>(1000000, 1000, 300);
 //    bench_clone_teardown_cycle::<BTreeSet<usize>>(1000000, 1000, 300);
 
+    imptree_single_elem_range_n(100, 100,       200000);
+    imptree_single_elem_range_n(1000, 100,      150000);
+    imptree_single_elem_range_n(10000, 100,     100000);
+    imptree_single_elem_range_n(100000, 100,     40000);
+    imptree_single_elem_range_n(1000000, 100,     6000);
+
+    btree_single_delete_n(100, 100, 100000);
+    btree_single_delete_n(1000, 100, 30000);
+    btree_single_delete_n(10000, 100, 10000);
+    btree_single_delete_n(100000, 100, 800);
+    btree_single_delete_n(1000000, 100, 300);
 
 
     bench_clone_teardown_cycle::<TreeBulk>(100, 100, 3000000);
