@@ -9,6 +9,7 @@ mod base;
 mod slot_stack;
 mod delete_range;
 mod drivers;
+mod unsafe_stack;
 
 mod rust_bench;
 
@@ -66,7 +67,7 @@ mod tests {
     fn test_prebuilt(items: &[usize], from_to: (usize, usize),
                      expect_tree: &[usize], expect_out: &[usize]) {
 
-        let nodes: Vec<Node<usize>> = mk_prebuilt(items);
+        let nodes: Vec<Option<Node<usize>>> = mk_prebuilt(items);
         let mut tree = Tree::with_nodes(nodes);
         let (from, to) = from_to;
 
@@ -137,11 +138,11 @@ mod tests {
     }
 
 
-    fn mk_prebuilt(items: &[usize]) -> Vec<Node<usize>> {
+    fn mk_prebuilt(items: &[usize]) -> Vec<Option<Node<usize>>> {
         let nodes: Vec<_> = items.iter().map(|&x| if x==0 {
-            Node { item:None }
+            None
         } else {
-            Node { item: Some(x) }
+            Some(Node { item: x })
         }).collect();
 
         nodes
@@ -194,7 +195,7 @@ mod tests {
     fn test_exhaustive_rec<F>(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>, check: &F)
                                                             where F: Fn(Tree) -> () {
         if stack.is_empty() {
-            let nodes: Vec<Node<usize>> = mk_prebuilt(items);
+            let nodes: Vec<Option<Node<usize>>> = mk_prebuilt(items);
             let tree = Tree::with_nodes(nodes);
             check(tree);
         } else {
@@ -271,11 +272,11 @@ mod tests {
             return None;
         }
 
-        let node = tree.node(idx);
-        if node.item.is_none() {
+        let node = tree.node_opt(idx);
+        if node.is_none() {
             return None;
         } else {
-            let item = node.item.unwrap();
+            let item = node.unwrap().item;
             let left = check_bst(tree, output, tree_orig, Tree::lefti(idx));
             let right = check_bst(tree, output, tree_orig, Tree::righti(idx));
 

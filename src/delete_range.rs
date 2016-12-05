@@ -1,5 +1,6 @@
 use base::{TeardownTree, TeardownTreeInternal, Item, Node};
 use slot_stack::SlotStack;
+use unsafe_stack::UnsafeStack;
 
 use std::mem;
 
@@ -22,13 +23,12 @@ impl TraversalDecision {
 }
 
 pub struct DeleteRangeCache<T: Item> {
-    pub slots_min: SlotStack<T>, pub slots_max: SlotStack<T>,
-    pub delete_subtree_stack: Vec<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
+    pub slots_min: SlotStack<T>, pub slots_max: SlotStack<T>,   // TODO: we no longer need both stacks, one is enough... but removing one causes 3% performance regression
 }
 
 impl<T: Item> Clone for DeleteRangeCache<T> {
     fn clone(&self) -> Self {
-        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty());
+        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty());
         let capacity = self.slots_max.capacity;
         DeleteRangeCache::new(capacity)
     }
@@ -38,8 +38,7 @@ impl<T: Item> DeleteRangeCache<T> {
     pub fn new(height: usize) -> DeleteRangeCache<T> {
         let slots_min = SlotStack::new(height);
         let slots_max = SlotStack::new(height);
-        let delete_subtree_stack = Vec::with_capacity(height);
-        DeleteRangeCache { slots_min: slots_min, slots_max: slots_max, delete_subtree_stack: delete_subtree_stack }
+        DeleteRangeCache { slots_min: slots_min, slots_max: slots_max }
     }
 }
 
@@ -47,22 +46,21 @@ impl<T: Item> DeleteRangeCache<T> {
 pub struct DeleteRange<'a, T: 'a+Item> {
     tree: &'a mut TeardownTree<T>,
     slots_min: SlotStack<T>, slots_max: SlotStack<T>,
-    delete_subtree_stack: Vec<usize>, // TODO: this can be made a little faster by avoiding bounds checking (cf. SlotStack)
     pub output: &'a mut Vec<T>
 }
 
 impl<'a, T: Item> DeleteRange<'a, T> {
     pub fn new(tree: &'a mut TeardownTree<T>, output: &'a mut Vec<T>) -> DeleteRange<'a, T> {
         let cache = tree.delete_range_cache.take().unwrap();
-        DeleteRange { tree: tree, slots_min: cache.slots_min, slots_max: cache.slots_max, output: output, delete_subtree_stack: cache.delete_subtree_stack }
+        DeleteRange { tree: tree, slots_min: cache.slots_min, slots_max: cache.slots_max, output: output }
     }
 
     /// The items are not guaranteed to be returned in any particular order.
     pub fn delete_range<D: TraversalDriver<T>>(mut self, drv: &mut D) {
         self.delete_range_loop(drv, 0);
-        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.delete_subtree_stack.is_empty());
+        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.tree.traversal_stack.is_empty());
 
-        self.tree.delete_range_cache = Some(DeleteRangeCache { slots_min: self.slots_min, slots_max: self.slots_max, delete_subtree_stack: self.delete_subtree_stack });
+        self.tree.delete_range_cache = Some(DeleteRangeCache { slots_min: self.slots_min, slots_max: self.slots_max });
     }
 
 
@@ -80,12 +78,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     #[inline(always)]
-    fn item(&mut self, idx: usize) -> &Option<T> {
+    fn item(&mut self, idx: usize) -> &T {
         &self.node(idx).item
     }
 
     #[inline(always)]
-    fn item_mut(&mut self, idx: usize) -> &mut Option<T> {
+    fn item_mut(&mut self, idx: usize) -> &mut T {
         &mut self.node_mut(idx).item
     }
 
@@ -100,8 +98,8 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     #[inline(always)]
-    fn consume(&mut self, node: &mut Node<T>) {
-        let item = node.item.take().unwrap();
+    fn consume(&mut self, idx: usize) {
+        let item = self.tree.take(idx);
         self.output.push(item);
     }
 }
@@ -116,11 +114,10 @@ impl<'a, T: Item> DeleteRange<'a, T> {
                 return;
             }
 
-            let node = self.node_mut(idx);
-            let decision = drv.decide(node.item.as_ref().unwrap().key());
+            let decision = drv.decide(&self.item(idx).key());
 
             if decision.left && decision.right {
-                self.consume(node);
+                self.consume(idx);
                 let removed = self.descend_delete_left(drv, idx, true);
                 self.descend_delete_right(drv, idx, removed);
             } else if decision.left {
@@ -134,13 +131,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
     #[inline(never)]
     fn delete_range_min<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize) {
-        let node = self.node_mut(idx);
-        let decision = drv.decide(node.item.as_ref().unwrap().key());
+        let decision = drv.decide(&self.item(idx).key());
         debug_assert!(decision.left);
 
         if decision.right {
             // the root and the whole left subtree are inside the range
-            self.consume(node);
+            self.consume(idx);
             self.consume_subtree(Self::lefti(idx));
             self.descend_delete_right(drv, idx, true);
         } else {
@@ -150,7 +146,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             );
 
             if self.slots_min.has_open() {
-                self.slots_min.fill(node.item.take().unwrap());
+                self.slots_min.fill(self.tree.take(idx));
                 self.descend_fill_right(idx);
             }
         }
@@ -158,13 +154,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
     #[inline(never)]
     fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize) {
-        let node = self.node_mut(idx);
-        let decision = drv.decide(node.item.as_ref().unwrap().key());
+        let decision = drv.decide(&self.item(idx).key());
         debug_assert!(decision.right);
 
         if decision.left {
             // the root and the whole right subtree are inside the range
-            self.consume(node);
+            self.consume(idx);
             self.consume_subtree(Self::righti(idx));
             self.descend_delete_left(drv, idx, true);
         } else {
@@ -174,7 +169,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
             );
 
             if self.slots_max.has_open() {
-                self.slots_max.fill(node.item.take().unwrap());
+                self.slots_max.fill(self.tree.take(idx));
                 self.descend_fill_left(idx);
             }
         }
@@ -184,47 +179,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     //---- delete_subtree_* ---------------------------------------------------------------
     #[inline(never)]
     fn consume_subtree(&mut self, root: usize) {
-        debug_assert!(self.delete_subtree_stack.is_empty());
+        debug_assert!(self.tree.traversal_stack.is_empty());
 
-        if self.tree.is_null(root) {
-            return;
-        }
-
-        let mut next = root;
-
-        loop {
-            next = {
-                let node = &mut self.node_mut(next);
-                let item: &mut Option<T> = &mut node.item;
-                let item = item.take().unwrap();
-                self.output.push(item);
-
-                match (self.tree.has_left(next), self.tree.has_right(next)) {
-                    (false, false) => {
-                        if let Some(n) = self.delete_subtree_stack.pop() {
-                            n
-                        } else {
-                            break;
-                        }
-                    },
-
-                    (true, false)  => {
-                        Self::lefti(next)
-                    },
-
-                    (false, true)  => {
-                        Self::righti(next)
-                    },
-
-                    (true, true)   => {
-                        debug_assert!(self.delete_subtree_stack.len() < self.delete_subtree_stack.capacity());
-
-                        self.delete_subtree_stack.push(Self::righti(next));
-                        Self::lefti(next)
-                    },
-                }
-            };
-        }
+        self.tree.traverse_preorder(root, self.output, |this, output, idx| {
+            let item = this.take(idx);
+            output.push(item);
+        });
     }
 
 
@@ -242,13 +202,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         } else {
             debug_assert!(self.slots_min.has_open());
 
-            let node = self.node_mut(idx);
-            let item = node.item.take().unwrap();
+            let item = self.tree.take(idx);
             self.slots_min.fill(item);
 
             self.descend_fill_right(idx);
 
-            let done = node.item.is_some();
+            let done = !self.tree.is_null(idx);
             if done {
                 true
             } else {
@@ -271,13 +230,12 @@ impl<'a, T: Item> DeleteRange<'a, T> {
         } else {
             debug_assert!(self.slots_max.has_open());
 
-            let node = self.node_mut(idx);
-            let item = node.item.take().unwrap();
+            let item = self.tree.take(idx);
             self.slots_max.fill(item);
 
             self.descend_fill_left(idx);
 
-            let done = node.item.is_some();
+            let done = !self.tree.is_null(idx);
             if done {
                 true
             } else {
@@ -313,7 +271,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline(always)]
     fn descend_left_with_slot<F>(&mut self, idx: usize, f: F) -> bool
                                                         where F: Fn(&mut Self, usize) {
-        debug_assert!(self.node(idx).item.is_none());
+        debug_assert!(self.tree.is_null(idx));
 
         let child_idx = Self::lefti(idx);
         if self.tree.is_null(child_idx) {
@@ -326,9 +284,9 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         let slot = self.slots_max.pop();
 
-        if slot.is_some() {
-            debug_assert!(self.node(idx).item.is_none());
-            self.node_mut(idx).item = slot;
+        if let Some(item) = slot {
+            debug_assert!(self.tree.is_null(idx));
+            self.tree.place(idx, item);
             false
         } else {
             true
@@ -339,7 +297,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline(always)]
     fn descend_right_with_slot<F>(&mut self, idx: usize, f: F) -> bool
                                                         where F: Fn(&mut Self, usize) {
-        debug_assert!(self.node(idx).item.is_none());
+        debug_assert!(self.tree.is_null(idx));
 
         let child_idx = Self::righti(idx);
         if self.tree.is_null(child_idx) {
@@ -352,9 +310,9 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
         let slot = self.slots_min.pop();
 
-        if slot.is_some() {
-            debug_assert!(self.node(idx).item.is_none());
-            self.node_mut(idx).item = slot;
+        if let Some(item) = slot {
+            debug_assert!(self.tree.is_null(idx));
+            self.tree.place(idx, item);
             false
         } else {
             true
