@@ -173,7 +173,7 @@ impl<T: Item> TeardownTree<T> {
 
 
     /// Delete based on driver decisions.
-    pub fn delete_with_driver<'a, D: TraversalDriver<T>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
+    fn delete_with_driver<'a, D: TraversalDriver<T>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
         {
