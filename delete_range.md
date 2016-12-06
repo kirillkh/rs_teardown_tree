@@ -35,8 +35,8 @@ In order to achieve this, we maintain two stacks: `slots_min` and `slots_max`.
 A `slot` is a memory cell which admits two possible values: `Filled(item)`
 or `Empty`. The stacks support the following operations:
 
-1. `push(slot)`
-2. `pop() -> slot`
+1. `push()` - pushes an `Empty` slot on top of the stack
+2. `pop() -> slot` - deletes and returns the topmost slot from the stack
 3. `fill(item)` - replaces the **deepest** `Empty` slot with `Filled(item)`.
 
 Both stacks are initially empty. For node `X` above, we would
