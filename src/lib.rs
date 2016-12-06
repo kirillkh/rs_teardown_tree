@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn delete_range_exhaustive() {
-        for i in 1..8 {
+        for i in 1..9 {
             delete_range_exhaustive_n(i);
         }
     }

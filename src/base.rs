@@ -77,7 +77,7 @@ pub struct TeardownTree<T: Item> {
     size: usize,
 
     pub traversal_stack: UnsafeStack<usize>,
-    pub delete_range_cache: Option<DeleteRangeCache<T>>,
+    pub delete_range_cache: Option<DeleteRangeCache>,
 }
 
 impl<T: Item> Clone for TeardownTree<T> {
@@ -179,7 +179,7 @@ impl<T: Item> TeardownTree<T> {
         {
             DeleteRange::new(self, output).delete_range(drv);
             debug_assert!({
-                let cache: DeleteRangeCache<T> = self.delete_range_cache.take().unwrap();
+                let cache: DeleteRangeCache = self.delete_range_cache.take().unwrap();
                 let ok = cache.slots_min.is_empty() && cache.slots_max.is_empty() && self.traversal_stack.is_empty();
                 self.delete_range_cache = Some(cache);
                 ok
@@ -346,11 +346,17 @@ pub trait TeardownTreeInternal<T: Item> {
 
     fn drop_items(&mut self);
 
-    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, f: F) where F: FnMut(&mut Self, &mut A, usize);
+    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
+                                    where F: FnMut(&mut Self, &mut A, usize);
+    fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
+                                    where F: FnMut(&mut Self, &mut A, usize) -> bool;
+    fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, f: F)
+                                    where F: FnMut(&mut Self, &mut A, usize) -> bool;
 
     fn take(&mut self, idx: usize) -> T;
     fn place(&mut self, idx: usize, item: T);
     unsafe fn move_to(&mut self, idx: usize, dst: *mut T);
+    unsafe fn move_from_to(&mut self, src: usize, dst: usize);
 }
 
 impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
@@ -533,6 +539,80 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
     }
 
 
+    #[inline]
+    fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
+                                    where F: FnMut(&mut Self, &mut A, usize) -> bool {
+        debug_assert!(self.traversal_stack.is_empty());
+
+        if self.is_null(root) {
+            return;
+        }
+
+        let mut next = root;
+
+        'outer: loop {
+            if self.has_left(next) {
+                self.traversal_stack.push(next);
+                next = Self::lefti(next);
+            } else {
+                'inner: loop {
+                    let stop = f(self, a, next);
+                    if stop {
+                        self.traversal_stack.size = 0;
+                        break 'outer;
+                    }
+
+                    if self.has_right(next) {
+                        next = Self::righti(next);
+                        break 'inner;
+                    } else if !self.traversal_stack.is_empty() {
+                        next = self.traversal_stack.pop()
+                    } else {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+    }
+
+
+    #[inline]
+    fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
+                                            where F: FnMut(&mut Self, &mut A, usize) -> bool {
+        debug_assert!(self.traversal_stack.is_empty());
+
+        if self.is_null(root) {
+            return;
+        }
+
+        let mut next = root;
+
+        'outer: loop {
+            if self.has_right(next) {
+                self.traversal_stack.push(next);
+                next = Self::righti(next);
+            } else {
+                'inner: loop {
+                    let stop = f(self, a, next);
+                    if stop {
+                        self.traversal_stack.size = 0;
+                        break 'outer;
+                    }
+
+                    if self.has_left(next) {
+                        next = Self::lefti(next);
+                        break 'inner;
+                    } else if !self.traversal_stack.is_empty() {
+                        next = self.traversal_stack.pop()
+                    } else {
+                        break 'outer;
+                    }
+                }
+            }
+        }
+    }
+
+
     fn drop_items(&mut self) {
         if self.size*2 <= self.data.len() {
             self.traverse_preorder(0, &mut 0, |this: &mut Self, _, idx| {
@@ -574,6 +654,18 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
         let p: *mut Node<T> = self.data.as_mut_ptr().offset(idx as isize);
         let x = ptr::read(&(*p).item);
         ptr::write(dst, x);
+    }
+
+    #[inline(always)]
+    unsafe fn move_from_to(&mut self, src: usize, dst: usize) {
+        debug_assert!(!self.is_null(src) && self.is_null(dst));
+        self.mask[src] = false;
+        self.mask[dst] = true;
+        let pdata = self.data.as_mut_ptr();
+        let psrc: *mut Node<T> = pdata.offset(src as isize);
+        let pdst: *mut Node<T> = pdata.offset(dst as isize);
+        let x = ptr::read(psrc);
+        ptr::write(pdst, x);
     }
 
     #[inline(always)]
