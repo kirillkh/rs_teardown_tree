@@ -175,55 +175,41 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     //---- fill_slots_* -------------------------------------------------------------------
     #[inline(never)]
     fn fill_slots_min(&mut self, idx: usize) -> bool {
-        if self.tree.is_null(idx) {
-            return false;
-        }
+        debug_assert!(!self.tree.is_null(idx));
 
-        let done = self.fill_slots_min(Self::lefti(idx));
-
-        if done {
-            true
-        } else {
-            debug_assert!(self.slots_min.has_open());
-
-            self.slots_min.fill(self.tree, idx);
-
-            self.descend_fill_right(idx);
-
-            let done = !self.tree.is_null(idx);
+        if self.tree.has_left(idx) {
+            let done = self.fill_slots_min(Self::lefti(idx));
             if done {
-                true
-            } else {
-                !self.slots_min.has_open()
+                return true;
             }
         }
+
+        debug_assert!(self.slots_min.has_open());
+
+        self.slots_min.fill(self.tree, idx);
+
+        let done = !self.descend_fill_right(idx);
+        done || !self.slots_min.has_open()
     }
 
 
     #[inline(never)]
     fn fill_slots_max(&mut self, idx: usize) -> bool {
-        if self.tree.is_null(idx) {
-            return false;
-        }
+        debug_assert!(!self.tree.is_null(idx));
 
-        let done = self.fill_slots_max(Self::righti(idx));
-
-        if done {
-            true
-        } else {
-            debug_assert!(self.slots_max.has_open());
-
-            self.slots_max.fill(self.tree, idx);
-
-            self.descend_fill_left(idx);
-
-            let done = !self.tree.is_null(idx);
+        if self.tree.has_right(idx) {
+            let done = self.fill_slots_max(Self::righti(idx));
             if done {
-                true
-            } else {
-                !self.slots_max.has_open()
+                return true;
             }
         }
+
+        debug_assert!(self.slots_max.has_open());
+
+        self.slots_max.fill(self.tree, idx);
+
+        let done = !self.descend_fill_left(idx);
+        done || !self.slots_max.has_open()
     }
 
 
@@ -289,17 +275,17 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
 
     #[inline(always)]
-    fn descend_fill_left(&mut self, idx: usize) {
+    fn descend_fill_left(&mut self, idx: usize) -> bool {
         self.descend_left_with_slot(idx, |this: &mut Self, child_idx| {
             this.fill_slots_max(child_idx);
-        });
+        })
     }
 
     #[inline(always)]
-    fn descend_fill_right(&mut self, idx: usize) {
+    fn descend_fill_right(&mut self, idx: usize) -> bool {
         self.descend_right_with_slot(idx, |this: &mut Self, child_idx| {
             this.fill_slots_min(child_idx);
-        });
+        })
     }
 
 
