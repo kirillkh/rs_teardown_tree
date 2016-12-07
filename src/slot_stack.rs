@@ -1,68 +1,77 @@
-use base::Item;
+use base::{Item, TeardownTree, TeardownTreeInternal};
 //use std::ptr::Unique;
-use std::{mem, ptr};
+use std::mem;
 use std::fmt::{Debug, Formatter};
 
 
-type Slot<T> = Option<T>;
+#[derive(Clone, Copy)]
+pub struct Slot {
+    pub idx: usize,
+}
 
-pub struct SlotStack<T: Item> {
+impl Debug for Slot {
+    fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
+        write!(fmt, "{}", self.idx)
+    }
+}
+
+
+pub struct SlotStack {
     pub nslots: usize,
     pub nfilled: usize,
 //    pub slots: Unique<T>, // uncomment when Unique is stabilized
-    pub slots: *mut T,
+    pub slots: *mut Slot,
     pub capacity: usize
 }
 
-impl<T: Item> SlotStack<T> {
-    pub fn new(capacity: usize) -> SlotStack<T> {
+impl SlotStack {
+    pub fn new(capacity: usize) -> SlotStack {
         unsafe {
             let mut slots = vec![mem::uninitialized(); capacity];
-            let ptr: *mut T = slots.as_mut_ptr();
+            let ptr: *mut Slot = slots.as_mut_ptr();
             mem::forget(slots);
             SlotStack { nslots: 0, nfilled: 0, slots: ptr, capacity: capacity }
         }
     }
 
     #[inline(always)]
-    pub fn push(&mut self) {
+    pub fn push(&mut self, idx: usize) {
         debug_assert!(self.nslots < self.capacity);
+        self.slot_at(self.nslots).idx = idx;
         self.nslots += 1;
     }
 
     #[inline(always)]
-    pub fn pop(&mut self) -> Slot<T> {
+    pub fn pop(&mut self) -> Slot {
         debug_assert!(self.nslots > 0);
         if self.nfilled == self.nslots {
             self.nfilled -= 1;
-            self.nslots -= 1;
-            unsafe {
-                Some(ptr::read(self.slot_at(self.nslots) as *const T))
-            }
-        } else {
-            self.nslots -= 1;
-            None
+        }
+        self.nslots -= 1;
+
+        *self.slot_at(self.nslots)
+    }
+
+    #[inline(always)]
+    pub fn peek(&mut self) -> Slot {
+        debug_assert!(self.nslots > 0);
+        *self.slot_at(self.nslots - 1)
+    }
+
+
+    #[inline(always)]
+    pub fn fill<T: Item>(&mut self, tree: &mut TeardownTree<T>, src_idx: usize) {
+        debug_assert!(self.nfilled < self.nslots);
+        let dst_idx = self.slot_at(self.nfilled).idx;
+        self.nfilled += 1;
+        unsafe {
+            tree.move_from_to(src_idx, dst_idx);
         }
     }
 
-    #[inline(always)]
-    pub fn fill(&mut self, item: T) {
-        debug_assert!(self.nfilled < self.nslots);
-        *self.slot_at(self.nfilled) = item;
-        self.nfilled += 1;
-    }
 
     #[inline(always)]
-    pub fn fill_opt(&mut self, item: Option<T>) {
-        debug_assert!(item.is_some());
-        debug_assert!(self.nfilled < self.nslots);
-        *self.slot_at(self.nfilled) = item.unwrap();
-        self.nfilled += 1;
-    }
-
-
-    #[inline(always)]
-    fn slot_at(&self, idx: usize) -> &mut T {
+    fn slot_at(&self, idx: usize) -> &mut Slot {
         unsafe {
             mem::transmute(self.slots.offset(idx as isize))
         }
@@ -89,9 +98,11 @@ impl<T: Item> SlotStack<T> {
     }
 }
 
-impl <T: Item> Debug for SlotStack<T> {
+impl Debug for SlotStack {
     fn fmt(&self, fmt: &mut Formatter) -> ::std::fmt::Result {
-        let result = write!(fmt, "SlotStack: {{nslots={}, nfilled={}}}", self.nslots, self.nfilled);
+        let slots = unsafe { Vec::from_raw_parts(self.slots, self.nslots, self.capacity) };
+        let result = write!(fmt, "SlotStack: {{nslots={}, nfilled={}, slots={:?}}}", self.nslots, self.nfilled, &slots);
+        mem::forget(slots);
         result
     }
 }
@@ -109,7 +120,7 @@ impl <T: Item> Debug for SlotStack<T> {
 //    }
 //}
 
-impl <T: Item> Drop for SlotStack<T> {
+impl Drop for SlotStack {
     fn drop(&mut self) {
         unsafe {
             Vec::from_raw_parts(self.slots, self.nfilled, self.capacity);

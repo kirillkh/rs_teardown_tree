@@ -14,8 +14,6 @@ mod unsafe_stack;
 mod rust_bench;
 
 pub use base::{Item, TeardownTree, TeardownTreeRefill, Node};
-pub use delete_range::TraversalDecision;
-
 
 
 
@@ -161,7 +159,7 @@ mod tests {
 
     #[test]
     fn delete_range_exhaustive() {
-        for i in 1..8 {
+        for i in 1..9 {
             delete_range_exhaustive_n(i);
         }
     }
