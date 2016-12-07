@@ -4,10 +4,13 @@ teardown_tree
 
 `API docs <https://docs.rs/teardown_tree/>`_
 
-|crates|_
+|crates|_ |travis|_
 
-.. |crates| image:: http://meritbadge.herokuapp.com/teardown_tree 
+.. |crates| image:: http://meritbadge.herokuapp.com/teardown_tree
 .. _crates: https://crates.io/crates/teardown_tree
+
+.. |travis| image:: https://travis-ci.org/kirillkh/rs_teardown_tree.svg?branch=master
+.. _travis: https://travis-ci.org/kirillkh/rs_teardown_tree
 
 A BST (binary search tree) written in Rust that supports efficient **teardown** scenarios, i.e. the typical usage
 pattern is to build a master copy of the tree, then
