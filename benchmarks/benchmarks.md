@@ -10,4 +10,4 @@
 
 To benchmark on your machine: ``cargo run --release --bin benchmarks``.
 
-[1]: https://github.com/kirillkh/rs_teardown_tree/blob/master/delete_range.md]
+[1]: benchmarks.ods
