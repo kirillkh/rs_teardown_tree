@@ -1,10 +1,10 @@
 extern crate rand;
-extern crate treap;
+extern crate teardown_tree___treap;
 extern crate teardown_tree;
 //extern crate wio;
 use std::time;
 
-use treap::TreapMap;
+use teardown_tree___treap::TreapMap;
 
 use std::collections::BTreeSet;
 use std::time::Duration;

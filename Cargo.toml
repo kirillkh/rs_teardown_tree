@@ -20,7 +20,7 @@ path = "src/bin/benchmarks.rs"
 [dependencies]
 rand = "0.3.14"
 #wio = "0.1.2"
-treap = { git = "https://github.com/kirillkh/treap-rs.git" }
+teardown_tree___treap = "0.0.1"
 
 
 [profile.release]
