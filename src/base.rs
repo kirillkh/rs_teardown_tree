@@ -308,6 +308,11 @@ impl<T: Item> TeardownTree<T> {
     pub fn size(&self) -> usize {
         self.size
     }
+
+
+    pub fn clear(&mut self) {
+        self.drop_items();
+    }
 }
 
 impl<T: Item> Drop for TeardownTree<T> {
@@ -635,6 +640,8 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
                 }
             }
         }
+
+        self.size = 0;
     }
 
     #[inline(always)]
