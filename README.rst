@@ -49,7 +49,7 @@ As a library
 | Add to your Cargo.toml:
 |
 |     ``[dependencies]``
-|     ``teardown_tree = "0.4.7"``
+|     ``teardown_tree = "0.4.6"``
 
 
 
