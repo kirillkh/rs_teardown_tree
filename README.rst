@@ -81,4 +81,4 @@ That said, on my machine the whole clone/teardown sequence on a tree of 1,000,00
 1000 items at a time until the tree is empty), is ~14 times faster with ``delete_range`` implementation than with BTreeSet.
 It also uses 45% less memory (u64 items).
 
-`More benchmarks <delete_range.md>`_.
+`More benchmarks <benchmarks/benchmarks.md>`_.
