@@ -115,8 +115,8 @@ impl<T: Item> TeardownTree<T> {
 
     fn calc_height(nodes: &Vec<Option<Node<T>>>, idx: usize) -> usize {
         if idx < nodes.len() && nodes[idx].is_some() {
-            1 + max(Self::calc_height(nodes, Self::lefti(idx)),
-                    Self::calc_height(nodes, Self::righti(idx)))
+            1 + max(Self::calc_height(nodes, lefti(idx)),
+                    Self::calc_height(nodes, righti(idx)))
         } else {
             0
         }
@@ -143,7 +143,7 @@ impl<T: Item> TeardownTree<T> {
             0 => 0,
             n => {
                 let mid = Self::build_select_root(n);
-                let (lefti, righti) = (Self::lefti(idx), Self::righti(idx));
+                let (lefti, righti) = (lefti(idx), righti(idx));
                 let lh = Self::build(&mut sorted[..mid], lefti, data);
                 let rh = Self::build(&mut sorted[mid+1..], righti, data);
 
@@ -161,7 +161,8 @@ impl<T: Item> TeardownTree<T> {
         }
     }
 
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
+    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
+    /// Vec. The items are returned in order.
     pub fn delete_range(&mut self, from: T::Key, to: T::Key, output: &mut Vec<T>) {
         self.delete_with_driver(&mut DriverFromTo::new(from, to), output)
     }
@@ -232,8 +233,8 @@ impl<T: Item> TeardownTree<T> {
 
             idx = match ordering {
                 Ordering::Equal   => return Some(idx),
-                Ordering::Less    => Self::lefti(idx),
-                Ordering::Greater => Self::righti(idx),
+                Ordering::Less    => lefti(idx),
+                Ordering::Greater => righti(idx),
             };
 
             if idx >= self.data.len() {
@@ -260,30 +261,45 @@ impl<T: Item> TeardownTree<T> {
             },
 
             (true, false)  => {
-                let left_max = self.delete_max(Self::lefti(idx));
+                let left_max = self.delete_max(lefti(idx));
                 mem::replace(self.item_mut(idx), left_max)
             },
 
             (false, true)  => {
-                let right_min = self.delete_min(Self::righti(idx));
+                let right_min = self.delete_min(righti(idx));
                 mem::replace(self.item_mut(idx), right_min)
             },
 
             (true, true)   => {
-                let left_max = self.delete_max(Self::lefti(idx));
+                let left_max = self.delete_max(lefti(idx));
                 mem::replace(self.item_mut(idx), left_max)
             },
         }
     }
 
+
+    #[inline]
+    fn find_max(&mut self, mut idx: usize) -> usize {
+        while self.has_right(idx) {
+            idx = righti(idx);
+        }
+        idx
+    }
+
+    #[inline]
+    fn find_min(&mut self, mut idx: usize) -> usize {
+        while self.has_left(idx) {
+            idx = lefti(idx);
+        }
+        idx
+    }
+
     #[inline]
     fn delete_max(&mut self, mut idx: usize) -> T {
-        while self.has_right(idx) {
-            idx = Self::righti(idx);
-        }
+        idx = self.find_max(idx);
 
         if self.has_left(idx) {
-            let left_max = self.delete_max(Self::lefti(idx));
+            let left_max = self.delete_max(lefti(idx));
             mem::replace(self.item_mut(idx), left_max)
         } else {
             self.take(idx)
@@ -292,12 +308,10 @@ impl<T: Item> TeardownTree<T> {
 
     #[inline]
     fn delete_min(&mut self, mut idx: usize) -> T {
-        while self.has_left(idx) {
-            idx = Self::lefti(idx);
-        }
+        idx = self.find_min(idx);
 
         if self.has_right(idx) {
-            let right_min = self.delete_min(Self::righti(idx));
+            let right_min = self.delete_min(righti(idx));
             mem::replace(self.item_mut(idx), right_min)
         } else {
             self.take(idx)
@@ -333,10 +347,6 @@ pub trait TeardownTreeInternal<T: Item> {
 
     fn node_opt(&self, idx: usize) -> Option<&Node<T>>;
 
-    fn parenti(idx: usize) -> usize;
-    fn lefti(idx: usize) -> usize;
-    fn righti(idx: usize) -> usize;
-
     fn parent_opt(&self, idx: usize) -> Option<&Node<T>>;
     fn left_opt(&self, idx: usize) -> Option<&Node<T>>;
     fn right_opt(&self, idx: usize) -> Option<&Node<T>>;
@@ -351,12 +361,15 @@ pub trait TeardownTreeInternal<T: Item> {
 
     fn drop_items(&mut self);
 
+    fn left_enclosing(curr: usize) -> usize;
+    fn right_enclosing(curr: usize) -> usize;
+
     fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
                                     where F: FnMut(&mut Self, &mut A, usize);
     fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
-                                    where F: FnMut(&mut Self, &mut A, usize) -> bool;
+                                    where F: FnMut(&mut Self, &mut A, usize);
     fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, f: F)
-                                    where F: FnMut(&mut Self, &mut A, usize) -> bool;
+                                    where F: FnMut(&mut Self, &mut A, usize);
 
     fn take(&mut self, idx: usize) -> T;
     fn place(&mut self, idx: usize, item: T);
@@ -417,35 +430,18 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
         if self.is_null(idx) { None } else { Some(self.node(idx)) }
     }
 
-
-    #[inline(always)]
-    fn parenti(idx: usize) -> usize {
-        (idx-1) >> 1
-    }
-
-    #[inline(always)]
-    fn lefti(idx: usize) -> usize {
-        (idx<<1) + 1
-    }
-
-    #[inline(always)]
-    fn righti(idx: usize) -> usize {
-        (idx<<1) + 2
-    }
-
-
     #[inline(always)]
     fn parent_opt(&self, idx: usize) -> Option<&Node<T>> {
         if idx == 0 {
             None
         } else {
-            Some(&self.data[Self::parenti(idx)])
+            Some(&self.data[parenti(idx)])
         }
     }
 
     #[inline(always)]
     fn left_opt(&self, idx: usize) -> Option<&Node<T>> {
-        let lefti = Self::lefti(idx);
+        let lefti = lefti(idx);
         if self.is_null(lefti) {
             None
         } else {
@@ -455,7 +451,7 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
 
     #[inline(always)]
     fn right_opt(&self, idx: usize) -> Option<&Node<T>> {
-        let righti = Self::righti(idx);
+        let righti = righti(idx);
         if self.is_null(righti) {
             None
         } else {
@@ -466,21 +462,21 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
 
     #[inline(always)]
     fn parent(&self, idx: usize) -> &Node<T> {
-        let parenti = Self::parenti(idx);
+        let parenti = parenti(idx);
         debug_assert!(idx > 0 && !self.is_null(idx));
         &self.data[parenti]
     }
 
     #[inline(always)]
     fn left(&self, idx: usize) -> &Node<T> {
-        let lefti = Self::lefti(idx);
+        let lefti = lefti(idx);
         debug_assert!(!self.is_null(lefti));
         &self.data[lefti]
     }
 
     #[inline(always)]
     fn right(&self, idx: usize) -> &Node<T> {
-        let righti = Self::righti(idx);
+        let righti = righti(idx);
         debug_assert!(!self.is_null(righti));
         &self.data[righti]
     }
@@ -488,12 +484,12 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
 
     #[inline(always)]
     fn has_left(&self, idx: usize) -> bool {
-        !self.is_null(Self::lefti(idx))
+        !self.is_null(lefti(idx))
     }
 
     #[inline(always)]
     fn has_right(&self, idx: usize) -> bool {
-        !self.is_null(Self::righti(idx))
+        !self.is_null(righti(idx))
     }
 
     #[inline(always)]
@@ -525,18 +521,18 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
                     },
 
                     (true, false)  => {
-                        Self::lefti(next)
+                        lefti(next)
                     },
 
                     (false, true)  => {
-                        Self::righti(next)
+                        righti(next)
                     },
 
                     (true, true)   => {
                         debug_assert!(self.traversal_stack.size() < self.traversal_stack.capacity());
 
-                        self.traversal_stack.push(Self::righti(next));
-                        Self::lefti(next)
+                        self.traversal_stack.push(righti(next));
+                        lefti(next)
                     },
                 }
             };
@@ -544,37 +540,69 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
     }
 
 
+    /// Returns the closest subtree A enclosing `curr`, such that A is the left child (or 0 if no such
+    /// node is found). `curr` is considered to enclose itself, so we return `curr` if it is the left
+    /// child.
+    #[inline(always)]
+    fn left_enclosing(curr: usize) -> usize {
+        if curr & 1 == 0 {
+            if curr & 2 == 0 {
+                parenti(curr)
+            } else {
+                let t = curr + 2;
+                let shift = t.trailing_zeros();
+                (curr >> shift) - 1
+            }
+        } else {
+            curr
+        }
+    }
+
+    /// Returns the closest subtree A enclosing `curr`, such that A is the right child (or 0 if no such
+    /// node is found). `curr` is considered to enclose itself, so we return `curr` if it is the right
+    /// child.
+    #[inline(always)]
+    fn right_enclosing(curr: usize) -> usize {
+        if curr & 1 == 0 {
+            curr
+        } else {
+            if curr & 2 == 0 {
+                parenti(curr)
+            } else {
+                let t = curr + 1;
+                let shift = t.trailing_zeros();
+                (curr >> shift) - 1
+            }
+        }
+    }
+
+
     #[inline]
     fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
-                                    where F: FnMut(&mut Self, &mut A, usize) -> bool {
+                                            where F: FnMut(&mut Self, &mut A, usize) {
         debug_assert!(self.traversal_stack.is_empty());
 
         if self.is_null(root) {
             return;
         }
 
-        let mut next = root;
+        let mut next = self.find_min(root);
 
-        'outer: loop {
-            if self.has_left(next) {
-                self.traversal_stack.push(next);
-                next = Self::lefti(next);
-            } else {
-                'inner: loop {
-                    let stop = f(self, a, next);
-                    if stop {
-                        self.traversal_stack.size = 0;
-                        break 'outer;
+        loop {
+            next = {
+                f(self, a, next);
+
+                if self.has_right(next) {
+                    self.find_min(righti(next))
+                } else {
+                    let l_enclosing = Self::left_enclosing(next);
+
+                    if l_enclosing <= root {
+                        // done
+                        return;
                     }
 
-                    if self.has_right(next) {
-                        next = Self::righti(next);
-                        break 'inner;
-                    } else if !self.traversal_stack.is_empty() {
-                        next = self.traversal_stack.pop()
-                    } else {
-                        break 'outer;
-                    }
+                    parenti(l_enclosing)
                 }
             }
         }
@@ -583,35 +611,30 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
 
     #[inline]
     fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
-                                            where F: FnMut(&mut Self, &mut A, usize) -> bool {
+                                                        where F: FnMut(&mut Self, &mut A, usize) {
         debug_assert!(self.traversal_stack.is_empty());
 
         if self.is_null(root) {
             return;
         }
 
-        let mut next = root;
+        let mut next = self.find_max(root);
 
-        'outer: loop {
-            if self.has_right(next) {
-                self.traversal_stack.push(next);
-                next = Self::righti(next);
-            } else {
-                'inner: loop {
-                    let stop = f(self, a, next);
-                    if stop {
-                        self.traversal_stack.size = 0;
-                        break 'outer;
+        loop {
+            next = {
+                f(self, a, next);
+
+                if self.has_left(next) {
+                    self.find_max(lefti(next))
+                } else {
+                    let r_enclosing = Self::right_enclosing(next);
+
+                    if r_enclosing <= root {
+                        // done
+                        return;
                     }
 
-                    if self.has_left(next) {
-                        next = Self::lefti(next);
-                        break 'inner;
-                    } else if !self.traversal_stack.is_empty() {
-                        next = self.traversal_stack.pop()
-                    } else {
-                        break 'outer;
-                    }
+                    parenti(r_enclosing)
                 }
             }
         }
@@ -755,8 +778,8 @@ impl<K: Ord+Debug, T: Item<Key=K>> TeardownTree<T> {
 
             if self.has_left(idx) || self.has_right(idx) {
                 ancestors.push(true);
-                self.fmt_subtree(fmt, Self::lefti(idx), ancestors)?;
-                self.fmt_subtree(fmt, Self::righti(idx), ancestors)?;
+                self.fmt_subtree(fmt, lefti(idx), ancestors)?;
+                self.fmt_subtree(fmt, righti(idx), ancestors)?;
                 ancestors.pop();
             }
         } else {
@@ -765,4 +788,20 @@ impl<K: Ord+Debug, T: Item<Key=K>> TeardownTree<T> {
 
         Ok(())
     }
+}
+
+
+#[inline(always)]
+pub fn parenti(idx: usize) -> usize {
+    (idx-1) >> 1
+}
+
+#[inline(always)]
+pub fn lefti(idx: usize) -> usize {
+    (idx<<1) + 1
+}
+
+#[inline(always)]
+pub fn righti(idx: usize) -> usize {
+    (idx<<1) + 2
 }

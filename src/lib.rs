@@ -20,7 +20,7 @@ pub use base::{Item, TeardownTree, TeardownTreeRefill, Node};
 
 #[cfg(test)]
 mod tests {
-    use base::{TeardownTree, TeardownTreeInternal, Node};
+    use base::{TeardownTree, TeardownTreeInternal, Node, lefti, righti};
 
     type Tree = TeardownTree<usize>;
 
@@ -74,11 +74,9 @@ mod tests {
         expect.sort();
 
         tree.delete_range(from, to, &mut output);
-        let mut sorted_out = output.clone();
-        sorted_out.sort();
 
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
-        assert_eq!(format!("{:?}", &sorted_out), format!("{:?}", expect));
+        assert_eq!(format!("{:?}", &output), format!("{:?}", expect));
     }
 
     #[test]
@@ -91,6 +89,9 @@ mod tests {
 
         test_prebuilt(&[1, 0, 2], (2,2),
                       &[1], &[2]);
+
+        test_prebuilt(&[3, 2, 0, 1], (1,3),
+                      &[], &[3,2,1]);
 
         test_prebuilt(&[3, 2, 4, 1], (1,3),
                       &[4], &[3,2,1]);
@@ -197,7 +198,7 @@ mod tests {
             check(tree);
         } else {
             let info = stack.pop().unwrap();
-            let (lefti, righti) = (Tree::lefti(info.root_idx), Tree::righti(info.root_idx));
+            let (lefti, righti) = (lefti(info.root_idx), righti(info.root_idx));
             for i in info.range.clone() {
                 items[info.root_idx] = i;
 
@@ -259,8 +260,8 @@ mod tests {
         debug_assert!(output.len() == to-from+1, "tree'={:?}, tree={}, tree_mod={}, interval=({}, {}), expected output len={}, got: {:?}", tree_orig, tree_orig, tree_mod, from, to, to-from+1, output);
         debug_assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
 
-        output.sort();
-        assert_eq!(output, &(from..to+1).collect::<Vec<_>>());
+//        output.sort();
+        assert_eq!(output, &(from..to+1).collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         check_bst(&tree_mod, &output, tree_orig, 0);
     }
 
@@ -274,8 +275,8 @@ mod tests {
             return None;
         } else {
             let item = node.unwrap().item;
-            let left = check_bst(tree, output, tree_orig, Tree::lefti(idx));
-            let right = check_bst(tree, output, tree_orig, Tree::righti(idx));
+            let left = check_bst(tree, output, tree_orig, lefti(idx));
+            let right = check_bst(tree, output, tree_orig, righti(idx));
 
             let min =
                 if let Some((lmin, lmax)) = left {

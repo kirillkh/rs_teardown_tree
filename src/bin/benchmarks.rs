@@ -177,31 +177,6 @@ fn nanos(d: Duration) -> u64 {
 
 fn main() {
 //    set_affinity();
-    bench_refill::<TreeBulk>(100, 40000000);
-    bench_refill::<TreeBulk>(1000, 6000000);
-    bench_refill::<TreeBulk>(10000, 500000);
-    bench_refill::<TreeBulk>(100000, 40000);
-    bench_refill::<TreeBulk>(1000000, 1200);
-    bench_refill::<TreeBulk>(10000000, 110);
-
-
-    bench_refill::<TreapMaster>(100, 260000);
-    bench_refill::<TreapMaster>(1000, 28000);
-    bench_refill::<TreapMaster>(10000, 3000);
-    bench_refill::<TreapMaster>(100000, 220);
-    bench_refill::<TreapMaster>(1000000, 25);
-    bench_refill::<TreapMaster>(10000000, 3);
-
-
-    bench_refill::<BTreeSet<usize>>(100, 1700000);
-    bench_refill::<BTreeSet<usize>>(1000, 180000);
-    bench_refill::<BTreeSet<usize>>(10000, 16000);
-    bench_refill::<BTreeSet<usize>>(100000, 1300);
-    bench_refill::<BTreeSet<usize>>(1000000, 100);
-    bench_refill::<BTreeSet<usize>>(10000000, 8);
-
-
-
     bench_refill_teardown_cycle::<TreeBulk>(100, 100,    4500000);
     bench_refill_teardown_cycle::<TreeBulk>(1000, 100,    700000);
     bench_refill_teardown_cycle::<TreeBulk>(10000, 100,    70000);
@@ -256,6 +231,30 @@ fn main() {
     bench_refill_teardown_cycle::<TeardownTreeSingle>(100000, 1000,  600);
     bench_refill_teardown_cycle::<TeardownTreeSingle>(1000000, 1000,  60);
     bench_refill_teardown_cycle::<TeardownTreeSingle>(10000000, 1000,  6);
+
+
+    bench_refill::<TreeBulk>(100, 40000000);
+    bench_refill::<TreeBulk>(1000, 6000000);
+    bench_refill::<TreeBulk>(10000, 500000);
+    bench_refill::<TreeBulk>(100000, 40000);
+    bench_refill::<TreeBulk>(1000000, 1200);
+    bench_refill::<TreeBulk>(10000000, 110);
+
+
+    bench_refill::<TreapMaster>(100, 260000);
+    bench_refill::<TreapMaster>(1000, 28000);
+    bench_refill::<TreapMaster>(10000, 3000);
+    bench_refill::<TreapMaster>(100000, 220);
+    bench_refill::<TreapMaster>(1000000, 25);
+    bench_refill::<TreapMaster>(10000000, 3);
+
+
+    bench_refill::<BTreeSet<usize>>(100, 1700000);
+    bench_refill::<BTreeSet<usize>>(1000, 180000);
+    bench_refill::<BTreeSet<usize>>(10000, 16000);
+    bench_refill::<BTreeSet<usize>>(100000, 1300);
+    bench_refill::<BTreeSet<usize>>(1000000, 100);
+    bench_refill::<BTreeSet<usize>>(10000000, 8);
 
 
     imptree_single_elem_range_n(100, 100,    200000);
