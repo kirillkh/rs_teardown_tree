@@ -1,47 +1,87 @@
-use delete_range::{TraversalDriver, TraversalDecision};
-use base::Item;
+pub trait TraversalDriver<K> {
+    type Decision: TraversalDecision;
 
-pub struct DriverFromToRef<'a, T: Item+'a> {
-    from: &'a T::Key,
-    to: &'a T::Key
+    #[inline(always)]
+    fn decide(&self, key: &K) -> Self::Decision;
 }
 
-impl<'a, T: Item+'a> DriverFromToRef<'a, T> {
-    pub fn new(from: &'a T::Key, to: &'a T::Key) -> DriverFromToRef<'a, T> {
-        DriverFromToRef { from:from, to:to }
+
+pub trait TraversalDecision {
+    #[inline] fn left(&self) -> bool;
+    #[inline] fn right(&self) -> bool;
+    #[inline] fn consume(&self) -> bool;
+}
+
+
+
+
+#[derive(Clone, Copy, Debug)]
+pub struct RangeDecision {
+    pub left: bool,
+    pub right: bool,
+}
+
+impl TraversalDecision for RangeDecision {
+    #[inline] fn left(&self) -> bool {
+        self.left
+    }
+
+    #[inline] fn right(&self) -> bool {
+        self.right
+    }
+
+    #[inline] fn consume(&self) -> bool {
+        self.left && self.right
     }
 }
 
-impl<'a, T: Item+'a> TraversalDriver<T> for DriverFromToRef<'a, T> {
+
+
+
+pub struct RangeRefDriver<'a, K: Ord+'a> {
+    from: &'a K,
+    to: &'a K
+}
+
+impl<'a, K: Ord+'a> RangeRefDriver<'a, K> {
+    pub fn new(from: &'a K, to: &'a K) -> RangeRefDriver<'a, K> {
+        RangeRefDriver { from:from, to:to }
+    }
+}
+
+impl<'a, K: Ord+'a> TraversalDriver<K> for RangeRefDriver<'a, K> {
+    type Decision = RangeDecision;
+
     #[inline(always)]
-    fn decide(&self, x: &T::Key) -> TraversalDecision {
+    fn decide(&self, x: &K) -> Self::Decision {
         let left = self.from <= x;
         let right = x <= self.to;
 
-        TraversalDecision { left: left, right: right }
+        RangeDecision { left: left, right: right }
     }
 }
 
 
 
-pub struct DriverFromTo<T: Item> {
-    from: T::Key,
-    to: T::Key
+pub struct RangeDriver<K: Ord> {
+    from: K,
+    to: K
 }
 
-impl<T: Item> DriverFromTo<T> {
-    pub fn new(from: T::Key, to: T::Key) -> DriverFromTo<T> {
-        DriverFromTo { from:from, to:to }
+impl<K: Ord> RangeDriver<K> {
+    pub fn new(from: K, to: K) -> RangeDriver<K> {
+        RangeDriver { from:from, to:to }
     }
 }
 
-impl<T: Item> TraversalDriver<T> for DriverFromTo<T> {
+impl<K: Ord> TraversalDriver<K> for RangeDriver<K> {
+    type Decision = RangeDecision;
+
     #[inline(always)]
-    fn decide(&self, x: &T::Key) -> TraversalDecision {
+    fn decide(&self, x: &K) -> Self::Decision {
         let left = self.from <= *x;
         let right = *x <= self.to;
 
-        TraversalDecision { left: left, right: right }
+        RangeDecision { left: left, right: right }
     }
 }
-

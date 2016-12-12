@@ -1,16 +1,8 @@
 use base::{TeardownTree, TeardownTreeInternal, Item, Node, lefti, righti};
+use drivers::{TraversalDriver, TraversalDecision};
 use slot_stack::SlotStack;
 
-pub trait TraversalDriver<T: Item> {
-    #[inline(always)]
-    fn decide(&self, key: &T::Key) -> TraversalDecision;
-}
 
-#[derive(Clone, Copy, Debug)]
-pub struct TraversalDecision {
-    pub left: bool,
-    pub right: bool,
-}
 
 pub struct DeleteRangeCache {
     pub slots_min: SlotStack, pub slots_max: SlotStack,   // TODO: we no longer need both stacks, one is enough... but removing one causes 3% performance regression
@@ -46,7 +38,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     /// The items are returned in order.
-    pub fn delete_range<D: TraversalDriver<T>>(mut self, drv: &mut D) {
+    pub fn delete_range<D: TraversalDriver<T::Key>>(mut self, drv: &mut D) {
         self.delete_range_loop(drv, 0);
         debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty());
 
@@ -70,7 +62,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 // v5
 impl<'a, T: Item> DeleteRange<'a, T> {
     #[inline]
-    fn delete_range_loop<D: TraversalDriver<T>>(&mut self, drv: &D, mut idx: usize) {
+    fn delete_range_loop<D: TraversalDriver<T::Key>>(&mut self, drv: &D, mut idx: usize) {
         loop {
             if self.tree.is_null(idx) {
                 return;
@@ -78,27 +70,27 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
             let decision = drv.decide(&self.item(idx).key());
 
-            if decision.left && decision.right {
+            if decision.left() && decision.right() {
                 let item = self.tree.take(idx);
                 let removed = self.descend_delete_left(drv, idx, true);
                 self.output.push(item);
                 self.descend_delete_right(drv, idx, removed);
                 return;
-            } else if decision.left {
+            } else if decision.left() {
                 idx = lefti(idx);
             } else {
-                debug_assert!(decision.right);
+                debug_assert!(decision.right());
                 idx = righti(idx);
             }
         }
     }
 
     #[inline(never)]
-    fn delete_range_min<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize) {
+    fn delete_range_min<D: TraversalDriver<T::Key>>(&mut self, drv: &D, idx: usize) {
         let decision = drv.decide(&self.item(idx).key());
-        debug_assert!(decision.left);
+        debug_assert!(decision.left());
 
-        if decision.right {
+        if decision.right() {
             // the root and the whole left subtree are inside the range
             let item = self.tree.take(idx);
             self.consume_subtree(lefti(idx));
@@ -118,11 +110,11 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     }
 
     #[inline(never)]
-    fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize) {
+    fn delete_range_max<D: TraversalDriver<T::Key>>(&mut self, drv: &D, idx: usize) {
         let decision = drv.decide(&self.item(idx).key());
-        debug_assert!(decision.right);
+        debug_assert!(decision.right());
 
-        if decision.left {
+        if decision.left() {
             // the root and the whole right subtree are inside the range
             let item = self.tree.take(idx);
             self.descend_delete_left(drv, idx, true);
@@ -276,7 +268,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_left<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_left<D: TraversalDriver<T::Key>>(&mut self, drv: &D, idx: usize, with_slot: bool) -> bool {
         if with_slot {
             self.descend_left_with_slot(idx,
                         |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx)
@@ -292,7 +284,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_right<D: TraversalDriver<T>>(&mut self, drv: &D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_right<D: TraversalDriver<T::Key>>(&mut self, drv: &D, idx: usize, with_slot: bool) -> bool {
         if with_slot {
             self.descend_right_with_slot(idx,
                         |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx)

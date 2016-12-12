@@ -9,6 +9,7 @@ mod base;
 mod slot_stack;
 mod delete_range;
 mod drivers;
+mod interval;
 //mod unsafe_stack;
 
 mod rust_bench;

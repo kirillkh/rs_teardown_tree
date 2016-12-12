@@ -4,7 +4,7 @@ mod benches {
 
     use self::test::Bencher;
 
-    use base::{TeardownTree, Node, DriverFromToRef, TeardownTreeRefill};
+    use base::{TeardownTree, Node, RangeRefDriver, TeardownTreeRefill};
 
     type Tree = TeardownTree<usize>;
 

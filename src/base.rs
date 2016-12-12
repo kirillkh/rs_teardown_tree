@@ -3,8 +3,8 @@ use std::mem;
 use std::cmp::{max, Ordering};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use delete_range::{DeleteRange, DeleteRangeCache, TraversalDriver};
-use drivers::{DriverFromToRef, DriverFromTo};
+use delete_range::{DeleteRange, DeleteRangeCache};
+use drivers::{TraversalDriver, RangeRefDriver, RangeDriver};
 
 pub trait Item: Sized+Clone {
     type Key: Ord;
@@ -159,17 +159,17 @@ impl<T: Item> TeardownTree<T> {
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
     /// Vec. The items are returned in order.
     pub fn delete_range(&mut self, from: T::Key, to: T::Key, output: &mut Vec<T>) {
-        self.delete_with_driver(&mut DriverFromTo::new(from, to), output)
+        self.delete_with_driver(&mut RangeDriver::new(from, to), output)
     }
 
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
     pub fn delete_range_ref(&mut self, from: &T::Key, to: &T::Key, output: &mut Vec<T>) {
-        self.delete_with_driver(&mut DriverFromToRef::new(from, to), output)
+        self.delete_with_driver(&mut RangeRefDriver::new(from, to), output)
     }
 
 
     /// Delete based on driver decisions.
-    fn delete_with_driver<'a, D: TraversalDriver<T>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
+    fn delete_with_driver<'a, D: TraversalDriver<T::Key>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
         {
