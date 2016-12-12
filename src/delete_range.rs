@@ -48,7 +48,7 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     /// The items are returned in order.
     pub fn delete_range<D: TraversalDriver<T>>(mut self, drv: &mut D) {
         self.delete_range_loop(drv, 0);
-        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty() && self.tree.traversal_stack.is_empty());
+        debug_assert!(self.slots_min.is_empty() && self.slots_max.is_empty());
 
         self.tree.delete_range_cache = Some(DeleteRangeCache { slots_min: self.slots_min, slots_max: self.slots_max });
     }
@@ -145,8 +145,6 @@ impl<'a, T: Item> DeleteRange<'a, T> {
     //---- delete_subtree_* ---------------------------------------------------------------
     #[inline]
     fn consume_subtree(&mut self, root: usize) {
-        debug_assert!(self.tree.traversal_stack.is_empty());
-
         self.tree.traverse_inorder(root, self.output, |tree, output, idx| {
             unsafe {
                 let len = output.len();

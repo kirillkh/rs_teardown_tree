@@ -9,7 +9,7 @@ mod base;
 mod slot_stack;
 mod delete_range;
 mod drivers;
-mod unsafe_stack;
+//mod unsafe_stack;
 
 mod rust_bench;
 
@@ -130,6 +130,9 @@ mod tests {
 
         test_prebuilt(&[1, 0, 3, 0, 0, 2, 4], (1,2),
                       &[3, 0, 4], &[1, 2]);
+
+        test_prebuilt(&[1, 0, 4, 0, 0, 2, 0, 0, 0, 0, 0, 0, 3], (1,4),
+                      &[], &[1,2,3,4]);
 
         test_prebuilt(&[6, 4, 0, 1, 5, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], (4,6),
                       &[3, 2, 0, 1], &[6,4,5]);

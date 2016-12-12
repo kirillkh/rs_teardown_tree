@@ -5,7 +5,6 @@ use std::fmt;
 use std::fmt::{Debug, Formatter};
 use delete_range::{DeleteRange, DeleteRangeCache, TraversalDriver};
 use drivers::{DriverFromToRef, DriverFromTo};
-use unsafe_stack::UnsafeStack;
 
 pub trait Item: Sized+Clone {
     type Key: Ord;
@@ -76,19 +75,15 @@ pub struct TeardownTree<T: Item> {
     mask: Vec<bool>,
     size: usize,
 
-    pub traversal_stack: UnsafeStack<usize>,
     pub delete_range_cache: Option<DeleteRangeCache>,
 }
 
 impl<T: Item> Clone for TeardownTree<T> {
     fn clone(&self) -> Self {
-        debug_assert!(self.traversal_stack.is_empty());
-
         TeardownTree {
             data: self.data.clone(),
             mask: self.mask.clone(),
             size: self.size,
-            traversal_stack: UnsafeStack::new(self.traversal_stack.capacity()),
             delete_range_cache: self.delete_range_cache.clone()
         }
     }
@@ -110,7 +105,7 @@ impl<T: Item> TeardownTree<T> {
         let height = Self::build(&mut sorted, 0, &mut data);
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
-        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache), traversal_stack: UnsafeStack::new(capacity) }
+        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache) }
     }
 
     fn calc_height(nodes: &Vec<Option<Node<T>>>, idx: usize) -> usize {
@@ -181,7 +176,7 @@ impl<T: Item> TeardownTree<T> {
             DeleteRange::new(self, output).delete_range(drv);
             debug_assert!({
                 let cache: DeleteRangeCache = self.delete_range_cache.take().unwrap();
-                let ok = cache.slots_min.is_empty() && cache.slots_max.is_empty() && self.traversal_stack.is_empty();
+                let ok = cache.slots_min.is_empty() && cache.slots_max.is_empty();
                 self.delete_range_cache = Some(cache);
                 ok
             });
@@ -399,7 +394,7 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
         }
 
         let cache = DeleteRangeCache::new(height);
-        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache), traversal_stack: UnsafeStack::new(capacity) }
+        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache) }
     }
 
 
@@ -497,10 +492,48 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
         idx >= self.data.len() || !self.mask[idx]
     }
 
-    #[inline]
-    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F) where F: FnMut(&mut Self, &mut A, usize) {
-        debug_assert!(self.traversal_stack.is_empty());
 
+    /// Returns the closest subtree A enclosing `idx`, such that A is the left child (or 0 if no such
+    /// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the left
+    /// child.
+    #[inline(always)]
+    fn left_enclosing(idx: usize) -> usize {
+        debug_assert!((idx + 1).next_power_of_two() != idx+2);
+
+        if idx & 1 == 0 {
+            if idx & 2 == 0 {
+                parenti(idx)
+            } else {
+                let t = idx + 2;
+                let shift = t.trailing_zeros();
+                (idx >> shift) - 1
+            }
+        } else {
+            idx
+        }
+    }
+
+    /// Returns the closest subtree A enclosing `idx`, such that A is the right child (or 0 if no such
+    /// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the right
+    /// child.
+    #[inline(always)]
+    fn right_enclosing(idx: usize) -> usize {
+        if idx & 1 == 0 {
+            idx
+        } else {
+            if idx & 2 == 0 {
+                parenti(idx)
+            } else {
+                let t = idx + 1;
+                let shift = t.trailing_zeros();
+                (idx >> shift) - 1
+            }
+        }
+    }
+
+    #[inline]
+    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
+                                                where F: FnMut(&mut Self, &mut A, usize) {
         if self.is_null(root) {
             return;
         }
@@ -511,77 +544,41 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
             next = {
                 f(self, a, next);
 
-                match (self.has_left(next), self.has_right(next)) {
-                    (false, false) => {
-                        if self.traversal_stack.is_empty() {
-                            break;
+                if self.has_left(next) {
+                    lefti(next)
+                } else if self.has_right(next) {
+                    righti(next)
+                } else {
+                    loop {
+                        let l_enclosing = {
+                            let z = next + 2;
+
+                            if z == z & (!z+1) {
+                                0
+                            } else {
+                                Self::left_enclosing(next)
+                            }
+                        } ;
+
+                        if l_enclosing <= root {
+                            // done
+                            return;
                         }
 
-                        self.traversal_stack.pop()
-                    },
-
-                    (true, false)  => {
-                        lefti(next)
-                    },
-
-                    (false, true)  => {
-                        righti(next)
-                    },
-
-                    (true, true)   => {
-                        debug_assert!(self.traversal_stack.size() < self.traversal_stack.capacity());
-
-                        self.traversal_stack.push(righti(next));
-                        lefti(next)
-                    },
+                        next = l_enclosing + 1; // right sibling
+                        if !self.is_null(next) {
+                            break;
+                        }
+                    }
+                    next
                 }
             };
         }
     }
 
-
-    /// Returns the closest subtree A enclosing `curr`, such that A is the left child (or 0 if no such
-    /// node is found). `curr` is considered to enclose itself, so we return `curr` if it is the left
-    /// child.
-    #[inline(always)]
-    fn left_enclosing(curr: usize) -> usize {
-        if curr & 1 == 0 {
-            if curr & 2 == 0 {
-                parenti(curr)
-            } else {
-                let t = curr + 2;
-                let shift = t.trailing_zeros();
-                (curr >> shift) - 1
-            }
-        } else {
-            curr
-        }
-    }
-
-    /// Returns the closest subtree A enclosing `curr`, such that A is the right child (or 0 if no such
-    /// node is found). `curr` is considered to enclose itself, so we return `curr` if it is the right
-    /// child.
-    #[inline(always)]
-    fn right_enclosing(curr: usize) -> usize {
-        if curr & 1 == 0 {
-            curr
-        } else {
-            if curr & 2 == 0 {
-                parenti(curr)
-            } else {
-                let t = curr + 1;
-                let shift = t.trailing_zeros();
-                (curr >> shift) - 1
-            }
-        }
-    }
-
-
     #[inline]
     fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
                                             where F: FnMut(&mut Self, &mut A, usize) {
-        debug_assert!(self.traversal_stack.is_empty());
-
         if self.is_null(root) {
             return;
         }
@@ -595,6 +592,12 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
                 if self.has_right(next) {
                     self.find_min(righti(next))
                 } else {
+                    // handle the case where we are on strictly right-hand path from the root.
+                    // we don't need this in the current user code, but it can happen generally
+//                    if next==0 || (next + 1).next_power_of_two() == next+2 {
+//                        return;
+//                    }
+
                     let l_enclosing = Self::left_enclosing(next);
 
                     if l_enclosing <= root {
@@ -612,8 +615,6 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
     #[inline]
     fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
                                                         where F: FnMut(&mut Self, &mut A, usize) {
-        debug_assert!(self.traversal_stack.is_empty());
-
         if self.is_null(root) {
             return;
         }
