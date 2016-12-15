@@ -20,7 +20,7 @@ path = "src/bin/benchmarks.rs"
 [dependencies]
 rand = "0.3.14"
 #wio = "0.1.2"
-teardown_tree___treap = "0.0.1"
+teardown_tree___treap = "0.0.2"
 
 
 [profile.release]
