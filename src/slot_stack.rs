@@ -1,4 +1,4 @@
-use base::{Item, TeardownTree, TeardownTreeInternal};
+use base::{Item, TeardownTreeInternal};
 //use std::ptr::Unique;
 use std::mem;
 use std::fmt::{Debug, Formatter};
@@ -60,7 +60,7 @@ impl SlotStack {
 
 
     #[inline(always)]
-    pub fn fill<T: Item>(&mut self, tree: &mut TeardownTree<T>, src_idx: usize) {
+    pub fn fill<T: Item>(&mut self, tree: &mut TeardownTreeInternal<T>, src_idx: usize) {
         debug_assert!(self.nfilled < self.nslots);
         let dst_idx = self.slot_at(self.nfilled).idx;
         self.nfilled += 1;

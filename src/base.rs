@@ -44,6 +44,13 @@ pub trait TeardownTreeRefill<T: Copy+Item> {
 
 impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTree<T> {
     fn refill(&mut self, master: &TeardownTree<T>) {
+        self.internal.unwrap().refill(master)
+    }
+}
+
+impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTreeInternal<T> {
+    fn refill(&mut self, master: &TeardownTree<T>) {
+        let master = master.internal.unwrap();
         let len = self.data.len();
         debug_assert!(len == master.data.len());
         unsafe {
@@ -69,31 +76,68 @@ impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTree<T> {
 //    }
 //}
 
-
+#[derive(Clone)]
 pub struct TeardownTree<T: Item> {
+    internal: Option<TeardownTreeInternal<T>>
+}
+
+#[derive(Clone)]
+pub struct TeardownTreeInternal<T: Item> {
     data: Vec<Node<T>>,
     mask: Vec<bool>,
     size: usize,
 
-    pub delete_range_cache: Option<DeleteRangeCache>,
+    pub delete_range_cache: DeleteRangeCache,
 }
 
-impl<T: Item> Clone for TeardownTree<T> {
-    fn clone(&self) -> Self {
-        TeardownTree {
-            data: self.data.clone(),
-            mask: self.mask.clone(),
-            size: self.size,
-            delete_range_cache: self.delete_range_cache.clone()
-        }
+//impl<T: Item> Clone for TeardownTreeInternal<T> {
+//    fn clone(&self) -> Self {
+//        TeardownTreeInternal {
+//            data: self.data.clone(),
+//            mask: self.mask.clone(),
+//            size: self.size,
+//            delete_range_cache: self.delete_range_cache.clone()
+//        }
+//    }
+//}
+
+impl<T: Item> TeardownTree<T> {
+    /// Constructs a new TeardownTree<T>
+    /// **Note:** the argument must be sorted!
+    pub fn new(sorted: Vec<T>) -> TeardownTree<T> {
+        TeardownTree { internal: Some(TeardownTreeInternal::new(sorted)) }
+    }
+
+    fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTree<T> {
+        TeardownTree { internal: Some(TeardownTreeInternal::with_nodes(nodes)) }
+    }
+
+
+    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
+    /// Vec. The items are returned in order.
+    pub fn delete_range(&mut self, from: T::Key, to: T::Key, output: &mut Vec<T>) {
+        self.delete_with_driver(&mut RangeDriver::new(from, to), output)
+    }
+
+    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
+    pub fn delete_range_ref(&mut self, from: &T::Key, to: &T::Key, output: &mut Vec<T>) {
+        self.delete_with_driver(&mut RangeRefDriver::new(from, to), output)
+    }
+
+
+    /// Delete based on driver decisions.
+    fn delete_with_driver<D: TraversalDriver<T::Key>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
+        self.internal = Some(
+            self.internal.take().unwrap().delete_with_driver(drv, output)
+        );
     }
 }
 
 
-impl<T: Item> TeardownTree<T> {
+impl<T: Item> TeardownTreeInternal<T> {
     /// Constructs a new TeardownTree<T>
     /// Note: the argument must be sorted!
-    pub fn new(mut sorted: Vec<T>) -> TeardownTree<T> {
+    pub fn new(mut sorted: Vec<T>) -> TeardownTreeInternal<T> {
         let size = sorted.len();
 
         let capacity = size;
@@ -105,7 +149,7 @@ impl<T: Item> TeardownTree<T> {
         let height = Self::build(&mut sorted, 0, &mut data);
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
-        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache) }
+        TeardownTreeInternal { data: data, mask: mask, size: size, delete_range_cache: cache }
     }
 
     fn calc_height(nodes: &Vec<Option<Node<T>>>, idx: usize) -> usize {
@@ -156,32 +200,20 @@ impl<T: Item> TeardownTree<T> {
         }
     }
 
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
-    /// Vec. The items are returned in order.
-    pub fn delete_range(&mut self, from: T::Key, to: T::Key, output: &mut Vec<T>) {
-        self.delete_with_driver(&mut RangeDriver::new(from, to), output)
-    }
-
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
-    pub fn delete_range_ref(&mut self, from: &T::Key, to: &T::Key, output: &mut Vec<T>) {
-        self.delete_with_driver(&mut RangeRefDriver::new(from, to), output)
-    }
-
-
     /// Delete based on driver decisions.
-    fn delete_with_driver<'a, D: TraversalDriver<T::Key>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
+    fn delete_with_driver<D: TraversalDriver<T::Key>>(self, drv: &mut D, output: &mut Vec<T>) -> Self {
         debug_assert!(output.is_empty());
         output.truncate(0);
-        {
-            DeleteRange::new(self, output).delete_range(drv);
-            debug_assert!({
-                let cache: DeleteRangeCache = self.delete_range_cache.take().unwrap();
-                let ok = cache.slots_min.is_empty() && cache.slots_max.is_empty();
-                self.delete_range_cache = Some(cache);
-                ok
-            });
-        }
-        self.size -= output.len();
+
+        let tmp_out = Vec::from_raw_parts(output.as_mut_ptr(), output.len(), output.capacity());
+        let (tree, tmp_out) = DeleteRange::delete_range(self, drv, tmp_out);
+        mem::forget(tmp_out);
+
+        debug_assert!({
+            let cache = &self.delete_range_cache;
+            cache.slots_min.is_empty() && cache.slots_max.is_empty()
+        });
+        tree
     }
 
 
@@ -324,7 +356,7 @@ impl<T: Item> TeardownTree<T> {
     }
 }
 
-impl<T: Item> Drop for TeardownTree<T> {
+impl<T: Item> Drop for TeardownTreeInternal<T> {
     fn drop(&mut self) {
         self.drop_items();
         unsafe {
@@ -333,48 +365,48 @@ impl<T: Item> Drop for TeardownTree<T> {
     }
 }
 
-pub trait TeardownTreeInternal<T: Item> {
-    fn with_nodes(nodes: Vec<Option<Node<T>>>) -> TeardownTree<T>;
-//    fn into_node_vec(self) -> Vec<Option<Node<T>>>;
+//pub trait TeardownTreeInternal<T: Item> {
+//    fn with_nodes(nodes: Vec<Option<Node<T>>>) -> TeardownTree<T>;
+////    fn into_node_vec(self) -> Vec<Option<Node<T>>>;
+//
+//    fn node(&self, idx: usize) -> &Node<T>;
+//    fn node_mut(&mut self, idx: usize) -> &mut Node<T>;
+//
+//    fn node_opt(&self, idx: usize) -> Option<&Node<T>>;
+//
+//    fn parent_opt(&self, idx: usize) -> Option<&Node<T>>;
+//    fn left_opt(&self, idx: usize) -> Option<&Node<T>>;
+//    fn right_opt(&self, idx: usize) -> Option<&Node<T>>;
+//
+//    fn parent(&self, idx: usize) -> &Node<T>;
+//    fn left(&self, idx: usize) -> &Node<T>;
+//    fn right(&self, idx: usize) -> &Node<T>;
+//
+//    fn has_left(&self, idx: usize) -> bool;
+//    fn has_right(&self, idx: usize) -> bool;
+//    fn is_null(&self, idx: usize) -> bool;
+//
+//    fn drop_items(&mut self);
+//
+//    fn left_enclosing(curr: usize) -> usize;
+//    fn right_enclosing(curr: usize) -> usize;
+//
+//    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
+//                                    where F: FnMut(&mut Self, &mut A, usize);
+//    fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
+//                                    where F: FnMut(&mut Self, &mut A, usize);
+//    fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, f: F)
+//                                    where F: FnMut(&mut Self, &mut A, usize);
+//
+//    fn take(&mut self, idx: usize) -> T;
+//    fn place(&mut self, idx: usize, item: T);
+//    unsafe fn move_to(&mut self, idx: usize, dst: *mut T);
+//    unsafe fn move_from_to(&mut self, src: usize, dst: usize);
+//}
 
-    fn node(&self, idx: usize) -> &Node<T>;
-    fn node_mut(&mut self, idx: usize) -> &mut Node<T>;
-
-    fn node_opt(&self, idx: usize) -> Option<&Node<T>>;
-
-    fn parent_opt(&self, idx: usize) -> Option<&Node<T>>;
-    fn left_opt(&self, idx: usize) -> Option<&Node<T>>;
-    fn right_opt(&self, idx: usize) -> Option<&Node<T>>;
-
-    fn parent(&self, idx: usize) -> &Node<T>;
-    fn left(&self, idx: usize) -> &Node<T>;
-    fn right(&self, idx: usize) -> &Node<T>;
-
-    fn has_left(&self, idx: usize) -> bool;
-    fn has_right(&self, idx: usize) -> bool;
-    fn is_null(&self, idx: usize) -> bool;
-
-    fn drop_items(&mut self);
-
-    fn left_enclosing(curr: usize) -> usize;
-    fn right_enclosing(curr: usize) -> usize;
-
-    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
-                                    where F: FnMut(&mut Self, &mut A, usize);
-    fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
-                                    where F: FnMut(&mut Self, &mut A, usize);
-    fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, f: F)
-                                    where F: FnMut(&mut Self, &mut A, usize);
-
-    fn take(&mut self, idx: usize) -> T;
-    fn place(&mut self, idx: usize, item: T);
-    unsafe fn move_to(&mut self, idx: usize, dst: *mut T);
-    unsafe fn move_from_to(&mut self, src: usize, dst: usize);
-}
-
-impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
+impl<T: Item> TeardownTreeInternal<T> {
     /// Constructs a new TeardownTree<T> based on raw nodes vec.
-    fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTree<T> {
+    fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTreeInternal<T> {
         let size = nodes.iter().filter(|x| x.is_some()).count();
         let height = Self::calc_height(&nodes, 0);
         let capacity = nodes.len();
@@ -394,7 +426,7 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
         }
 
         let cache = DeleteRangeCache::new(height);
-        TeardownTree { data: data, mask: mask, size: size, delete_range_cache: Some(cache) }
+        TeardownTreeInternal { data: data, mask: mask, size: size, delete_range_cache: cache }
     }
 
 
@@ -717,7 +749,7 @@ impl<T: Item> TeardownTreeInternal<T> for TeardownTree<T> {
 
 impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        let mut nz: Vec<_> = self.mask.iter().enumerate()
+        let mut nz: Vec<_> = self.internal.mask.iter().enumerate()
             .rev()
             .skip_while(|&(_, flag)| !flag)
             .map(|(i, &flag)| match (self.node(i), flag) {

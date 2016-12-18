@@ -82,7 +82,7 @@ impl<Iv: Interval> Ord for IntervalNode<Iv> {
 
 
 
-use delete_range::{DeleteRange, DeleteRangeCache, DeleteBulkDrv};
+use delete_range::{DeleteRange, DeleteRangeCache};
 use base::{Item, Node, TeardownTree, TeardownTreeInternal, lefti, righti};
 use slot_stack::SlotStack;
 
@@ -105,14 +105,14 @@ trait DeleteIntersectingIntervalsInternal<Iv: Interval, T: Item<Key=IntervalNode
 }
 
 
-impl<'a, Iv: Interval, T: 'a+Item<Key=IntervalNode<Iv>>> DeleteIntersectingIntervals<Iv> for DeleteRange<'a, T> {
+impl<Iv: Interval, T: Item<Key=IntervalNode<Iv>>> DeleteIntersectingIntervals<Iv> for DeleteRange<T> {
     #[inline]
     fn delete_intersecting_ivl(&mut self, search: &Iv, idx: usize) {
         self.delete_intersecting_ivl_rec(search, idx, false);
     }
 }
 
-impl<'a, Iv: Interval, T: 'a+Item<Key=IntervalNode<Iv>>> DeleteIntersectingIntervalsInternal<Iv, T> for DeleteRange<'a, T> {
+impl<Iv: Interval, T: Item<Key=IntervalNode<Iv>>> DeleteIntersectingIntervalsInternal<Iv, T> for DeleteRange<T> {
     fn delete_intersecting_ivl_rec(&mut self, search: &Iv, idx: usize, mut min_included: bool) {
         let k: &IntervalNode<Iv> = self.node_unsafe(idx).item.key();
 
