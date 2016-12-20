@@ -1,6 +1,5 @@
 use base::Item;
 use std::ptr;
-use std::mem;
 
 pub trait Sink<T: Item> {
     fn consume(&mut self, item: T);

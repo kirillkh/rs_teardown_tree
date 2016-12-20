@@ -1,4 +1,3 @@
-use base::{Item, TeardownTreeInternal};
 //use std::ptr::Unique;
 use std::mem;
 use std::fmt::{Debug, Formatter};
@@ -60,7 +59,7 @@ impl SlotStack {
 
 
     #[inline(always)]
-    pub fn fill(&mut self, src_idx: usize) -> usize {
+    pub fn fill(&mut self) -> usize {
         debug_assert!(self.nfilled < self.nslots);
         let dst_idx = self.slot_at(self.nfilled).idx;
         self.nfilled += 1;
@@ -86,10 +85,10 @@ impl SlotStack {
         self.nslots
     }
 
-    #[inline(always)]
-    pub fn nfilled(&self) -> usize {
-        self.nfilled
-    }
+//    #[inline(always)]
+//    pub fn nfilled(&self) -> usize {
+//        self.nfilled
+//    }
 
     #[inline(always)]
     pub fn has_open(&self) -> bool {

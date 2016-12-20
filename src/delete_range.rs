@@ -40,7 +40,7 @@ pub trait BulkDeleteCommon<T: Item> {
 
 pub trait DeleteRangeInternal<T: Item> {
     fn delete_range<D: TraversalDriver<T>>(&mut self, drv: &mut D);
-    fn delete_range_loop<D: TraversalDriver<T>>(&mut self, drv: &mut D, mut idx: usize);
+    fn delete_range_loop<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
 
     fn delete_range_min<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
     fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
@@ -154,7 +154,7 @@ impl<T: Item> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
     #[inline(always)]
     fn fill_slot_min(&mut self, idx: usize) {
-        let dst_idx = self.slots_min().fill(idx);
+        let dst_idx = self.slots_min().fill();
         unsafe {
             self.move_from_to(idx, dst_idx);
         }
@@ -162,7 +162,7 @@ impl<T: Item> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
     #[inline(always)]
     fn fill_slot_max(&mut self, idx: usize) {
-        let dst_idx = self.slots_max().fill(idx);
+        let dst_idx = self.slots_max().fill();
         unsafe {
             self.move_from_to(idx, dst_idx);
         }

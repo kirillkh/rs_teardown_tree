@@ -1,8 +1,7 @@
 use base::{Item, TeardownTreeInternal, lefti, righti};
-use drivers::{TraversalDriver, TraversalDecision, Sink};
+use drivers::Sink;
 use delete_range::BulkDeleteCommon;
 use std::cmp::Ordering;
-use std::mem;
 
 
 pub trait Interval: Sized {

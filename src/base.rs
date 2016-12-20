@@ -3,7 +3,7 @@ use std::mem;
 use std::cmp::{max, Ordering};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use delete_range::{DeleteRange, DeleteRangeCache, DeleteRangeInternal};
+use delete_range::{DeleteRangeCache, DeleteRangeInternal};
 use drivers::{TraversalDriver, RangeRefDriver, RangeDriver, Sink};
 
 pub trait Item: Sized+Clone {
@@ -107,7 +107,7 @@ impl<T: Item> TeardownTree<T> {
         TeardownTree { internal: TeardownTreeInternal::new(sorted) }
     }
 
-    fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTree<T> {
+    pub fn with_nodes(nodes: Vec<Option<Node<T>>>) -> TeardownTree<T> {
         TeardownTree { internal: TeardownTreeInternal::with_nodes(nodes) }
     }
 
@@ -376,7 +376,7 @@ impl<T: Item> Drop for TeardownTreeInternal<T> {
 
 impl<T: Item> TeardownTreeInternal<T> {
     /// Constructs a new TeardownTree<T> based on raw nodes vec.
-    fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTreeInternal<T> {
+    pub fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTreeInternal<T> {
         let size = nodes.iter().filter(|x| x.is_some()).count();
         let height = Self::calc_height(&nodes, 0);
         let capacity = nodes.len();
