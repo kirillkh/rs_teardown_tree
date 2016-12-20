@@ -60,18 +60,17 @@ impl SlotStack {
 
 
     #[inline(always)]
-    pub fn fill<T: Item>(&mut self, tree: &mut TeardownTreeInternal<T>, src_idx: usize) {
+    pub fn fill(&mut self, src_idx: usize) -> usize {
         debug_assert!(self.nfilled < self.nslots);
         let dst_idx = self.slot_at(self.nfilled).idx;
         self.nfilled += 1;
-        unsafe {
-            tree.move_from_to(src_idx, dst_idx);
-        }
+        dst_idx
     }
 
 
     #[inline(always)]
     fn slot_at(&self, idx: usize) -> &mut Slot {
+        debug_assert!(idx < self.nslots);
         unsafe {
             mem::transmute(self.slots.offset(idx as isize))
         }

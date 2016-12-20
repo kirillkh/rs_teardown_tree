@@ -3,8 +3,8 @@ use std::mem;
 use std::cmp::{max, Ordering};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use delete_range::{DeleteRange, DeleteRangeCache};
-use drivers::{TraversalDriver, RangeRefDriver, RangeDriver};
+use delete_range::{DeleteRange, DeleteRangeCache, DeleteRangeInternal};
+use drivers::{TraversalDriver, RangeRefDriver, RangeDriver, Sink};
 
 pub trait Item: Sized+Clone {
     type Key: Ord;
@@ -35,7 +35,6 @@ impl<T: Item> Node<T> {
     }
 }
 
-
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
 pub trait TeardownTreeRefill<T: Copy+Item> {
     fn refill(&mut self, master: &TeardownTree<T>);
@@ -44,13 +43,13 @@ pub trait TeardownTreeRefill<T: Copy+Item> {
 
 impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTree<T> {
     fn refill(&mut self, master: &TeardownTree<T>) {
-        self.internal.unwrap().refill(master)
+        self.internal.refill(master)
     }
 }
 
 impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTreeInternal<T> {
     fn refill(&mut self, master: &TeardownTree<T>) {
-        let master = master.internal.unwrap();
+        let master = &master.internal;
         let len = self.data.len();
         debug_assert!(len == master.data.len());
         unsafe {
@@ -78,7 +77,7 @@ impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTreeInternal<T> {
 
 #[derive(Clone)]
 pub struct TeardownTree<T: Item> {
-    internal: Option<TeardownTreeInternal<T>>
+    internal: TeardownTreeInternal<T>
 }
 
 #[derive(Clone)]
@@ -105,31 +104,48 @@ impl<T: Item> TeardownTree<T> {
     /// Constructs a new TeardownTree<T>
     /// **Note:** the argument must be sorted!
     pub fn new(sorted: Vec<T>) -> TeardownTree<T> {
-        TeardownTree { internal: Some(TeardownTreeInternal::new(sorted)) }
+        TeardownTree { internal: TeardownTreeInternal::new(sorted) }
     }
 
     fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTree<T> {
-        TeardownTree { internal: Some(TeardownTreeInternal::with_nodes(nodes)) }
+        TeardownTree { internal: TeardownTreeInternal::with_nodes(nodes) }
     }
 
 
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
     /// Vec. The items are returned in order.
     pub fn delete_range(&mut self, from: T::Key, to: T::Key, output: &mut Vec<T>) {
-        self.delete_with_driver(&mut RangeDriver::new(from, to), output)
+        debug_assert!(output.is_empty());
+        output.truncate(0);
+
+        self.delete_with_driver(&mut RangeDriver::new(from, to, output))
     }
 
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
     pub fn delete_range_ref(&mut self, from: &T::Key, to: &T::Key, output: &mut Vec<T>) {
-        self.delete_with_driver(&mut RangeRefDriver::new(from, to), output)
+        debug_assert!(output.is_empty());
+        output.truncate(0);
+
+        self.delete_with_driver(&mut RangeRefDriver::new(from, to, output))
     }
 
 
     /// Delete based on driver decisions.
-    fn delete_with_driver<D: TraversalDriver<T::Key>>(&mut self, drv: &mut D, output: &mut Vec<T>) {
-        self.internal = Some(
-            self.internal.take().unwrap().delete_with_driver(drv, output)
-        );
+    fn delete_with_driver<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
+        self.internal.delete_with_driver(drv)
+    }
+
+
+    pub fn size(&self) -> usize {
+        self.internal.size()
+    }
+
+    pub fn clear(&mut self) {
+        self.internal.clear()
+    }
+
+    pub fn delete(&mut self, search: &T::Key) -> Option<T> {
+        self.internal.delete(search)
     }
 }
 
@@ -201,19 +217,13 @@ impl<T: Item> TeardownTreeInternal<T> {
     }
 
     /// Delete based on driver decisions.
-    fn delete_with_driver<D: TraversalDriver<T::Key>>(self, drv: &mut D, output: &mut Vec<T>) -> Self {
-        debug_assert!(output.is_empty());
-        output.truncate(0);
-
-        let tmp_out = Vec::from_raw_parts(output.as_mut_ptr(), output.len(), output.capacity());
-        let (tree, tmp_out) = DeleteRange::delete_range(self, drv, tmp_out);
-        mem::forget(tmp_out);
+    fn delete_with_driver<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
+        self.delete_range(drv);
 
         debug_assert!({
             let cache = &self.delete_range_cache;
             cache.slots_min.is_empty() && cache.slots_max.is_empty()
         });
-        tree
     }
 
 
@@ -224,7 +234,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     }
 
     #[inline(always)]
-    fn item(&self, idx: usize) -> &T {
+    pub fn item(&self, idx: usize) -> &T {
         &self.node(idx).item
     }
 
@@ -232,7 +242,6 @@ impl<T: Item> TeardownTreeInternal<T> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     pub fn delete(&mut self, search: &T::Key) -> Option<T> {
         self.index_of(search).map(|idx| {
-            self.size -= 1;
             self.delete_idx(idx)
         })
     }
@@ -280,7 +289,7 @@ impl<T: Item> TeardownTreeInternal<T> {
 
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> T {
-        debug_assert!(!self.is_null(idx));
+        debug_assert!(!self.is_nil(idx));
 
         match (self.has_left(idx), self.has_right(idx)) {
             (false, false) => {
@@ -365,45 +374,6 @@ impl<T: Item> Drop for TeardownTreeInternal<T> {
     }
 }
 
-//pub trait TeardownTreeInternal<T: Item> {
-//    fn with_nodes(nodes: Vec<Option<Node<T>>>) -> TeardownTree<T>;
-////    fn into_node_vec(self) -> Vec<Option<Node<T>>>;
-//
-//    fn node(&self, idx: usize) -> &Node<T>;
-//    fn node_mut(&mut self, idx: usize) -> &mut Node<T>;
-//
-//    fn node_opt(&self, idx: usize) -> Option<&Node<T>>;
-//
-//    fn parent_opt(&self, idx: usize) -> Option<&Node<T>>;
-//    fn left_opt(&self, idx: usize) -> Option<&Node<T>>;
-//    fn right_opt(&self, idx: usize) -> Option<&Node<T>>;
-//
-//    fn parent(&self, idx: usize) -> &Node<T>;
-//    fn left(&self, idx: usize) -> &Node<T>;
-//    fn right(&self, idx: usize) -> &Node<T>;
-//
-//    fn has_left(&self, idx: usize) -> bool;
-//    fn has_right(&self, idx: usize) -> bool;
-//    fn is_null(&self, idx: usize) -> bool;
-//
-//    fn drop_items(&mut self);
-//
-//    fn left_enclosing(curr: usize) -> usize;
-//    fn right_enclosing(curr: usize) -> usize;
-//
-//    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
-//                                    where F: FnMut(&mut Self, &mut A, usize);
-//    fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, f: F)
-//                                    where F: FnMut(&mut Self, &mut A, usize);
-//    fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, f: F)
-//                                    where F: FnMut(&mut Self, &mut A, usize);
-//
-//    fn take(&mut self, idx: usize) -> T;
-//    fn place(&mut self, idx: usize, item: T);
-//    unsafe fn move_to(&mut self, idx: usize, dst: *mut T);
-//    unsafe fn move_from_to(&mut self, src: usize, dst: usize);
-//}
-
 impl<T: Item> TeardownTreeInternal<T> {
     /// Constructs a new TeardownTree<T> based on raw nodes vec.
     fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTreeInternal<T> {
@@ -443,7 +413,7 @@ impl<T: Item> TeardownTreeInternal<T> {
 //    }
 
     #[inline(always)]
-    fn node(&self, idx: usize) -> &Node<T> {
+    pub fn node(&self, idx: usize) -> &Node<T> {
         &self.data[idx]
     }
 
@@ -454,7 +424,7 @@ impl<T: Item> TeardownTreeInternal<T> {
 
     #[inline(always)]
     fn node_opt(&self, idx: usize) -> Option<&Node<T>> {
-        if self.is_null(idx) { None } else { Some(self.node(idx)) }
+        if self.is_nil(idx) { None } else { Some(self.node(idx)) }
     }
 
     #[inline(always)]
@@ -469,7 +439,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     #[inline(always)]
     fn left_opt(&self, idx: usize) -> Option<&Node<T>> {
         let lefti = lefti(idx);
-        if self.is_null(lefti) {
+        if self.is_nil(lefti) {
             None
         } else {
             Some(&self.data[lefti])
@@ -479,7 +449,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     #[inline(always)]
     fn right_opt(&self, idx: usize) -> Option<&Node<T>> {
         let righti = righti(idx);
-        if self.is_null(righti) {
+        if self.is_nil(righti) {
             None
         } else {
             Some(&self.data[righti])
@@ -490,37 +460,37 @@ impl<T: Item> TeardownTreeInternal<T> {
     #[inline(always)]
     fn parent(&self, idx: usize) -> &Node<T> {
         let parenti = parenti(idx);
-        debug_assert!(idx > 0 && !self.is_null(idx));
+        debug_assert!(idx > 0 && !self.is_nil(idx));
         &self.data[parenti]
     }
 
     #[inline(always)]
     fn left(&self, idx: usize) -> &Node<T> {
         let lefti = lefti(idx);
-        debug_assert!(!self.is_null(lefti));
+        debug_assert!(!self.is_nil(lefti));
         &self.data[lefti]
     }
 
     #[inline(always)]
     fn right(&self, idx: usize) -> &Node<T> {
         let righti = righti(idx);
-        debug_assert!(!self.is_null(righti));
+        debug_assert!(!self.is_nil(righti));
         &self.data[righti]
     }
 
 
     #[inline(always)]
-    fn has_left(&self, idx: usize) -> bool {
-        !self.is_null(lefti(idx))
+    pub fn has_left(&self, idx: usize) -> bool {
+        !self.is_nil(lefti(idx))
     }
 
     #[inline(always)]
-    fn has_right(&self, idx: usize) -> bool {
-        !self.is_null(righti(idx))
+    pub fn has_right(&self, idx: usize) -> bool {
+        !self.is_nil(righti(idx))
     }
 
     #[inline(always)]
-    fn is_null(&self, idx: usize) -> bool {
+    pub fn is_nil(&self, idx: usize) -> bool {
         idx >= self.data.len() || !self.mask[idx]
     }
 
@@ -566,7 +536,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     #[inline]
     fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
                                                 where F: FnMut(&mut Self, &mut A, usize) {
-        if self.is_null(root) {
+        if self.is_nil(root) {
             return;
         }
 
@@ -598,7 +568,7 @@ impl<T: Item> TeardownTreeInternal<T> {
                         }
 
                         next = l_enclosing + 1; // right sibling
-                        if !self.is_null(next) {
+                        if !self.is_nil(next) {
                             break;
                         }
                     }
@@ -609,9 +579,9 @@ impl<T: Item> TeardownTreeInternal<T> {
     }
 
     #[inline]
-    fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
+    pub fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
                                             where F: FnMut(&mut Self, &mut A, usize) {
-        if self.is_null(root) {
+        if self.is_nil(root) {
             return;
         }
 
@@ -647,7 +617,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     #[inline]
     fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
                                                         where F: FnMut(&mut Self, &mut A, usize) {
-        if self.is_null(root) {
+        if self.is_nil(root) {
             return;
         }
 
@@ -701,27 +671,30 @@ impl<T: Item> TeardownTreeInternal<T> {
     }
 
     #[inline(always)]
-    fn take(&mut self, idx: usize) -> T {
-        debug_assert!(!self.is_null(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
+    pub fn take(&mut self, idx: usize) -> T {
+        debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         let p: *const Node<T> = unsafe {
             self.data.as_ptr().offset(idx as isize)
         };
         self.mask[idx] = false;
+        self.size -= 1;
         unsafe { ptr::read(&(*p).item) }
     }
 
     #[inline(always)]
-    unsafe fn move_to(&mut self, idx: usize, dst: *mut T) {
-        debug_assert!(!self.is_null(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
+    pub unsafe fn move_to<S: Sink<T>>(&mut self, idx: usize, sink: &mut S) {
+        debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         self.mask[idx] = false;
-        let p: *mut Node<T> = self.data.as_mut_ptr().offset(idx as isize);
-        let x = ptr::read(&(*p).item);
-        ptr::write(dst, x);
+        self.size -= 1;
+        let p: *const Node<T> = self.data.as_ptr().offset(idx as isize);
+
+        let item = ptr::read(&(*p).item);
+        sink.consume_unchecked(item);
     }
 
     #[inline(always)]
-    unsafe fn move_from_to(&mut self, src: usize, dst: usize) {
-        debug_assert!(!self.is_null(src) && self.is_null(dst));
+    pub unsafe fn move_from_to(&mut self, src: usize, dst: usize) {
+        debug_assert!(!self.is_nil(src) && self.is_nil(dst));
         self.mask[src] = false;
         self.mask[dst] = true;
         let pdata = self.data.as_mut_ptr();
@@ -737,6 +710,7 @@ impl<T: Item> TeardownTreeInternal<T> {
             self.data[idx].item = item;
         } else {
             self.mask[idx] = true;
+            self.size += 1;
             unsafe {
                 let p: *mut Node<T> = self.data.as_mut_ptr().offset(idx as isize);
                 ptr::write(p, Node::new(item));
@@ -752,7 +726,7 @@ impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
         let mut nz: Vec<_> = self.internal.mask.iter().enumerate()
             .rev()
             .skip_while(|&(_, flag)| !flag)
-            .map(|(i, &flag)| match (self.node(i), flag) {
+            .map(|(i, &flag)| match (self.internal.node(i), flag) {
                 (_, false) => String::from("0"),
                 (ref node, true) => format!("{:?}", node.item.key())
             })
@@ -802,14 +776,14 @@ impl<K: Ord+Debug, T: Item<Key=K>> TeardownTree<T> {
     fn fmt_subtree(&self, fmt: &mut Formatter, idx: usize, ancestors: &mut Vec<bool>) -> fmt::Result {
         self.fmt_branch(fmt, ancestors)?;
 
-        if !self.is_null(idx) {
-            writeln!(fmt, "{:?}", self.item(idx).key())?;
+        if !self.internal.is_nil(idx) {
+            writeln!(fmt, "{:?}", self.internal.item(idx).key())?;
 
             if idx%2 == 0 && !ancestors.is_empty() {
                 *ancestors.last_mut().unwrap() = false;
             }
 
-            if self.has_left(idx) || self.has_right(idx) {
+            if self.internal.has_left(idx) || self.internal.has_right(idx) {
                 ancestors.push(true);
                 self.fmt_subtree(fmt, lefti(idx), ancestors)?;
                 self.fmt_subtree(fmt, righti(idx), ancestors)?;
