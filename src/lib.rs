@@ -21,9 +21,11 @@ pub use base::{Item, TeardownTree, TeardownTreeRefill, Node};
 
 #[cfg(test)]
 mod tests {
-    use base::{TeardownTree, TeardownTreeInternal, Node, lefti, righti};
+    use base::{TeardownTreeInternal, Node, lefti, righti};
+    use delete_range::DeleteRangeInternal;
+    use drivers::RangeDriver;
 
-    type Tree = TeardownTree<usize>;
+    type Tree = TeardownTreeInternal<usize>;
 
 
     #[test]
@@ -74,7 +76,7 @@ mod tests {
         let mut expect = expect_out.to_vec();
         expect.sort();
 
-        tree.delete_range(from, to, &mut output);
+        tree.delete_range(&mut RangeDriver::new(from, to, &mut output));
 
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
         assert_eq!(format!("{:?}", &output), format!("{:?}", expect));
@@ -254,7 +256,7 @@ mod tests {
                 let mut tree_mod = tree.clone();
 //                println!("tree={:?}, from={}, to={}", &tree, i, j);
                 output.truncate(0);
-                tree_mod.delete_range(i, j, &mut output);
+                tree_mod.delete_range(&mut RangeDriver::new(i, j, &mut output));
                 delete_range_check(n, i, j, &mut output, tree_mod, &tree);
             }
         }
@@ -270,7 +272,7 @@ mod tests {
     }
 
     fn check_bst(tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, idx: usize) -> Option<(usize, usize)> {
-        if tree.size() == 0 || !tree.is_null(idx) {
+        if tree.size() == 0 || !tree.is_nil(idx) {
             return None;
         }
 

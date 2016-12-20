@@ -69,7 +69,6 @@ impl SlotStack {
 
     #[inline(always)]
     fn slot_at(&self, idx: usize) -> &mut Slot {
-        debug_assert!(idx < self.nslots);
         unsafe {
             mem::transmute(self.slots.offset(idx as isize))
         }

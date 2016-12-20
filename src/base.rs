@@ -37,19 +37,18 @@ impl<T: Item> Node<T> {
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
 pub trait TeardownTreeRefill<T: Copy+Item> {
-    fn refill(&mut self, master: &TeardownTree<T>);
+    fn refill(&mut self, master: &Self);
 }
 
 
 impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTree<T> {
     fn refill(&mut self, master: &TeardownTree<T>) {
-        self.internal.refill(master)
+        self.internal.refill(&master.internal)
     }
 }
 
 impl<T: Copy+Item> TeardownTreeRefill<T> for TeardownTreeInternal<T> {
-    fn refill(&mut self, master: &TeardownTree<T>) {
-        let master = &master.internal;
+    fn refill(&mut self, master: &TeardownTreeInternal<T>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
         unsafe {
@@ -423,7 +422,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     }
 
     #[inline(always)]
-    fn node_opt(&self, idx: usize) -> Option<&Node<T>> {
+    pub fn node_opt(&self, idx: usize) -> Option<&Node<T>> {
         if self.is_nil(idx) { None } else { Some(self.node(idx)) }
     }
 
@@ -720,13 +719,19 @@ impl<T: Item> TeardownTreeInternal<T> {
 }
 
 
-
 impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        let mut nz: Vec<_> = self.internal.mask.iter().enumerate()
+        fmt::Debug::fmt(&self.internal, fmt)
+    }
+}
+
+
+impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTreeInternal<T> {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        let mut nz: Vec<_> = self.mask.iter().enumerate()
             .rev()
             .skip_while(|&(_, flag)| !flag)
-            .map(|(i, &flag)| match (self.internal.node(i), flag) {
+            .map(|(i, &flag)| match (self.node(i), flag) {
                 (_, false) => String::from("0"),
                 (ref node, true) => format!("{:?}", node.item.key())
             })
@@ -746,8 +751,14 @@ impl<K: Ord+Debug, T: Item<Key=K>> Debug for TeardownTree<T> {
 }
 
 
-
 impl<K: Ord+Debug, T: Item<Key=K>> fmt::Display for TeardownTree<T> {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        fmt::Display::fmt(&self.internal, fmt)
+    }
+}
+
+
+impl<K: Ord+Debug, T: Item<Key=K>> fmt::Display for TeardownTreeInternal<T> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         writeln!(fmt, "")?;
         let mut ancestors = vec![];
@@ -755,7 +766,7 @@ impl<K: Ord+Debug, T: Item<Key=K>> fmt::Display for TeardownTree<T> {
     }
 }
 
-impl<K: Ord+Debug, T: Item<Key=K>> TeardownTree<T> {
+impl<K: Ord+Debug, T: Item<Key=K>> TeardownTreeInternal<T> {
     fn fmt_branch(&self, fmt: &mut Formatter, ancestors: &Vec<bool>) -> fmt::Result {
         for (i, c) in ancestors.iter().enumerate() {
             if i == ancestors.len() - 1 {
@@ -776,14 +787,14 @@ impl<K: Ord+Debug, T: Item<Key=K>> TeardownTree<T> {
     fn fmt_subtree(&self, fmt: &mut Formatter, idx: usize, ancestors: &mut Vec<bool>) -> fmt::Result {
         self.fmt_branch(fmt, ancestors)?;
 
-        if !self.internal.is_nil(idx) {
-            writeln!(fmt, "{:?}", self.internal.item(idx).key())?;
+        if !self.is_nil(idx) {
+            writeln!(fmt, "{:?}", self.item(idx).key())?;
 
             if idx%2 == 0 && !ancestors.is_empty() {
                 *ancestors.last_mut().unwrap() = false;
             }
 
-            if self.internal.has_left(idx) || self.internal.has_right(idx) {
+            if self.has_left(idx) || self.has_right(idx) {
                 ancestors.push(true);
                 self.fmt_subtree(fmt, lefti(idx), ancestors)?;
                 self.fmt_subtree(fmt, righti(idx), ancestors)?;
