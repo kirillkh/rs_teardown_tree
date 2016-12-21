@@ -1,4 +1,3 @@
-use base::{Item, TeardownTree, TeardownTreeInternal};
 //use std::ptr::Unique;
 use std::mem;
 use std::fmt::{Debug, Formatter};
@@ -60,13 +59,11 @@ impl SlotStack {
 
 
     #[inline(always)]
-    pub fn fill<T: Item>(&mut self, tree: &mut TeardownTree<T>, src_idx: usize) {
+    pub fn fill(&mut self) -> usize {
         debug_assert!(self.nfilled < self.nslots);
         let dst_idx = self.slot_at(self.nfilled).idx;
         self.nfilled += 1;
-        unsafe {
-            tree.move_from_to(src_idx, dst_idx);
-        }
+        dst_idx
     }
 
 
@@ -87,10 +84,10 @@ impl SlotStack {
         self.nslots
     }
 
-    #[inline(always)]
-    pub fn nfilled(&self) -> usize {
-        self.nfilled
-    }
+//    #[inline(always)]
+//    pub fn nfilled(&self) -> usize {
+//        self.nfilled
+//    }
 
     #[inline(always)]
     pub fn has_open(&self) -> bool {

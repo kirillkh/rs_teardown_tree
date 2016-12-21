@@ -4,9 +4,11 @@ mod benches {
 
     use self::test::Bencher;
 
-    use base::{TeardownTree, Node, DriverFromToRef, TeardownTreeRefill};
+    use base::{TeardownTreeInternal, Node, TeardownTreeRefill};
+    use delete_range::DeleteRangeInternal;
+    use drivers::RangeDriver;
 
-    type Tree = TeardownTree<usize>;
+    type Tree = TeardownTreeInternal<usize>;
 
     #[bench]
     fn bench_delete_range_00100(bencher: &mut Bencher) {
@@ -135,7 +137,7 @@ mod benches {
             for i in 0..100 {
                 output.truncate(0);
                 let x = perm[i];
-                copy.delete_range(&mut DriverFromTo::new((x - 1) * n / 100, x * n / 100), &mut output);
+                copy.delete_range(&mut RangeDriver::new((x - 1) * n / 100, x * n / 100, &mut output));
                 test::black_box(output.len());
             }
         });

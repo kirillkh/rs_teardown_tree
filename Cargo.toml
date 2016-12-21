@@ -1,6 +1,6 @@
 [package]
 name = "teardown_tree"
-version = "0.4.7"
+version = "0.4.8"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 description = "A binary search tree that supports fast clone and delete-range operations"
 readme = "README.rst"
@@ -21,6 +21,7 @@ path = "src/bin/benchmarks.rs"
 rand = "0.3.14"
 cpuprofiler = "0.0.2"
 #wio = "0.1.2"
+teardown_tree___treap = "0.0.2"
 
 
 [profile.release]
