@@ -201,13 +201,11 @@ impl<T: Item> TeardownTreeInternal<T> {
                 let lh = Self::build(&mut sorted[..mid], lefti, data);
                 let rh = Self::build(&mut sorted[mid+1..], righti, data);
 
-                let p = unsafe {
-                    sorted.as_ptr().offset(mid as isize)
-                };
-                let item = unsafe { ptr::read(p) };
-
-                let garbage = mem::replace(&mut data[idx], Node { item: item} );
-                mem::forget(garbage);
+                unsafe {
+                    let p = sorted.get_unchecked(mid);
+                    let item = ptr::read(p);
+                    ptr::write(data.get_unchecked_mut(idx), Node { item: item });
+                }
 
                 debug_assert!(rh <= lh);
                 1 + lh
@@ -647,8 +645,8 @@ impl<T: Item> TeardownTreeInternal<T> {
         if self.size*2 <= self.data.len() {
             self.traverse_preorder(0, &mut 0, |this: &mut Self, _, idx| {
                 unsafe {
-                    let p = this.data.as_mut_ptr();
-                    ptr::drop_in_place(p.offset(idx as isize));
+                    let p = this.data.get_unchecked_mut(idx);
+                    ptr::drop_in_place(p);
                 }
 
                 this.mask[idx] = false;
@@ -673,7 +671,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     pub fn take(&mut self, idx: usize) -> T {
         debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         let p: *const Node<T> = unsafe {
-            self.data.as_ptr().offset(idx as isize)
+            self.data.get_unchecked(idx)
         };
         self.mask[idx] = false;
         self.size -= 1;
@@ -685,7 +683,7 @@ impl<T: Item> TeardownTreeInternal<T> {
         debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         *self.mask.get_unchecked_mut(idx) = false;
         self.size -= 1;
-        let p: *const Node<T> = self.data.as_ptr().offset(idx as isize);
+        let p: *const Node<T> = self.data.get_unchecked(idx);
 
         let item = ptr::read(&(*p).item);
         sink.consume_unchecked(item);
@@ -694,8 +692,8 @@ impl<T: Item> TeardownTreeInternal<T> {
     #[inline(always)]
     pub unsafe fn move_from_to(&mut self, src: usize, dst: usize) {
         debug_assert!(!self.is_nil(src) && self.is_nil(dst));
-        self.mask[src] = false;
-        self.mask[dst] = true;
+        *self.mask.get_unchecked_mut(src) = false;
+        *self.mask.get_unchecked_mut(dst) = true;
         let pdata = self.data.as_mut_ptr();
         let psrc: *mut Node<T> = pdata.offset(src as isize);
         let pdst: *mut Node<T> = pdata.offset(dst as isize);
@@ -711,7 +709,7 @@ impl<T: Item> TeardownTreeInternal<T> {
             self.mask[idx] = true;
             self.size += 1;
             unsafe {
-                let p: *mut Node<T> = self.data.as_mut_ptr().offset(idx as isize);
+                let p = self.data.get_unchecked_mut(idx);
                 ptr::write(p, Node::new(item));
             };
         }
