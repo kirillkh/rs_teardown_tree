@@ -490,7 +490,7 @@ impl<T: Item> TeardownTreeInternal<T> {
 
     #[inline(always)]
     pub fn is_nil(&self, idx: usize) -> bool {
-        idx >= self.data.len() || !self.mask[idx]
+        idx >= self.data.len() || !unsafe { *self.mask.get_unchecked(idx) }
     }
 
 
@@ -683,7 +683,7 @@ impl<T: Item> TeardownTreeInternal<T> {
     #[inline(always)]
     pub unsafe fn move_to<S: Sink<T>>(&mut self, idx: usize, sink: &mut S) {
         debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
-        self.mask[idx] = false;
+        *self.mask.get_unchecked_mut(idx) = false;
         self.size -= 1;
         let p: *const Node<T> = self.data.as_ptr().offset(idx as isize);
 
