@@ -138,7 +138,7 @@ fn consume_unchecked<T>(output: &mut Vec<T>, item: T) {
         let len = output.len();
         debug_assert!(len < output.capacity());
         output.set_len(len + 1);
-        let p = output.as_mut_ptr().offset(len as isize);
+        let p = output.get_unchecked_mut(len);
         ptr::write(p, item);
     }
 }
@@ -150,7 +150,7 @@ fn consume_ptr<T>(output: &mut Vec<T>, src: *const T) {
         let len = output.len();
         debug_assert!(len < output.capacity());
         output.set_len(len + 1);
-        let p = output.as_mut_ptr().offset(len as isize);
+        let p = output.get_unchecked_mut(len);
         let item = ptr::read(src);
         ptr::write(p, item);
     }
