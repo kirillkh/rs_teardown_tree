@@ -88,17 +88,6 @@ pub struct TeardownTreeInternal<T: Item> {
     pub delete_range_cache: DeleteRangeCache,
 }
 
-//impl<T: Item> Clone for TeardownTreeInternal<T> {
-//    fn clone(&self) -> Self {
-//        TeardownTreeInternal {
-//            data: self.data.clone(),
-//            mask: self.mask.clone(),
-//            size: self.size,
-//            delete_range_cache: self.delete_range_cache.clone()
-//        }
-//    }
-//}
-
 impl<T: Item> TeardownTree<T> {
     /// Constructs a new TeardownTree<T>
     /// **Note:** the argument must be sorted!
@@ -117,7 +106,7 @@ impl<T: Item> TeardownTree<T> {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
-        self.delete_with_driver(&mut RangeDriver::new(from, to, output))
+        self.internal.delete_with_driver(&mut RangeDriver::new(from, to, output))
     }
 
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
@@ -125,13 +114,7 @@ impl<T: Item> TeardownTree<T> {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
-        self.delete_with_driver(&mut RangeRefDriver::new(from, to, output))
-    }
-
-
-    /// Delete based on driver decisions.
-    fn delete_with_driver<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
-        self.internal.delete_with_driver(drv)
+        self.internal.delete_with_driver(&mut RangeRefDriver::new(from, to, output))
     }
 
 
@@ -187,7 +170,7 @@ impl<T: Item> TeardownTreeInternal<T> {
             debug_assert!(x >= 1, "x={}, n={}", x, n);
             x - 1
         } else {
-            n - x / 2
+            n - x/2
         }
     }
 
