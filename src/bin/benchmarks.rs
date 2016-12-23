@@ -2,164 +2,12 @@ extern crate rand;
 extern crate teardown_tree___treap;
 extern crate teardown_tree;
 //extern crate wio;
-use std::time;
-
-use teardown_tree___treap::TreapMap;
 
 use std::collections::BTreeSet;
+use bench_delete_range::{TreapMaster, TreeBulk, TeardownTreeSingle};
+use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
+
 use std::time::Duration;
-use rand::{XorShiftRng, SeedableRng, Rng};
-
-use teardown_tree::{TeardownTree, TeardownTreeRefill};
-
-type Tree = TeardownTree<usize>;
-type TreeBulk = TeardownTreeBulk;
-
-
-
-fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
-    let mut rng = XorShiftRng::from_seed([1,2,3,4]);
-    let mut elapsed_nanos = 0;
-    for _ in 0..iters {
-        let mut btset = BTreeSet::new();
-        for i in 0..n {
-            btset.insert(i);
-        }
-
-        let keys = {
-            let mut keys = vec![];
-            let mut pool: Vec<_> = (0..n).collect();
-
-            for i in 0..rm_items {
-                let n = rng.gen_range(0, n - i);
-                let next = pool.swap_remove(n);
-                keys.push(next);
-            }
-
-            keys
-        };
-
-        let start = time::SystemTime::now();
-        for i in 0..rm_items {
-            let x = btset.remove(&keys[i]);
-            black_box(x);
-        }
-        let elapsed = start.elapsed().unwrap();
-        elapsed_nanos += nanos(elapsed);
-    }
-
-    println!("average time to delete {} random elements from BTreeMap using remove(), {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
-}
-
-fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
-    let mut rng = XorShiftRng::from_seed([1,2,3,4]);
-    let mut elapsed_nanos = 0;
-
-    let elems: Vec<_> = (1..n+1).collect();
-
-    let tree = TeardownTreeBulk(Tree::new(elems));
-    let mut copy = tree.clone();
-    let mut output = Vec::with_capacity(tree.0.size());
-
-    for _ in 0..iters {
-        let keys = {
-            let mut pool: Vec<_> = (1..n+1).collect();
-            let mut keys = vec![];
-
-            for i in 0..rm_items {
-                let r = rng.gen_range(0, n-i);
-                let next = pool.swap_remove(r);
-                keys.push(next);
-            }
-
-            keys
-        };
-
-        copy.rfill(&tree);
-
-
-        let start = time::SystemTime::now();
-        for i in 0..rm_items {
-            output.truncate(0);
-            let x = copy.0.delete_range(keys[i], keys[i], &mut output);
-            black_box(x);
-        }
-        let elapsed = start.elapsed().unwrap();
-        elapsed_nanos += nanos(elapsed);
-    }
-
-    println!("average time to delete {} random elements from TeardownTree using delete_range(), {} elements: {}ns, total: {}ms", rm_items, n, elapsed_nanos/iters, elapsed_nanos/1000000)
-}
-
-
-fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) {
-    let elems: Vec<_> = (0..n).collect();
-    let tree = M::build(elems);
-    let mut copy = tree.cpy();
-    let mut elapsed_nanos = 0;
-
-    for _ in 0..iters {
-        copy = black_box(copy);
-        copy.clear();
-        let start = time::SystemTime::now();
-        copy.rfill(&tree);
-        let elapsed = start.elapsed().unwrap();
-        elapsed_nanos += nanos(elapsed);
-    }
-
-    println!("average time to refill {} with {} elements: {}ns, total: {}ms", M::descr_refill(), n, elapsed_nanos/iters, elapsed_nanos/1000000)
-}
-
-#[inline(never)]
-fn bench_refill_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters: u64) {
-    let mut rng = XorShiftRng::from_seed([1,2,3,4]);
-    let elems: Vec<_> = (0..n).collect();
-
-    let nranges = n / rm_items +
-        if n % rm_items != 0 { 1 } else { 0 };
-
-    let ranges = {
-        // generate a random permutation
-        let mut pool: Vec<_> = (0..nranges).collect();
-        let mut ranges = vec![];
-
-        for i in 0..nranges {
-            let k = rng.gen_range(0, nranges-i);
-            let range_idx = pool.swap_remove(k);
-            let from = range_idx * rm_items;
-            let to = ::std::cmp::min(from + rm_items-1, n-1);
-            ranges.push((from, to));
-        }
-
-        ranges
-    };
-
-
-    let tree = M::build(elems);
-    let mut copy = tree.cpy();
-    let mut output = Vec::with_capacity(tree.sz());
-    copy.del_range(0, n-1, &mut output);
-    output.truncate(0);
-
-    let start = time::SystemTime::now();
-    for _ in 0..iters {
-        copy.rfill(&tree);
-        for i in 0..nranges {
-            output.truncate(0);
-            let (ref from, ref to) = ranges[i];
-            copy.del_range(*from, *to, &mut output);
-            output = black_box(output);
-            assert!(output.len() == *to  - *from + 1, "from={}, to={}, expected: {}, len: {}", *from, *to, *to  - *from + 1, output.len());
-        }
-        assert!(copy.sz() == 0);
-    }
-    let elapsed = start.elapsed().unwrap();
-    let elapsed_nanos = nanos(elapsed);
-    println!("average time to refill/tear down {}, {} elements in bulks of {} elements: {}ns, total: {}ms", M::descr_cycle(), n, rm_items, elapsed_nanos/iters, elapsed_nanos/1000000)
-}
-
-
-
 
 #[inline]
 fn nanos(d: Duration) -> u64 {
@@ -276,251 +124,407 @@ fn main() {
 
 //---- unifying interfaces used in above benchmarks and its impls for 1) TeardownTree delete_range, 2) TeardownTree delete(), BTreeSet
 
-trait TeardownTreeMaster: Sized {
-    type Cpy: TeardownTreeCopy<Master=Self>;
+mod bench_delete_range {
+    use std::collections::BTreeSet;
+    use teardown_tree___treap::TreapMap;
+    use teardown_tree::{TeardownTree, TeardownTreeRefill};
+    use teardown_tree::PlainTeardownTree;
+    use std::time;
+    use rand::{XorShiftRng, SeedableRng, Rng};
+    use super::nanos;
 
-    fn build(elems: Vec<usize>) -> Self;
-    fn cpy(&self) -> Self::Cpy;
-    fn sz(&self) -> usize;
-    fn descr_cycle() -> String;
-    fn descr_refill() -> String;
-}
-
-trait TeardownTreeCopy {
-    type Master: TeardownTreeMaster;
-
-    fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>);
-    fn rfill(&mut self, master: &Self::Master);
-    fn sz(&self) -> usize;
-    fn clear(&mut self);
-}
+    pub type Tree = TeardownTree<usize>;
+    pub type TreeBulk = TeardownTreeBulk;
 
 
-/// for benchmarking TeardownTree delete_range()
-#[derive(Clone, Debug)]
-struct TeardownTreeBulk(TeardownTree<usize>);
+    pub fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
+        let mut rng = XorShiftRng::from_seed([1,2,3,4]);
+        let mut elapsed_nanos = 0;
+        for _ in 0..iters {
+            let mut btset = BTreeSet::new();
+            for i in 0..n {
+                btset.insert(i);
+            }
 
-impl TeardownTreeMaster for TeardownTreeBulk {
-    type Cpy = TeardownTreeBulk;
+            let keys = {
+                let mut keys = vec![];
+                let mut pool: Vec<_> = (0..n).collect();
 
-    fn build(elems: Vec<usize>) -> Self {
-        TeardownTreeBulk(TeardownTree::new(elems))
+                for i in 0..rm_items {
+                    let n = rng.gen_range(0, n - i);
+                    let next = pool.swap_remove(n);
+                    keys.push(next);
+                }
+
+                keys
+            };
+
+            let start = time::SystemTime::now();
+            for i in 0..rm_items {
+                let x = btset.remove(&keys[i]);
+                black_box(x);
+            }
+            let elapsed = start.elapsed().unwrap();
+            elapsed_nanos += nanos(elapsed);
+        }
+
+        println!("average time to delete {} random elements from BTreeMap using remove(), {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
     }
 
-    fn cpy(&self) -> Self {
-        self.clone()
+    pub fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
+        let mut rng = XorShiftRng::from_seed([1,2,3,4]);
+        let mut elapsed_nanos = 0;
+
+        let elems: Vec<_> = (1..n+1).collect();
+
+        let tree = TeardownTreeBulk(Tree::new(elems));
+        let mut copy = tree.clone();
+        let mut output = Vec::with_capacity(tree.0.size());
+
+        for _ in 0..iters {
+            let keys = {
+                let mut pool: Vec<_> = (1..n+1).collect();
+                let mut keys = vec![];
+
+                for i in 0..rm_items {
+                    let r = rng.gen_range(0, n-i);
+                    let next = pool.swap_remove(r);
+                    keys.push(next);
+                }
+
+                keys
+            };
+
+            copy.rfill(&tree);
+
+
+            let start = time::SystemTime::now();
+            for i in 0..rm_items {
+                output.truncate(0);
+                let x = copy.0.delete_range(keys[i], keys[i], &mut output);
+                black_box(x);
+            }
+            let elapsed = start.elapsed().unwrap();
+            elapsed_nanos += nanos(elapsed);
+        }
+
+        println!("average time to delete {} random elements from TeardownTree using delete_range(), {} elements: {}ns, total: {}ms", rm_items, n, elapsed_nanos/iters, elapsed_nanos/1000000)
     }
 
-    fn sz(&self) -> usize {
-        self.0.size()
+
+    pub fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) {
+        let elems: Vec<_> = (0..n).collect();
+        let tree = M::build(elems);
+        let mut copy = tree.cpy();
+        let mut elapsed_nanos = 0;
+
+        for _ in 0..iters {
+            copy = black_box(copy);
+            copy.clear();
+            let start = time::SystemTime::now();
+            copy.rfill(&tree);
+            let elapsed = start.elapsed().unwrap();
+            elapsed_nanos += nanos(elapsed);
+        }
+
+        println!("average time to refill {} with {} elements: {}ns, total: {}ms", M::descr_refill(), n, elapsed_nanos/iters, elapsed_nanos/1000000)
     }
 
-    fn descr_cycle() -> String {
-        "TeardownTree using delete_range()".to_string()
+    #[inline(never)]
+    pub fn bench_refill_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters: u64) {
+        let mut rng = XorShiftRng::from_seed([1,2,3,4]);
+        let elems: Vec<_> = (0..n).collect();
+
+        let nranges = n / rm_items +
+            if n % rm_items != 0 { 1 } else { 0 };
+
+        let ranges = {
+            // generate a random permutation
+            let mut pool: Vec<_> = (0..nranges).collect();
+            let mut ranges = vec![];
+
+            for i in 0..nranges {
+                let k = rng.gen_range(0, nranges-i);
+                let range_idx = pool.swap_remove(k);
+                let from = range_idx * rm_items;
+                let to = ::std::cmp::min(from + rm_items-1, n-1);
+                ranges.push((from, to));
+            }
+
+            ranges
+        };
+
+
+        let tree = M::build(elems);
+        let mut copy = tree.cpy();
+        let mut output = Vec::with_capacity(tree.sz());
+        copy.del_range(0, n-1, &mut output);
+        output.truncate(0);
+
+        let start = time::SystemTime::now();
+        for _ in 0..iters {
+            copy.rfill(&tree);
+            for i in 0..nranges {
+                output.truncate(0);
+                let (ref from, ref to) = ranges[i];
+                copy.del_range(*from, *to, &mut output);
+                output = black_box(output);
+                assert!(output.len() == *to  - *from + 1, "from={}, to={}, expected: {}, len: {}", *from, *to, *to  - *from + 1, output.len());
+            }
+            assert!(copy.sz() == 0);
+        }
+        let elapsed = start.elapsed().unwrap();
+        let elapsed_nanos = nanos(elapsed);
+        println!("average time to refill/tear down {}, {} elements in bulks of {} elements: {}ns, total: {}ms", M::descr_cycle(), n, rm_items, elapsed_nanos/iters, elapsed_nanos/1000000)
     }
 
-    fn descr_refill() -> String {
-        "TeardownTree".to_string()
-    }
-}
 
-impl TeardownTreeCopy for TeardownTreeBulk {
-    type Master = TeardownTreeBulk;
+    pub trait TeardownTreeMaster: Sized {
+        type Cpy: TeardownTreeCopy<Master = Self>;
 
-    fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-        self.0.delete_range(from, to, output);
-    }
-
-    fn rfill(&mut self, master: &Self::Master) {
-        self.0.refill(&master.0)
+        fn build(elems: Vec<usize>) -> Self;
+        fn cpy(&self) -> Self::Cpy;
+        fn sz(&self) -> usize;
+        fn descr_cycle() -> String;
+        fn descr_refill() -> String;
     }
 
-    fn sz(&self) -> usize {
-        self.0.size()
+    pub trait TeardownTreeCopy {
+        type Master: TeardownTreeMaster;
+
+        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>);
+        fn rfill(&mut self, master: &Self::Master);
+        fn sz(&self) -> usize;
+        fn clear(&mut self);
     }
 
-    fn clear(&mut self) {
-        self.0.clear();
+
+    /// for benchmarking TeardownTree delete_range()
+    #[derive(Clone, Debug)]
+    pub struct TeardownTreeBulk(TeardownTree<usize>);
+
+    impl TeardownTreeMaster for TeardownTreeBulk {
+        type Cpy = TeardownTreeBulk;
+
+        fn build(elems: Vec<usize>) -> Self {
+            TeardownTreeBulk(TeardownTree::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn sz(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "TeardownTree using delete_range()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "TeardownTree".to_string()
+        }
     }
-}
 
+    impl TeardownTreeCopy for TeardownTreeBulk {
+        type Master = TeardownTreeBulk;
 
+        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
+            self.0.delete_range(from, to, output);
+        }
 
-/// for benchmarking TeardownTree delete()
-#[derive(Clone, Debug)]
-struct TeardownTreeSingle(TeardownTree<usize>);
+        fn rfill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
 
-impl TeardownTreeMaster for TeardownTreeSingle {
-    type Cpy = TeardownTreeSingle;
+        fn sz(&self) -> usize {
+            self.0.size()
+        }
 
-    fn build(elems: Vec<usize>) -> Self {
-        TeardownTreeSingle(TeardownTree::new(elems))
+        fn clear(&mut self) {
+            self.0.clear();
+        }
     }
 
-    fn cpy(&self) -> Self {
-        self.clone()
+
+    /// for benchmarking TeardownTree delete()
+    #[derive(Clone, Debug)]
+    pub struct TeardownTreeSingle(TeardownTree<usize>);
+
+    impl TeardownTreeMaster for TeardownTreeSingle {
+        type Cpy = TeardownTreeSingle;
+
+        fn build(elems: Vec<usize>) -> Self {
+            TeardownTreeSingle(TeardownTree::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn sz(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "TeardownTree using delete()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "TeardownTree".to_string()
+        }
     }
 
-    fn sz(&self) -> usize {
-        self.0.size()
-    }
+    impl TeardownTreeCopy for TeardownTreeSingle {
+        type Master = TeardownTreeSingle;
 
-    fn descr_cycle() -> String {
-        "TeardownTree using delete()".to_string()
-    }
-
-    fn descr_refill() -> String {
-        "TeardownTree".to_string()
-    }
-}
-
-impl TeardownTreeCopy for TeardownTreeSingle {
-    type Master = TeardownTreeSingle;
-
-    fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-        for i in from..to+1 {
-            if let Some(x) = self.0.delete(&i) {
-                output.push(x);
+        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
+            for i in from..to + 1 {
+                if let Some(x) = self.0.delete(&i) {
+                    output.push(x);
+                }
             }
         }
-    }
 
-    fn rfill(&mut self, master: &Self::Master) {
-        self.0.refill(&master.0)
-    }
-
-    fn sz(&self) -> usize {
-        self.0.size()
-    }
-
-    fn clear(&mut self) {
-        self.0.clear();
-    }
-}
-
-
-
-/// for benchmarking BTreeSet remove()
-impl TeardownTreeMaster for BTreeSet<usize> {
-    type Cpy = BTreeSetCopy;
-
-    fn build(elems: Vec<usize>) -> Self {
-        let mut set = BTreeSet::new();
-
-        for elem in elems.into_iter() {
-            set.insert(elem);
+        fn rfill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
         }
 
-        set
+        fn sz(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
     }
 
-    fn cpy(&self) -> Self::Cpy {
-        BTreeSetCopy { set: self.clone() }
+
+    /// for benchmarking BTreeSet remove()
+    impl TeardownTreeMaster for BTreeSet<usize> {
+        type Cpy = BTreeSetCopy;
+
+        fn build(elems: Vec<usize>) -> Self {
+            let mut set = BTreeSet::new();
+
+            for elem in elems.into_iter() {
+                set.insert(elem);
+            }
+
+            set
+        }
+
+        fn cpy(&self) -> Self::Cpy {
+            BTreeSetCopy { set: self.clone() }
+        }
+
+        fn sz(&self) -> usize {
+            self.len()
+        }
+
+        fn descr_cycle() -> String {
+            "BTreeSet using remove()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "BTreeSet".to_string()
+        }
     }
 
-    fn sz(&self) -> usize {
-        self.len()
+    pub struct BTreeSetCopy {
+        set: BTreeSet<usize>
     }
 
-    fn descr_cycle() -> String {
-        "BTreeSet using remove()".to_string()
-    }
+    impl TeardownTreeCopy for BTreeSetCopy {
+        type Master = BTreeSet<usize>;
 
-    fn descr_refill() -> String {
-        "BTreeSet".to_string()
-    }
-}
-
-struct BTreeSetCopy {
-    set: BTreeSet<usize>
-}
-
-impl TeardownTreeCopy for BTreeSetCopy {
-    type Master = BTreeSet<usize>;
-
-    fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-        for i in from..to+1 {
-            if self.set.remove(&i) {
-                output.push(i);
+        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
+            for i in from..to + 1 {
+                if self.set.remove(&i) {
+                    output.push(i);
+                }
             }
         }
+
+        fn rfill(&mut self, master: &Self::Master) {
+            assert!(self.set.is_empty(), "size={}", self.set.len());
+            self.set = master.clone();
+        }
+
+        fn sz(&self) -> usize {
+            self.set.len()
+        }
+
+        fn clear(&mut self) {
+            self.set.clear();
+        }
     }
 
-    fn rfill(&mut self, master: &Self::Master) {
-        assert!(self.set.is_empty(), "size={}", self.set.len());
-        self.set = master.clone();
+
+    pub fn black_box<T>(dummy: T) -> T {
+        use std::ptr;
+        use std::mem::forget;
+
+        unsafe {
+            let ret = ptr::read_volatile(&dummy as *const T);
+            forget(dummy);
+            ret
+        }
     }
 
-    fn sz(&self) -> usize {
-        self.set.len()
+
+    //---- benchmarking Treap split/join ---------------------------------------------------------------
+    use std::iter::FromIterator;
+
+    pub struct TreapMaster(TreapMap<usize, ()>);
+
+    pub struct TreapCopy(TreapMap<usize, ()>);
+
+    impl TeardownTreeMaster for TreapMaster {
+        type Cpy = TreapCopy;
+
+        fn build(elems: Vec<usize>) -> Self {
+            let iter = elems.into_iter().map(|x| (x, ()));
+            TreapMaster(TreapMap::from_iter(iter))
+        }
+
+        fn cpy(&self) -> Self::Cpy {
+            TreapCopy(self.0.clone())
+        }
+
+        fn sz(&self) -> usize {
+            self.0.len()
+        }
+
+        fn descr_cycle() -> String {
+            "Treap using split/join".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "Treap".to_string()
+        }
     }
 
-    fn clear(&mut self) {
-        self.set.clear();
+    impl TeardownTreeCopy for TreapCopy {
+        type Master = TreapMaster;
+
+        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
+            self.0.delete_range(from, to + 1, output);
+        }
+
+        fn rfill(&mut self, master: &Self::Master) {
+            self.0 = master.0.clone()
+        }
+
+        fn sz(&self) -> usize {
+            self.0.len()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
     }
 }
 
 
-fn black_box<T>(dummy: T) -> T {
-    use std::ptr;
-    use std::mem::forget;
-
-    unsafe {
-        let ret = ptr::read_volatile(&dummy as *const T);
-        forget(dummy);
-        ret
-    }
-}
-
-
-
-//---- benchmarking Treap split/join ---------------------------------------------------------------
-use std::iter::FromIterator;
-
-struct TreapMaster (TreapMap<usize, ()>);
-struct TreapCopy (TreapMap<usize, ()>);
-
-impl TeardownTreeMaster for TreapMaster {
-    type Cpy = TreapCopy;
-
-    fn build(elems: Vec<usize>) -> Self {
-        let iter = elems.into_iter().map(|x| (x, ()));
-        TreapMaster(TreapMap::from_iter(iter))
-    }
-
-    fn cpy(&self) -> Self::Cpy {
-        TreapCopy(self.0.clone())
-    }
-
-    fn sz(&self) -> usize {
-        self.0.len()
-    }
-
-    fn descr_cycle() -> String {
-        "Treap using split/join".to_string()
-    }
-
-    fn descr_refill() -> String {
-        "Treap".to_string()
-    }
-}
-
-impl TeardownTreeCopy for TreapCopy {
-    type Master = TreapMaster;
-
-    fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-        self.0.delete_range(from, to+1, output);
-    }
-
-    fn rfill(&mut self, master: &Self::Master) {
-        self.0 = master.0.clone()
-    }
-
-    fn sz(&self) -> usize {
-        self.0.len()
-    }
-
-    fn clear(&mut self) {
-        self.0.clear();
-    }
-}

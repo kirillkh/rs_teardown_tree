@@ -6,24 +6,21 @@
 extern crate rand;
 
 mod base;
-mod slot_stack;
-mod delete_range;
-mod drivers;
-mod interval;
+mod applied;
 //mod unsafe_stack;
 
 mod rust_bench;
 
-pub use base::{Item, TeardownTree, TeardownTreeRefill, Node};
-
+pub use base::{TeardownTree, TeardownTreeRefill, Node};
+pub use applied::PlainTeardownTree;
 
 
 
 #[cfg(test)]
-mod tests {
+mod plain_tests {
     use base::{TeardownTreeInternal, Node, lefti, righti};
-    use delete_range::DeleteRangeInternal;
-    use drivers::RangeDriver;
+    use base::RangeDriver;
+    use applied::{PlainTeardownTree, PlainDeleteRange, PlainDelete};
 
     type Tree = TeardownTreeInternal<usize>;
 
@@ -76,7 +73,7 @@ mod tests {
         let mut expect = expect_out.to_vec();
         expect.sort();
 
-        tree.delete_range(&mut RangeDriver::new(from, to, &mut output));
+        tree.delete_range(from, to, &mut output);
 
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
         assert_eq!(format!("{:?}", &output), format!("{:?}", expect));
@@ -146,7 +143,7 @@ mod tests {
         let nodes: Vec<_> = items.iter().map(|&x| if x==0 {
             None
         } else {
-            Some(Node { item: x })
+            Some(Node::new(x))
         }).collect();
 
         nodes
@@ -256,7 +253,7 @@ mod tests {
                 let mut tree_mod = tree.clone();
 //                println!("tree={:?}, from={}, to={}", &tree, i, j);
                 output.truncate(0);
-                tree_mod.delete_range(&mut RangeDriver::new(i, j, &mut output));
+                tree_mod.delete_range(i, j, &mut output);
                 delete_range_check(n, i, j, &mut output, tree_mod, &tree);
             }
         }
