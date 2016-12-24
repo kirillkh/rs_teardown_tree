@@ -12,7 +12,8 @@ mod applied;
 mod rust_bench;
 
 pub use base::{TeardownTree, TeardownTreeRefill, Node};
-pub use applied::PlainTeardownTree;
+pub use self::applied::interval_tree;
+pub use self::applied::plain_tree;
 
 
 
@@ -20,7 +21,7 @@ pub use applied::PlainTeardownTree;
 mod plain_tests {
     use base::{TeardownTreeInternal, Node, lefti, righti};
     use base::RangeDriver;
-    use applied::{PlainTeardownTree, PlainDeleteRange, PlainDelete};
+    use plain_tree::{PlainTeardownTree, PlainDeleteRange, PlainDelete};
 
     type Tree = TeardownTreeInternal<usize>;
 

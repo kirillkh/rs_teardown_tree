@@ -128,7 +128,7 @@ mod bench_delete_range {
     use std::collections::BTreeSet;
     use teardown_tree___treap::TreapMap;
     use teardown_tree::{TeardownTree, TeardownTreeRefill};
-    use teardown_tree::PlainTeardownTree;
+    use teardown_tree::plain_tree::PlainTeardownTree;
     use std::time;
     use rand::{XorShiftRng, SeedableRng, Rng};
     use super::nanos;

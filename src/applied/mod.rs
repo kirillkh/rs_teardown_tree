@@ -1,10 +1,6 @@
-mod interval_tree;
-mod plain_tree;
+pub mod interval_tree;
+pub mod plain_tree;
 pub mod interval;
-
-pub use self::interval_tree::*;
-pub use self::plain_tree::*;
-
 
 use base::TeardownTreeInternal;
 

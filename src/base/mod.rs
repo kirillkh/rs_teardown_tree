@@ -185,6 +185,13 @@ impl<T: Ord> TeardownTreeInternal<T> {
 
 
     #[inline(always)]
+    pub fn item_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut T {
+        unsafe {
+            mem::transmute(&mut self.node_mut(idx).item)
+        }
+    }
+
+    #[inline(always)]
     pub fn item_mut(&mut self, idx: usize) -> &mut T {
         &mut self.node_mut(idx).item
     }
@@ -355,21 +362,21 @@ impl<T: Ord> TeardownTreeInternal<T> {
 
 
     #[inline(always)]
-    fn parent(&self, idx: usize) -> &Node<T> {
+    pub fn parent(&self, idx: usize) -> &Node<T> {
         let parenti = parenti(idx);
         debug_assert!(idx > 0 && !self.is_nil(idx));
         &self.data[parenti]
     }
 
     #[inline(always)]
-    fn left(&self, idx: usize) -> &Node<T> {
+    pub fn left(&self, idx: usize) -> &Node<T> {
         let lefti = lefti(idx);
         debug_assert!(!self.is_nil(lefti));
         &self.data[lefti]
     }
 
     #[inline(always)]
-    fn right(&self, idx: usize) -> &Node<T> {
+    pub fn right(&self, idx: usize) -> &Node<T> {
         let righti = righti(idx);
         debug_assert!(!self.is_nil(righti));
         &self.data[righti]

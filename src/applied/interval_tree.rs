@@ -1,9 +1,9 @@
 use applied::interval::{Interval, IntervalNode};
-use base::{TeardownTree, TeardownTreeInternal, lefti, righti, Sink};
+use base::{TeardownTree, TeardownTreeInternal, lefti, righti, parenti, Sink};
 use base::drivers::{consume_ptr, consume_unchecked};
 use base::BulkDeleteCommon;
 use base::InternalAccess;
-use std::mem;
+use std::{mem, cmp};
 
 pub trait IntervalTeardownTree<Iv: Interval> {
     fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
@@ -11,6 +11,10 @@ pub trait IntervalTeardownTree<Iv: Interval> {
 }
 
 trait IntervalTreeInternal<Iv: Interval> {
+    #[inline] fn update_maxb(&mut self, idx: usize);
+}
+
+trait IntervalDeleteRange<Iv: Interval> {
     fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize,
                                                               min_included: bool, sink: &mut S);
     fn descend_delete_intersecting_ivl_left<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, with_slot: bool,
@@ -21,23 +25,45 @@ trait IntervalTreeInternal<Iv: Interval> {
 
 
 
-trait IntervalDeleteRange<Iv: Interval> {
-    fn delete_with_driver<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S);
+//trait IntervalDeleteRange<Iv: Interval> {
+//    fn delete_with_driver<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S);
+//
+//    fn delete_range<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S);
+//    fn delete_range_loop<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
+//
+//    fn delete_range_min<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
+//    fn delete_range_max<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
+//
+//    fn descend_delete_left<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
+//    fn descend_delete_right<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
+//}
 
-    fn delete_range<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S);
-    fn delete_range_loop<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
-
-    fn delete_range_min<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
-    fn delete_range_max<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
-
-    fn descend_delete_left<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
-    fn descend_delete_right<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
+trait PlainDelete<Iv: Interval> {
+    #[inline] fn delete_idx(&mut self, idx: usize) -> Iv;
+    #[inline] fn delete_max(&mut self, idx: usize) -> (Iv, Iv::K);
+    #[inline] fn delete_min(&mut self, idx: usize) -> Iv;
 }
 
-trait PlainDelete<T: Ord> {
-    #[inline] fn delete_idx(&mut self, idx: usize) -> T;
-    #[inline] fn delete_max(&mut self, idx: usize) -> T;
-    #[inline] fn delete_min(&mut self, idx: usize) -> T;
+
+impl<Iv: Interval> IntervalTreeInternal<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
+    #[inline]
+    fn update_maxb(&mut self, idx: usize) {
+        let item = self.item_mut_unsafe(idx);
+
+        let left_self_maxb =
+            if self.has_left(idx) {
+                cmp::max(&self.left(idx).item.maxb, item.ivl.b())
+            } else {
+                item.ivl.b()
+            };
+        item.maxb =
+            if self.has_right(idx) {
+                cmp::max(&self.right(idx).item.maxb, left_self_maxb)
+            } else {
+                left_self_maxb
+            }.clone();
+    }
+
 }
 
 
@@ -48,7 +74,7 @@ impl<Iv: Interval> IntervalTeardownTree<Iv> for TeardownTree<IntervalNode<Iv>> {
     fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv> {
         self.internal().index_of(search).map(|idx| {
             self.internal().delete_idx(idx)
-        }).map(|node| node.ivl)
+        })
     }
 
     #[inline]
@@ -58,62 +84,134 @@ impl<Iv: Interval> IntervalTeardownTree<Iv> for TeardownTree<IntervalNode<Iv>> {
 }
 
 
-impl<T: Ord> PlainDelete<T> for TeardownTreeInternal<T> {
+impl<Iv: Interval> PlainDelete<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
     #[inline]
-    fn delete_idx(&mut self, idx: usize) -> T {
+    fn delete_idx(&mut self, idx: usize) -> Iv {
         debug_assert!(!self.is_nil(idx));
 
-        match (self.has_left(idx), self.has_right(idx)) {
+        let item = self.item_mut_unsafe(idx);
+
+        let replacement: Iv = match (self.has_left(idx), self.has_right(idx)) {
             (false, false) => {
-                self.take(idx)
+                let item = self.take(idx);
+                return item.ivl
             },
 
             (true, false)  => {
-                let left_max = self.delete_max(lefti(idx));
-                mem::replace(self.item_mut(idx), left_max)
+                let (removed, left_maxb) = self.delete_max(lefti(idx));
+                item.maxb = left_maxb;
+                removed
             },
 
             (false, true)  => {
-                let right_min = self.delete_min(righti(idx));
-                mem::replace(self.item_mut(idx), right_min)
+//                let (removed, right_maxb) = self.delete_min(righti(idx));
+//                item.maxb = right_maxb;
+                let removed = self.delete_min(righti(idx));
+                if &item.maxb == removed.b() {
+                    self.update_maxb(idx)
+                } else { // maxb remains the same
+                    debug_assert!(removed.b() < &item.maxb);
+                }
+                removed
             },
 
             (true, true)   => {
-                let left_max = self.delete_max(lefti(idx));
-                mem::replace(self.item_mut(idx), left_max)
+                let (removed, left_maxb) = self.delete_max(lefti(idx));
+                if &item.maxb == removed.b() {
+                    item.maxb = cmp::max(left_maxb, self.right(idx).item.maxb);
+                } else { // maxb remains the same
+                    debug_assert!(removed.b() < &item.maxb);
+                }
+                removed
             },
-        }
+        };
+
+        mem::replace(&mut item.ivl, replacement)
     }
 
 
+    /// returns the removed max-item of this subtree and the old maxb (before removal)
     #[inline]
-    fn delete_max(&mut self, mut idx: usize) -> T {
-        idx = self.find_max(idx);
+    // we attempt to reduce the number of memory accesses as much as possible; might be overengineered
+    fn delete_max(&mut self, idx: usize) -> (Iv, Iv::K) {
+        let max_idx = self.find_max(idx);
 
-        if self.has_left(idx) {
-            let left_max = self.delete_max(lefti(idx));
-            mem::replace(self.item_mut(idx), left_max)
+        let (removed, mut old_maxb, mut new_maxb) = if self.has_left(max_idx) {
+            let item = self.item_mut_unsafe(max_idx);
+            let (left_max, left_maxb) = self.delete_max(lefti(max_idx));
+            let removed = mem::replace(&mut item.ivl, left_max);
+
+            let old_maxb = mem::replace(&mut item.maxb, left_maxb.clone());
+            (removed, old_maxb, Some(left_maxb))
         } else {
-            self.take(idx)
+            let IntervalNode { ivl, maxb:old_maxb } = self.take(max_idx);
+            (ivl, old_maxb, None)
+        };
+
+        // update ancestors
+        let mut upd_idx = max_idx;
+        while upd_idx != idx {
+            upd_idx = parenti(upd_idx);
+
+            let item = self.item_mut_unsafe(upd_idx);
+            old_maxb = item.maxb.clone();
+            if &item.maxb == removed.b() {
+                let mb = {
+                    let self_left_maxb =
+                        if self.has_left(upd_idx) {
+                            cmp::max(&self.left(upd_idx).item.maxb, &item.maxb)
+                        } else {
+                            &item.maxb
+                        };
+
+                    new_maxb.map_or(self_left_maxb.clone(),
+                                    |mb| cmp::max(mb, self_left_maxb.clone()))
+                };
+                item.maxb = mb.clone();
+                new_maxb = Some(mb);
+            } else {
+                new_maxb = Some(old_maxb.clone());
+            }
         }
+
+        (removed, old_maxb)
     }
 
+    // TODO: check whether optimizations similar to delete_max() are worth it
     #[inline]
-    fn delete_min(&mut self, mut idx: usize) -> T {
-        idx = self.find_min(idx);
+    fn delete_min(&mut self, idx: usize) -> Iv {
+        let min_idx = self.find_min(idx);
 
-        if self.has_right(idx) {
-            let right_min = self.delete_min(righti(idx));
-            mem::replace(self.item_mut(idx), right_min)
+        let removed = if self.has_right(min_idx) {
+            let right_min = self.delete_min(righti(min_idx));
+            let item = self.item_mut_unsafe(min_idx);
+
+            if self.has_right(min_idx) {
+                let right_maxb = &self.right(min_idx).item.maxb;
+                item.maxb = cmp::max(right_maxb, right_min.b()).clone();
+            } else {
+                item.maxb = right_min.b().clone();
+            }
+
+            mem::replace(&mut item.ivl, right_min)
         } else {
-            self.take(idx)
+            self.take(min_idx).ivl
+        };
+
+        // update ancestors
+        let mut upd_idx = min_idx;
+        while upd_idx != idx {
+            upd_idx = parenti(upd_idx);
+            self.update_maxb(upd_idx);
         }
+
+        removed
     }
 }
 
 
 
-impl<Iv: Interval> IntervalTreeInternal<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
+impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
     fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, mut min_included: bool, sink: &mut S) {
         let k: &IntervalNode<Iv> = &self.node_unsafe(idx).item;
 
