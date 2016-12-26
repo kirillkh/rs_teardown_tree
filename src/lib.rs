@@ -19,7 +19,7 @@ pub use self::applied::plain_tree;
 
 #[cfg(test)]
 mod plain_tests {
-    use base::{TeardownTreeInternal, Node, lefti, righti};
+    use base::{TeardownTreeInternal, Node, lefti, righti, parenti};
     use base::RangeDriver;
     use plain_tree::{PlainTeardownTree, PlainDeleteRange, PlainDelete};
 
@@ -74,7 +74,12 @@ mod plain_tests {
         let mut expect = expect_out.to_vec();
         expect.sort();
 
+//        println!("tree={:?}, range=({}, {}), {}", &tree, from, to, &tree);
+        let tree_orig = tree.clone();
         tree.delete_range(from, to, &mut output);
+
+        let tree_mod = tree.clone();
+        delete_range_check(items.iter().filter(|&&x| x!=0).count(), from, to, &mut output, tree_mod, &tree_orig);
 
         assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
         assert_eq!(format!("{:?}", &output), format!("{:?}", expect));
@@ -104,19 +109,6 @@ mod plain_tests {
                       &[2, 1], &[4,3]);
 
 
-        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (1,1),
-                      &[2, 0, 3, 0, 0, 0, 4], &[1]);
-
-        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (2,2),
-                      &[1, 0, 3, 0, 0, 0, 4], &[2]);
-
-        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (3,3),
-                      &[1, 0, 2, 0, 0, 0, 4], &[3]);
-
-        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (4,4),
-                      &[1, 0, 2, 0, 0, 0, 3], &[4]);
-
-
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (1,1),
                       &[4, 3, 0, 2], &[1]);
 
@@ -132,11 +124,30 @@ mod plain_tests {
         test_prebuilt(&[1, 0, 3, 0, 0, 2, 4], (1,2),
                       &[3, 0, 4], &[1, 2]);
 
+
+        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (1,1),
+                      &[2, 0, 3, 0, 0, 0, 4], &[1]);
+
+        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (2,2),
+                      &[1, 0, 3, 0, 0, 0, 4], &[2]);
+
+        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (3,3),
+                      &[1, 0, 2, 0, 0, 0, 4], &[3]);
+
+        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (4,4),
+                      &[1, 0, 2, 0, 0, 0, 3], &[4]);
+
         test_prebuilt(&[1, 0, 4, 0, 0, 2, 0, 0, 0, 0, 0, 0, 3], (1,4),
                       &[], &[1,2,3,4]);
 
         test_prebuilt(&[6, 4, 0, 1, 5, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], (4,6),
                       &[3, 2, 0, 1], &[6,4,5]);
+
+        test_prebuilt(&[1, 0, 2, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 3], (1,1),
+                      &[2, 0, 3, 0, 0, 0, 4], &[1]);
+
+        test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4], (1,2),
+                      &[3, 0, 4, 0, 0, 0, 5], &[1,2]);
     }
 
 
@@ -252,7 +263,7 @@ mod plain_tests {
         for i in 1..n+1 {
             for j in i..n+1 {
                 let mut tree_mod = tree.clone();
-//                println!("tree={:?}, from={}, to={}", &tree, i, j);
+//                println!("tree={:?}, from={}, to={}, {}", &tree, i, j, &tree);
                 output.truncate(0);
                 tree_mod.delete_range(i, j, &mut output);
                 delete_range_check(n, i, j, &mut output, tree_mod, &tree);
@@ -267,6 +278,7 @@ mod plain_tests {
 //        output.sort();
         assert_eq!(output, &(from..to+1).collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         check_bst(&tree_mod, &output, tree_orig, 0);
+        check_items(&tree_mod, &tree_orig);
     }
 
     fn check_bst(tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, idx: usize) -> Option<(usize, usize)> {
@@ -299,5 +311,18 @@ mod plain_tests {
 
             return Some((min, max));
         }
+    }
+
+    fn check_items(tree: &Tree, tree_orig: &Tree) {
+        let mut noccupied = 0;
+
+        for i in 0..tree.data.len() {
+            if tree.mask[i] {
+                debug_assert!(i == 0 || tree.mask[parenti(i)]);
+                noccupied += 1;
+            }
+        }
+
+        debug_assert!(noccupied == tree.size());
     }
 }

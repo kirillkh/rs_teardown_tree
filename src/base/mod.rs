@@ -90,8 +90,8 @@ pub struct TeardownTree<T: Ord> {
 
 #[derive(Clone)]
 pub struct TeardownTreeInternal<T: Ord> {
-    data: Vec<Node<T>>,
-    mask: Vec<bool>,
+    pub data: Vec<Node<T>>,
+    pub mask: Vec<bool>,
     size: usize,
 
     pub delete_range_cache: DeleteRangeCache,
@@ -404,7 +404,7 @@ impl<T: Ord> TeardownTreeInternal<T> {
     /// child.
     #[inline(always)]
     fn left_enclosing(idx: usize) -> usize {
-        debug_assert!((idx + 1).next_power_of_two() != idx+2);
+        debug_assert!((idx+2) & (idx+1) != 0, "idx={}", idx);
 
         if idx & 1 == 0 {
             if idx & 2 == 0 {
@@ -482,9 +482,9 @@ impl<T: Ord> TeardownTreeInternal<T> {
         }
     }
 
-    #[inline]
-    pub fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
-                                            where F: FnMut(&mut Self, &mut A, usize) {
+    #[inline(never)]
+    pub fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
+                                            where F: FnMut(&mut Self, &mut A, usize) -> bool {
         if self.is_nil(root) {
             return;
         }
@@ -493,22 +493,25 @@ impl<T: Ord> TeardownTreeInternal<T> {
 
         loop {
             next = {
-                f(self, a, next);
+                let stop = on_next(self, a, next);
+                if stop {
+                    break;
+                }
 
                 if self.has_right(next) {
                     self.find_min(righti(next))
                 } else {
                     // handle the case where we are on strictly right-hand path from the root.
                     // we don't need this in the current user code, but it can happen generally
-//                    if next==0 || (next + 1).next_power_of_two() == next+2 {
-//                        return;
+//                    if (next+2) & (next+1) == 0 {
+//                        break;
 //                    }
 
                     let l_enclosing = Self::left_enclosing(next);
 
                     if l_enclosing <= root {
                         // done
-                        return;
+                        break;
                     }
 
                     parenti(l_enclosing)
@@ -598,7 +601,7 @@ impl<T: Ord> TeardownTreeInternal<T> {
 
     #[inline(always)]
     pub unsafe fn move_from_to(&mut self, src: usize, dst: usize) {
-        debug_assert!(!self.is_nil(src) && self.is_nil(dst));
+        debug_assert!(!self.is_nil(src) && self.is_nil(dst), "is_nil(src)={}, is_nil(dst)={}", self.is_nil(src), self.is_nil(dst));
         *self.mask.get_unchecked_mut(src) = false;
         *self.mask.get_unchecked_mut(dst) = true;
         let pdata = self.data.as_mut_ptr();

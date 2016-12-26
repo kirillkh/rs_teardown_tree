@@ -13,18 +13,13 @@ pub trait BulkDeleteCommon<T: Ord> {
     fn fill_slot_min(&mut self, idx: usize);
     fn fill_slot_max(&mut self, idx: usize);
 
-    fn descend_left<F>(&mut self, idx: usize, f: F)
+    fn descend_left<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
                             where F: FnMut(&mut Self, usize);
-    fn descend_right<F>(&mut self, idx: usize, f: F)
-                            where F: FnMut(&mut Self, usize);
-
-    fn descend_left_with_slot<F>(&mut self, idx: usize, f: F) -> bool
-                            where F: FnMut(&mut Self, usize);
-    fn descend_right_with_slot<F>(&mut self, idx: usize, f: F) -> bool
+    fn descend_right<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
                             where F: FnMut(&mut Self, usize);
 
-    fn descend_fill_left(&mut self, idx: usize) -> bool;
-    fn descend_fill_right(&mut self, idx: usize) -> bool;
+    fn descend_fill_left(&mut self, idx: usize, with_slot: bool) -> bool;
+    fn descend_fill_right(&mut self, idx: usize, with_slot: bool) -> bool;
 
 
     fn slots_min(&mut self) -> &mut SlotStack;
@@ -91,6 +86,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
             unsafe {
                 tree.move_to(idx, sink);
             }
+            false
         });
     }
 
@@ -101,8 +97,10 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
         debug_assert!(!self.is_nil(idx));
 
         if self.has_left(idx) {
-            let done = self.fill_slots_min(lefti(idx));
-            if done {
+            self.descend_left(idx, false, |this: &mut Self, child_idx| {
+                this.fill_slots_min(child_idx);
+            });
+            if !self.slots_min().has_open() {
                 return true;
             }
         }
@@ -111,7 +109,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
         self.fill_slot_min(idx);
 
-        let done = !self.descend_fill_right(idx);
+        let done = !self.descend_fill_right(idx, true);
         done || !self.slots_min().has_open()
     }
 
@@ -121,8 +119,10 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
         debug_assert!(!self.is_nil(idx));
 
         if self.has_right(idx) {
-            let done = self.fill_slots_max(righti(idx));
-            if done {
+            !self.descend_right(idx, false, |this: &mut Self, child_idx| {
+                this.fill_slots_max(child_idx);
+            });
+            if !self.slots_max().has_open() {
                 return true;
             }
         }
@@ -131,7 +131,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
         self.fill_slot_max(idx);
 
-        let done = !self.descend_fill_left(idx);
+        let done = !self.descend_fill_left(idx, true);
         done || !self.slots_max().has_open()
     }
 
@@ -157,74 +157,63 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
     //---- descend_* -------------------------------------------------------------------------------
 
 
-    #[inline(always)]
-    fn descend_left<F>(&mut self, idx: usize, mut f: F)
-                                            where F: FnMut(&mut Self, usize) {
-        let child_idx = lefti(idx);
-        if !self.is_nil(child_idx) {
-            f(self, child_idx);
-        }
-    }
-
-    #[inline(always)]
-    fn descend_right<F>(&mut self, idx: usize, mut f: F)
-                                            where F: FnMut(&mut Self, usize) {
-        let child_idx = righti(idx);
-        if !self.is_nil(child_idx) {
-            f(self, child_idx);
-        }
-    }
-
-
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_left_with_slot<F>(&mut self, idx: usize, mut f: F) -> bool
-                                            where F: FnMut(&mut Self, usize) {
-        debug_assert!(self.is_nil(idx));
-
+    fn descend_left<F>(&mut self, idx: usize, with_slot: bool, mut f: F) -> bool
+                                                    where F: FnMut(&mut Self, usize) {
         let child_idx = lefti(idx);
         if self.is_nil(child_idx) {
-            return true;
+            debug_assert!(self.is_nil(idx) == with_slot);
+            return with_slot;
         }
 
-        self.slots_max().push(idx);
+        if with_slot {
+            self.slots_max().push(idx);
 
-        f(self, child_idx);
+            f(self, child_idx);
 
-        self.slots_max().pop();
-        self.is_nil(idx)
+            self.slots_max().pop();
+            self.is_nil(idx)
+        } else {
+            f(self, child_idx);
+            false
+        }
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_right_with_slot<F>(&mut self, idx: usize, mut f: F) -> bool
-                                            where F: FnMut(&mut Self, usize) {
-        debug_assert!(self.is_nil(idx));
-
+    fn descend_right<F>(&mut self, idx: usize, with_slot: bool, mut f: F) -> bool
+                                                    where F: FnMut(&mut Self, usize) {
         let child_idx = righti(idx);
         if self.is_nil(child_idx) {
-            return true;
+            debug_assert!(self.is_nil(idx) == with_slot);
+            return with_slot;
         }
 
-        self.slots_min().push(idx);
+        if with_slot {
+            self.slots_min().push(idx);
 
-        f(self, child_idx);
+            f(self, child_idx);
 
-        self.slots_min().pop();
-        self.is_nil(idx)
+            self.slots_min().pop();
+            self.is_nil(idx)
+        } else {
+            f(self, child_idx);
+            false
+        }
     }
 
 
     #[inline(always)]
-    fn descend_fill_left(&mut self, idx: usize) -> bool {
-        self.descend_left_with_slot(idx, |this: &mut Self, child_idx| {
+    fn descend_fill_left(&mut self, idx: usize, with_slot: bool) -> bool {
+        self.descend_left(idx, with_slot, |this: &mut Self, child_idx| {
             this.fill_slots_max(child_idx);
         })
     }
 
     #[inline(always)]
-    fn descend_fill_right(&mut self, idx: usize) -> bool {
-        self.descend_right_with_slot(idx, |this: &mut Self, child_idx| {
+    fn descend_fill_right(&mut self, idx: usize, with_slot: bool) -> bool {
+        self.descend_right(idx, with_slot, |this: &mut Self, child_idx| {
             this.fill_slots_min(child_idx);
         })
     }

@@ -1,4 +1,4 @@
-use base::{TeardownTree, TeardownTreeInternal, righti, lefti, InternalAccess};
+use base::{TeardownTree, TeardownTreeInternal, righti, lefti, parenti, InternalAccess};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use base::BulkDeleteCommon;
 use std::mem;
@@ -45,6 +45,8 @@ pub trait PlainDeleteRange<T: Ord> {
 
     fn descend_delete_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
     fn descend_delete_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
+
+    fn fill_slots_min2(&mut self, idx: usize);
 }
 
 pub trait PlainDelete<T: Ord> {
@@ -146,7 +148,8 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
     #[inline]
     fn delete_with_driver<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
         self.delete_range_loop(drv, 0);
-        debug_assert!(self.slots_min().is_empty() && self.slots_max().is_empty());
+        debug_assert!(self.slots_min().is_empty(), "slots_min={:?}", self.slots_min());
+        debug_assert!(self.slots_max().is_empty());
     }
 
     #[inline]
@@ -186,13 +189,16 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
             self.descend_delete_right(drv, idx, true);
         } else {
             // the root and the right subtree are outside the range
-            self.descend_left(idx,
+            self.descend_left(idx, false,
                               |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx)
             );
 
             if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
-                self.descend_fill_right(idx);
+                self.descend_fill_right(idx, true);
+//                self.descend_right(idx, true, |this: &mut Self, child_idx| {
+//                    this.fill_slots_min2(child_idx);
+//                });
             }
         }
     }
@@ -200,7 +206,7 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
     #[inline(never)]
     fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize) {
         let decision = drv.decide(&self.item(idx));
-        debug_assert!(decision.right());
+        debug_assert!(decision.right(), "idx={}", idx);
 
         if decision.left() {
             // the root and the whole right subtree are inside the range
@@ -210,13 +216,13 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
             self.consume_subtree(righti(idx), drv);
         } else {
             // the root and the left subtree are outside the range
-            self.descend_right(idx,
+            self.descend_right(idx, false,
                                |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx)
             );
 
             if self.slots_max().has_open() {
                 self.fill_slot_max(idx);
-                self.descend_fill_left(idx);
+                self.descend_fill_left(idx, true);
             }
         }
     }
@@ -225,32 +231,66 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
     fn descend_delete_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
-        if with_slot {
-            self.descend_left_with_slot(idx,
-                                        |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx)
-            )
-        } else {
-            self.descend_left(idx,
-                              |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx)
-            );
-
-            false
-        }
+        self.descend_left(idx, with_slot,
+                          |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
     fn descend_delete_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
-        if with_slot {
-            self.descend_right_with_slot(idx,
-                                         |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx)
-            )
-        } else {
-            self.descend_right(idx,
-                               |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx)
-            );
+        self.descend_right(idx, with_slot,
+                           |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx))
+    }
 
-            false
+
+
+    fn fill_slots_min2(&mut self, root: usize) {
+        debug_assert!(!self.is_nil(root));
+
+        struct State {
+            prev: usize,
+            stopped: bool
+        }
+
+        let mut state = State { prev:0, stopped:false };
+        self.traverse_inorder(root, &mut state,
+            |this: &mut Self, state, idx| {
+                // unwind the stack to the current node
+                if idx < state.prev {
+                    let mut curr = state.prev;
+                    while idx != curr {
+                        debug_assert!(idx < curr);
+                        debug_assert!(curr&1==0 || parenti(curr) == idx);
+
+                        this.slots_min().pop();
+                        curr = parenti(curr);
+                    }
+                    debug_assert!(idx == curr);
+                }
+                state.prev = idx;
+
+                if this.slots_min().has_open() {
+                    this.fill_slot_min(idx);
+                    this.slots_min().push(idx);
+                    false
+                } else {
+                    state.stopped = true;
+                    true
+                }
+            }
+        );
+
+        let mut curr = state.prev;
+        while root != curr {
+            debug_assert!(root < curr);
+            if curr & 1 == 0 {
+                self.slots_min().pop();
+            }
+            curr = parenti(curr);
+        }
+
+        if !state.stopped {
+            self.slots_min().pop();
         }
     }
 }

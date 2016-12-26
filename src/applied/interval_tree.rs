@@ -256,17 +256,13 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode
             let removed = if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
 
-                self.descend_fill_right(idx)
+                self.descend_fill_right(idx, true)
             } else {
                 false
             };
 
             if self.slots_max().has_open() {
-                if removed {
-                    self.descend_fill_left(idx);
-                } else {
-                    self.fill_slots_max(idx);
-                }
+                self.descend_fill_left(idx, removed);
             }
         } else {
             // consume root if necessary
@@ -305,7 +301,7 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode
 
             // fill the remaining open slots_max from the left subtree
             if removed && self.slots_max().has_open() {
-                self.descend_fill_left(righti(idx));
+                self.descend_fill_left(righti(idx), true);
             }
         }
     }
@@ -314,33 +310,15 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
     fn descend_delete_intersecting_ivl_left<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool {
-        if with_slot {
-            self.descend_left_with_slot(idx,
-                                        |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink)
-            )
-        } else {
-            self.descend_left(idx,
-                              |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink)
-            );
-
-            false
-        }
+        self.descend_left(idx, with_slot,
+                          |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
     fn descend_delete_intersecting_ivl_right<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool {
-        if with_slot {
-            self.descend_right_with_slot(idx,
-                                         |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink)
-            )
-        } else {
-            self.descend_right(idx,
-                               |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink)
-            );
-
-            false
-        }
+        self.descend_right(idx, with_slot,
+                           |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink))
     }
 }
 
