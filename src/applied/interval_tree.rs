@@ -1,7 +1,7 @@
 use applied::interval::{Interval, IntervalNode};
 use base::{TeardownTree, TeardownTreeInternal, lefti, righti, parenti, Sink};
 use base::drivers::{consume_ptr, consume_unchecked};
-use base::BulkDeleteCommon;
+use base::{BulkDeleteCommon, TreeInternal};
 use base::InternalAccess;
 use std::{mem, cmp};
 
@@ -9,25 +9,6 @@ pub trait IntervalTeardownTree<Iv: Interval> {
     fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
     fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>);
 }
-
-trait IntervalTreeInternal<Iv: Interval> {
-    #[inline] fn update_maxb(&mut self, idx: usize);
-
-    #[inline] fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
-
-    #[inline] fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>);
-}
-
-trait IntervalDeleteRange<Iv: Interval> {
-    fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize,
-                                                              min_included: bool, sink: &mut S);
-    fn descend_delete_intersecting_ivl_left<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, with_slot: bool,
-                                                                       min_included: bool, sink: &mut S) -> bool;
-    fn descend_delete_intersecting_ivl_right<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, with_slot: bool,
-                                                                        min_included: bool, sink: &mut S) -> bool;
-}
-
-
 
 //trait IntervalDeleteRange<Iv: Interval> {
 //    fn delete_with_driver<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S);
@@ -41,13 +22,6 @@ trait IntervalDeleteRange<Iv: Interval> {
 //    fn descend_delete_left<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
 //    fn descend_delete_right<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
 //}
-
-trait PlainDelete<Iv: Interval> {
-    #[inline] fn delete_idx(&mut self, idx: usize) -> Iv;
-    #[inline] fn delete_max(&mut self, idx: usize) -> (Iv, Iv::K);
-    #[inline] fn delete_min(&mut self, idx: usize) -> Iv;
-}
-
 
 impl<Iv: Interval> IntervalTeardownTree<Iv> for TeardownTree<IntervalNode<Iv>> {
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -64,7 +38,7 @@ impl<Iv: Interval> IntervalTeardownTree<Iv> for TeardownTree<IntervalNode<Iv>> {
 }
 
 
-impl<Iv: Interval> IntervalTreeInternal<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
+trait IntervalTreeInternal<Iv: Interval>: IntervalDelete<Iv>+IntervalDeleteRange<Iv> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     // TODO: accepting IntervalNode is super ugly, temporary solution only
     #[inline]
@@ -88,7 +62,11 @@ impl<Iv: Interval> IntervalTreeInternal<Iv> for TeardownTreeInternal<IntervalNod
     fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>) {
         self.delete_intersecting_ivl_rec(search, idx, false, &mut self::IntervalSink { output: output });
     }
+}
+impl<Iv: Interval> IntervalTreeInternal<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {}
 
+
+trait IntervalDelete<Iv: Interval>: TreeInternal<IntervalNode<Iv>> {
     #[inline]
     fn update_maxb(&mut self, idx: usize) {
         let item = self.item_mut_unsafe(idx);
@@ -107,10 +85,6 @@ impl<Iv: Interval> IntervalTreeInternal<Iv> for TeardownTreeInternal<IntervalNod
             }.clone();
     }
 
-}
-
-
-impl<Iv: Interval> PlainDelete<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> Iv {
         debug_assert!(!self.is_nil(idx));
@@ -234,10 +208,10 @@ impl<Iv: Interval> PlainDelete<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
         removed
     }
 }
+impl<Iv: Interval> IntervalDelete<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {}
 
 
-
-impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {
+trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>>+IntervalDelete<Iv> {
     fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, mut min_included: bool, sink: &mut S) {
         let k: &IntervalNode<Iv> = &self.node_unsafe(idx).item;
 
@@ -321,6 +295,7 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode
                            |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink))
     }
 }
+impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {}
 
 
 struct IntervalSink<'a, Iv: Interval+'a> {

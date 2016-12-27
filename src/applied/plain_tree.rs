@@ -1,6 +1,6 @@
 use base::{TeardownTree, TeardownTreeInternal, righti, lefti, parenti, InternalAccess};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
-use base::BulkDeleteCommon;
+use base::{BulkDeleteCommon, TreeInternal};
 use std::mem;
 
 pub trait PlainTeardownTree<T: Ord> {
@@ -28,41 +28,7 @@ impl<T: Ord> PlainTeardownTree<T> for TeardownTree<T> {
 }
 
 
-pub trait PlainDeleteRange<T: Ord> {
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
-    /// Vec. The items are returned in order.
-    fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>);
-
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
-    fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>);
-
-    fn delete_with_driver<D: TraversalDriver<T>>(&mut self, drv: &mut D);
-
-    fn delete_range_loop<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
-
-    fn delete_range_min<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
-    fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
-
-    fn descend_delete_max_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
-    fn descend_delete_max_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
-    fn descend_delete_min_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
-    fn descend_delete_min_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
-
-    fn fill_slots_min2(&mut self, idx: usize);
-}
-
-pub trait PlainDelete<T: Ord> {
-    /// Deletes the item with the given key from the tree and returns it (or None).
-    fn delete(&mut self, search: &T) -> Option<T>;
-
-    #[inline] fn delete_idx(&mut self, idx: usize) -> T;
-    #[inline] fn delete_max(&mut self, idx: usize) -> T;
-    #[inline] fn delete_min(&mut self, idx: usize) -> T;
-}
-
-
-
-impl<T: Ord> PlainDelete<T> for TeardownTreeInternal<T> {
+pub trait PlainDelete<T: Ord>: TreeInternal<T> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     fn delete(&mut self, search: &T) -> Option<T> {
         self.index_of(search).map(|idx| {
@@ -122,9 +88,9 @@ impl<T: Ord> PlainDelete<T> for TeardownTreeInternal<T> {
         }
     }
 }
+impl<T: Ord> PlainDelete<T> for TeardownTreeInternal<T> {}
 
-
-impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
+pub trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T> {
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
     /// Vec. The items are returned in order.
     #[inline]
@@ -307,3 +273,4 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
         }
     }
 }
+impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {}

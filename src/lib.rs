@@ -19,9 +19,8 @@ pub use self::applied::plain_tree;
 
 #[cfg(test)]
 mod plain_tests {
-    use base::{TeardownTreeInternal, Node, lefti, righti, parenti};
-    use base::RangeDriver;
-    use plain_tree::{PlainTeardownTree, PlainDeleteRange, PlainDelete};
+    use base::{TeardownTreeInternal, TreeInternalBase, TreeInternal, Node, lefti, righti, parenti};
+    use plain_tree::{PlainDeleteRange, PlainDelete};
 
     type Tree = TeardownTreeInternal<usize>;
 

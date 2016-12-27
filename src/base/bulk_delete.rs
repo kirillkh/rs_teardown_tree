@@ -1,35 +1,8 @@
-use base::{TeardownTreeInternal, Node, lefti, righti};
+use base::{TeardownTreeInternal, TreeInternal, Node, lefti, righti};
 use base::Sink;
 use base::SlotStack;
 use std::mem;
 
-
-pub trait BulkDeleteCommon<T: Ord> {
-    fn consume_subtree<S: Sink<T>>(&mut self, root: usize, sink: &mut S);
-
-    fn fill_slots_min(&mut self, idx: usize) -> bool;
-    fn fill_slots_max(&mut self, idx: usize) -> bool;
-
-    fn fill_slot_min(&mut self, idx: usize);
-    fn fill_slot_max(&mut self, idx: usize);
-
-    fn descend_left<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
-                            where F: FnMut(&mut Self, usize);
-    fn descend_right<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
-                            where F: FnMut(&mut Self, usize);
-
-    fn descend_fill_min_left(&mut self, idx: usize, with_slot: bool) -> bool;
-    fn descend_fill_max_left(&mut self, idx: usize, with_slot: bool) -> bool;
-    fn descend_fill_max_right(&mut self, idx: usize, with_slot: bool) -> bool;
-    fn descend_fill_min_right(&mut self, idx: usize, with_slot: bool) -> bool;
-
-
-    fn slots_min(&mut self) -> &mut SlotStack;
-    fn slots_max(&mut self) -> &mut SlotStack;
-
-    #[inline(always)]
-    fn node_unsafe<'b>(&self, idx: usize) -> &'b Node<T>;
-}
 
 pub struct DeleteRangeCache {
     pub slots_min: SlotStack, pub slots_max: SlotStack,   // TODO: we no longer need both stacks, one is enough... but removing one causes 3% performance regression
@@ -59,7 +32,7 @@ impl DeleteRangeCache {
 //}
 
 //==== generic methods =============================================================================
-impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
+pub trait BulkDeleteCommon<T: Ord>: TreeInternal<T> {
 //    //---- helpers ---------------------------------------------------------------------------------
 //    #[inline(always)]
 //    pub fn node(&self, idx: usize) -> &Node<T> {
@@ -205,7 +178,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
     #[inline(always)]
     fn descend_fill_min_left(&mut self, idx: usize, with_slot: bool) -> bool {
-        self.descend_left(idx, false, |this: &mut Self, child_idx| {
+        self.descend_left(idx, with_slot, |this: &mut Self, child_idx| {
             this.fill_slots_min(child_idx);
         })
     }
@@ -232,15 +205,6 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
         })
     }
 
-
-    fn slots_min(&mut self) -> &mut SlotStack {
-        &mut self.delete_range_cache.slots_min
-    }
-
-    fn slots_max(&mut self) -> &mut SlotStack {
-        &mut self.delete_range_cache.slots_max
-    }
-
     #[inline(always)]
     fn node_unsafe<'b>(&self, idx: usize) -> &'b Node<T> {
         unsafe {
@@ -248,8 +212,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
         }
     }
 }
-
-
+impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {}
 
 ////==== delete_bulk() - a more general (and slower) version of the algorithm that allows to traverse nodes without consuming them ====
 //impl<'a, T: Item> DeleteRange<'a, T> {
