@@ -43,8 +43,10 @@ pub trait PlainDeleteRange<T: Ord> {
     fn delete_range_min<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
     fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize);
 
-    fn descend_delete_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
-    fn descend_delete_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
+    fn descend_delete_max_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
+    fn descend_delete_max_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
+    fn descend_delete_min_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
+    fn descend_delete_min_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool;
 
     fn fill_slots_min2(&mut self, idx: usize);
 }
@@ -163,9 +165,9 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
 
             if decision.left() && decision.right() {
                 let item = self.take(idx);
-                let removed = self.descend_delete_left(drv, idx, true);
+                let removed = self.descend_delete_max_left(drv, idx, true);
                 drv.consume_unchecked(item);
-                self.descend_delete_right(drv, idx, removed);
+                self.descend_delete_min_right(drv, idx, removed);
                 return;
             } else if decision.left() {
                 idx = lefti(idx);
@@ -186,16 +188,14 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
             let item = self.take(idx);
             self.consume_subtree(lefti(idx), drv);
             drv.consume_unchecked(item);
-            self.descend_delete_right(drv, idx, true);
+            self.descend_delete_min_right(drv, idx, true);
         } else {
             // the root and the right subtree are outside the range
-            self.descend_left(idx, false,
-                              |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx)
-            );
+            self.descend_delete_min_left(drv, idx, false);
 
             if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
-                self.descend_fill_right(idx, true);
+                self.descend_fill_min_right(idx, true);
 //                self.descend_right(idx, true, |this: &mut Self, child_idx| {
 //                    this.fill_slots_min2(child_idx);
 //                });
@@ -211,18 +211,16 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
         if decision.left() {
             // the root and the whole right subtree are inside the range
             let item = self.take(idx);
-            self.descend_delete_left(drv, idx, true);
+            self.descend_delete_max_left(drv, idx, true);
             drv.consume_unchecked(item);
             self.consume_subtree(righti(idx), drv);
         } else {
             // the root and the left subtree are outside the range
-            self.descend_right(idx, false,
-                               |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx)
-            );
+            self.descend_delete_max_right(drv, idx, false);
 
             if self.slots_max().has_open() {
                 self.fill_slot_max(idx);
-                self.descend_fill_left(idx, true);
+                self.descend_fill_max_left(idx, true);
             }
         }
     }
@@ -230,16 +228,31 @@ impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_min_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
         self.descend_left(idx, with_slot,
-                          |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
+                          |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_max_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+        self.descend_left(idx, with_slot,
+                          |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
+    }
+
+
+    /// Returns true if the item is removed after recursive call, false otherwise.
+    #[inline(always)]
+    fn descend_delete_min_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
         self.descend_right(idx, with_slot,
                            |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx))
+    }
+
+    /// Returns true if the item is removed after recursive call, false otherwise.
+    #[inline(always)]
+    fn descend_delete_max_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+        self.descend_right(idx, with_slot,
+                           |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
     }
 
 

@@ -256,13 +256,13 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode
             let removed = if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
 
-                self.descend_fill_right(idx, true)
+                self.descend_fill_min_right(idx, true)
             } else {
                 false
             };
 
             if self.slots_max().has_open() {
-                self.descend_fill_left(idx, removed);
+                self.descend_fill_max_left(idx, removed);
             }
         } else {
             // consume root if necessary
@@ -301,7 +301,7 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode
 
             // fill the remaining open slots_max from the left subtree
             if removed && self.slots_max().has_open() {
-                self.descend_fill_left(righti(idx), true);
+                self.descend_fill_max_left(righti(idx), true);
             }
         }
     }

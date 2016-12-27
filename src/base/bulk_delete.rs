@@ -18,8 +18,10 @@ pub trait BulkDeleteCommon<T: Ord> {
     fn descend_right<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
                             where F: FnMut(&mut Self, usize);
 
-    fn descend_fill_left(&mut self, idx: usize, with_slot: bool) -> bool;
-    fn descend_fill_right(&mut self, idx: usize, with_slot: bool) -> bool;
+    fn descend_fill_min_left(&mut self, idx: usize, with_slot: bool) -> bool;
+    fn descend_fill_max_left(&mut self, idx: usize, with_slot: bool) -> bool;
+    fn descend_fill_max_right(&mut self, idx: usize, with_slot: bool) -> bool;
+    fn descend_fill_min_right(&mut self, idx: usize, with_slot: bool) -> bool;
 
 
     fn slots_min(&mut self) -> &mut SlotStack;
@@ -97,9 +99,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
         debug_assert!(!self.is_nil(idx));
 
         if self.has_left(idx) {
-            self.descend_left(idx, false, |this: &mut Self, child_idx| {
-                this.fill_slots_min(child_idx);
-            });
+            self.descend_fill_min_left(idx, false);
             if !self.slots_min().has_open() {
                 return true;
             }
@@ -109,7 +109,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
         self.fill_slot_min(idx);
 
-        let done = !self.descend_fill_right(idx, true);
+        let done = !self.descend_fill_min_right(idx, true);
         done || !self.slots_min().has_open()
     }
 
@@ -119,9 +119,8 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
         debug_assert!(!self.is_nil(idx));
 
         if self.has_right(idx) {
-            !self.descend_right(idx, false, |this: &mut Self, child_idx| {
-                this.fill_slots_max(child_idx);
-            });
+            self.descend_fill_max_right(idx, false);
+
             if !self.slots_max().has_open() {
                 return true;
             }
@@ -131,7 +130,7 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
         self.fill_slot_max(idx);
 
-        let done = !self.descend_fill_left(idx, true);
+        let done = !self.descend_fill_max_left(idx, true);
         done || !self.slots_max().has_open()
     }
 
@@ -205,18 +204,34 @@ impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {
 
 
     #[inline(always)]
-    fn descend_fill_left(&mut self, idx: usize, with_slot: bool) -> bool {
+    fn descend_fill_min_left(&mut self, idx: usize, with_slot: bool) -> bool {
+        self.descend_left(idx, false, |this: &mut Self, child_idx| {
+            this.fill_slots_min(child_idx);
+        })
+    }
+
+    #[inline(always)]
+    fn descend_fill_max_left(&mut self, idx: usize, with_slot: bool) -> bool {
         self.descend_left(idx, with_slot, |this: &mut Self, child_idx| {
             this.fill_slots_max(child_idx);
         })
     }
 
+
     #[inline(always)]
-    fn descend_fill_right(&mut self, idx: usize, with_slot: bool) -> bool {
+    fn descend_fill_min_right(&mut self, idx: usize, with_slot: bool) -> bool {
         self.descend_right(idx, with_slot, |this: &mut Self, child_idx| {
             this.fill_slots_min(child_idx);
         })
     }
+
+    #[inline(always)]
+    fn descend_fill_max_right(&mut self, idx: usize, with_slot: bool) -> bool {
+        self.descend_right(idx, with_slot, |this: &mut Self, child_idx| {
+            this.fill_slots_max(child_idx);
+        })
+    }
+
 
     fn slots_min(&mut self) -> &mut SlotStack {
         &mut self.delete_range_cache.slots_min
