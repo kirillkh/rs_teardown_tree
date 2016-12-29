@@ -1,4 +1,4 @@
-use base::{TeardownTreeInternal, TreeInternal, Node, lefti, righti};
+use base::{TreeBase, TreeWrapper, Node, lefti, righti};
 use base::Sink;
 use base::SlotStack;
 use std::mem;
@@ -25,41 +25,28 @@ impl DeleteRangeCache {
 }
 
 
-//pub struct DeleteRange<T: Item> {
-//    pub tree: TeardownTreeInternal<T>,
-////    pub slots_min: SlotStack, pub slots_max: SlotStack,
-//    pub output: Vec<T>
-//}
+
+
+pub trait EnterItem<T: Ord>: Sized {
+    type Tree: BulkDeleteCommon<T, Self>;
+
+    #[inline]
+    fn enter<F>(arg: &mut Self::Tree, idx: usize, f: F)
+                                where F: FnMut(&mut Self::Tree, usize);
+}
+
+
 
 //==== generic methods =============================================================================
-pub trait BulkDeleteCommon<T: Ord>: TreeInternal<T> {
-//    //---- helpers ---------------------------------------------------------------------------------
-//    #[inline(always)]
-//    pub fn node(&self, idx: usize) -> &Node<T> {
-//        self.tree.node(idx)
-//    }
-//
-//    #[inline(always)]
-//    pub fn item(&mut self, idx: usize) -> &T {
-//        &self.node(idx).item
-//    }
-//
-//    #[inline(always)]
-//    pub fn slots_min(&mut self) -> &mut SlotStack {
-//        &mut self.tree.delete_range_cache.slots_min
-//    }
-//
-//    #[inline(always)]
-//    pub fn slots_max(&mut self) -> &mut SlotStack {
-//        &mut self.tree.delete_range_cache.slots_max
-//    }
+pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+Sized  {
+//    type Enter: EnterItem<T, Tree=Self>;
 
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline]
     fn consume_subtree<S: Sink<T>>(&mut self, root: usize, sink: &mut S) {
-        self.traverse_inorder(root, sink, |tree, sink, idx| {
+        self.traverse_inorder(root, sink, |this, sink, idx| {
             unsafe {
-                tree.move_to(idx, sink);
+                this.move_to(idx, sink);
             }
             false
         });
@@ -142,12 +129,12 @@ pub trait BulkDeleteCommon<T: Ord>: TreeInternal<T> {
         if with_slot {
             self.slots_max().push(idx);
 
-            f(self, child_idx);
+            Enter::enter(self, child_idx, f);
 
             self.slots_max().pop();
             self.is_nil(idx)
         } else {
-            f(self, child_idx);
+            Enter::enter(self, child_idx, f);
             false
         }
     }
@@ -165,12 +152,12 @@ pub trait BulkDeleteCommon<T: Ord>: TreeInternal<T> {
         if with_slot {
             self.slots_min().push(idx);
 
-            f(self, child_idx);
+            Enter::enter(self, child_idx, f);
 
             self.slots_min().pop();
             self.is_nil(idx)
         } else {
-            f(self, child_idx);
+            Enter::enter(self, child_idx, f);
             false
         }
     }
@@ -212,7 +199,7 @@ pub trait BulkDeleteCommon<T: Ord>: TreeInternal<T> {
         }
     }
 }
-impl<T: Ord> BulkDeleteCommon<T> for TeardownTreeInternal<T> {}
+
 
 ////==== delete_bulk() - a more general (and slower) version of the algorithm that allows to traverse nodes without consuming them ====
 //impl<'a, T: Item> DeleteRange<'a, T> {

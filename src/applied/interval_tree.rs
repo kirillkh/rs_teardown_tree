@@ -1,44 +1,16 @@
 use applied::interval::{Interval, IntervalNode};
-use base::{TeardownTree, TeardownTreeInternal, lefti, righti, parenti, Sink};
+use base::{TreeWrapper, TreeBase, BulkDeleteCommon, EnterItem, lefti, righti, parenti, Sink};
 use base::drivers::{consume_ptr, consume_unchecked};
-use base::{BulkDeleteCommon, TreeInternal};
-use base::InternalAccess;
 use std::{mem, cmp};
+use std::marker::PhantomData;
 
-pub trait IntervalTeardownTree<Iv: Interval> {
-    fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
-    fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>);
+
+pub trait IntervalTreeInternal<Iv: Interval> {
+    #[inline] fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
+    #[inline] fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>);
 }
 
-//trait IntervalDeleteRange<Iv: Interval> {
-//    fn delete_with_driver<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S);
-//
-//    fn delete_range<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S);
-//    fn delete_range_loop<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
-//
-//    fn delete_range_min<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
-//    fn delete_range_max<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize);
-//
-//    fn descend_delete_left<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
-//    fn descend_delete_right<S: Sink<IntervalNode<Iv>>>(&mut self, drv: &mut S, idx: usize, with_slot: bool) -> bool;
-//}
-
-impl<Iv: Interval> IntervalTeardownTree<Iv> for TeardownTree<IntervalNode<Iv>> {
-    /// Deletes the item with the given key from the tree and returns it (or None).
-    // TODO: accepting IntervalNode is super ugly, temporary solution only
-    #[inline]
-    fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv> {
-        self.internal().delete(search)
-    }
-
-    #[inline]
-    fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>) {
-        self.internal().delete_intersecting(search, idx, output)
-    }
-}
-
-
-trait IntervalTreeInternal<Iv: Interval>: IntervalDelete<Iv>+IntervalDeleteRange<Iv> {
+impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     // TODO: accepting IntervalNode is super ugly, temporary solution only
     #[inline]
@@ -60,13 +32,14 @@ trait IntervalTreeInternal<Iv: Interval>: IntervalDelete<Iv>+IntervalDeleteRange
 
     #[inline]
     fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>) {
-        self.delete_intersecting_ivl_rec(search, idx, false, &mut self::IntervalSink { output: output });
+        UpdateMax::enter(self, 0, move |this, idx|
+            this.delete_intersecting_ivl_rec(search, idx, false, &mut self::IntervalSink { output: output })
+        )
     }
 }
-impl<Iv: Interval> IntervalTreeInternal<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {}
 
 
-trait IntervalDelete<Iv: Interval>: TreeInternal<IntervalNode<Iv>> {
+trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
     #[inline]
     fn update_maxb(&mut self, idx: usize) {
         let item = self.item_mut_unsafe(idx);
@@ -208,10 +181,12 @@ trait IntervalDelete<Iv: Interval>: TreeInternal<IntervalNode<Iv>> {
         removed
     }
 }
-impl<Iv: Interval> IntervalDelete<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {}
 
 
-trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>>+IntervalDelete<Iv> {
+trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>,
+//                                                          UpdateMax<TreeWrapper<IntervalNode<Iv>>>
+                                                          UpdateMax<Iv, Self>
+                                                         > + IntervalDelete<Iv> {
     fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, mut min_included: bool, sink: &mut S) {
         let k: &IntervalNode<Iv> = &self.node_unsafe(idx).item;
 
@@ -295,7 +270,6 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>>+Inte
                            |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink))
     }
 }
-impl<Iv: Interval> IntervalDeleteRange<Iv> for TeardownTreeInternal<IntervalNode<Iv>> {}
 
 
 struct IntervalSink<'a, Iv: Interval+'a> {
@@ -316,3 +290,48 @@ impl<'a, Iv: Interval> Sink<IntervalNode<Iv>> for IntervalSink<'a, Iv> {
         consume_ptr(&mut self.output, p)
     }
 }
+
+
+struct UpdateMax<Iv: Interval, Tree: TreeBase<IntervalNode<Iv>>> {
+    _ph: PhantomData<(Iv, Tree)>
+}
+
+impl<Iv: Interval, Tree> EnterItem<IntervalNode<Iv>> for UpdateMax<Iv, Tree>
+                                            where Tree: BulkDeleteCommon<IntervalNode<Iv>,
+                                                                         UpdateMax<Iv, Tree>> {
+    type Tree = Tree;
+
+    #[inline]
+    fn enter<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
+                                                    where F: FnMut(&mut Self::Tree, usize) {
+        f(tree, idx);
+
+        if tree.is_nil(idx) {
+            return;
+        }
+
+        let item = tree.item_mut_unsafe(idx);
+        match (tree.has_left(idx), tree.has_right(idx)) {
+            (false, false) => {},
+            (false, true) =>
+                item.maxb = cmp::max(&item.maxb, &tree.item(righti(idx)).maxb).clone(),
+            (true, false) =>
+                item.maxb = cmp::max(&item.maxb, &tree.item(lefti(idx)).maxb).clone(),
+            (true, true) =>
+                item.maxb = cmp::max(&item.maxb,
+                                     cmp::max(&tree.item(lefti(idx)).maxb, &tree.item(righti(idx)).maxb))
+                                    .clone(),
+        }
+    }
+}
+
+impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
+                                    UpdateMax<Iv, TreeWrapper<IntervalNode<Iv>>>
+                                   > for TreeWrapper<IntervalNode<Iv>> {
+//    type Update = UpdateMax;
+}
+
+
+
+impl<Iv: Interval> IntervalDelete<Iv> for TreeWrapper<IntervalNode<Iv>> {}
+impl<Iv: Interval> IntervalDeleteRange<Iv> for TreeWrapper<IntervalNode<Iv>> {}

@@ -1,48 +1,19 @@
 mod slot_stack;
 mod bulk_delete;
 mod unsafe_stack;
+mod base_repr;
 pub mod drivers;
 
 pub use self::slot_stack::*;
 pub use self::bulk_delete::*;
 pub use self::unsafe_stack::*;
 pub use self::drivers::*;
+pub use self::base_repr::*;
 
 use std::ptr;
 use std::mem;
-use std::cmp::{max, Ordering};
-use std::fmt;
-use std::fmt::{Debug, Formatter};
-//use self::{DeleteRangeCache, DeleteRangeInternal};
-//use self::{TraversalDriver, RangeRefDriver, RangeDriver, Sink};
+use std::cmp::{Ordering};
 
-//pub trait Item: Sized+Clone {
-//    type Key: Ord;
-//
-//    #[inline(always)]
-//    fn key(&self) -> &Self::Key;
-//}
-//
-//
-//impl Item for usize {
-//    type Key = usize;
-//
-//    #[inline(always)]
-//    fn key(&self) -> &Self::Key {
-//        self
-//    }
-//}
-
-#[derive(Debug, Clone)]
-pub struct Node<T: Ord> {
-    pub item: T,
-}
-
-impl<T: Ord> Node<T> {
-    pub fn new(item: T) -> Self {
-        Node { item: item }
-    }
-}
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
 pub trait TeardownTreeRefill<T: Copy+Ord> {
@@ -50,14 +21,9 @@ pub trait TeardownTreeRefill<T: Copy+Ord> {
 }
 
 
-impl<T: Copy+Ord> TeardownTreeRefill<T> for TeardownTree<T> {
-    fn refill(&mut self, master: &TeardownTree<T>) {
-        self.internal.refill(&master.internal)
-    }
-}
 
-impl<T: Copy+Ord> TeardownTreeRefill<T> for TeardownTreeInternal<T> {
-    fn refill(&mut self, master: &TeardownTreeInternal<T>) {
+impl<T: Copy+Ord> TeardownTreeRefill<T> for TreeWrapper<T> {
+    fn refill(&mut self, master: &TreeWrapper<T>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
         unsafe {
@@ -83,166 +49,8 @@ impl<T: Copy+Ord> TeardownTreeRefill<T> for TeardownTreeInternal<T> {
 //    }
 //}
 
-#[derive(Clone)]
-pub struct TeardownTree<T: Ord> {
-    internal: TeardownTreeInternal<T>
-}
 
-#[derive(Clone)]
-pub struct TeardownTreeInternal<T: Ord> {
-    pub data: Vec<Node<T>>,
-    pub mask: Vec<bool>,
-    size: usize,
-
-    pub delete_range_cache: DeleteRangeCache,
-}
-
-impl<T: Ord> TeardownTree<T> {
-    /// Constructs a new TeardownTree<T>
-    /// **Note:** the argument must be sorted!
-    pub fn new(sorted: Vec<T>) -> TeardownTree<T> {
-        TeardownTree { internal: TeardownTreeInternal::new(sorted) }
-    }
-
-    pub fn with_nodes(nodes: Vec<Option<Node<T>>>) -> TeardownTree<T> {
-        TeardownTree { internal: TeardownTreeInternal::with_nodes(nodes) }
-    }
-
-
-    pub fn size(&self) -> usize {
-        self.internal.size()
-    }
-
-    pub fn clear(&mut self) {
-        self.internal.clear()
-    }
-}
-
-
-impl<T: Ord> TeardownTreeInternal<T> {
-    /// Constructs a new TeardownTree<T>
-    /// Note: the argument must be sorted!
-    pub fn new(mut sorted: Vec<T>) -> TeardownTreeInternal<T> {
-        let size = sorted.len();
-
-        let capacity = size;
-
-        let mut data = Vec::with_capacity(capacity);
-        unsafe { data.set_len(capacity); }
-
-        let mask: Vec<bool> = vec![true; capacity];
-        let height = Self::build(&mut sorted, 0, &mut data);
-        unsafe { sorted.set_len(0); }
-        let cache = DeleteRangeCache::new(height);
-        TeardownTreeInternal { data: data, mask: mask, size: size, delete_range_cache: cache }
-    }
-
-    fn calc_height(nodes: &Vec<Option<Node<T>>>, idx: usize) -> usize {
-        if idx < nodes.len() && nodes[idx].is_some() {
-            1 + max(Self::calc_height(nodes, lefti(idx)),
-                    Self::calc_height(nodes, righti(idx)))
-        } else {
-            0
-        }
-    }
-
-    /// Finds the point to partition n keys for a nearly-complete binary tree
-    /// http://stackoverflow.com/a/26896494/3646645
-    fn build_select_root(n: usize) -> usize {
-        // the highest power of two <= n
-        let x = if n.is_power_of_two() { n }
-                else { n.next_power_of_two() / 2 };
-
-        if x/2 <= (n-x) + 1 {
-            debug_assert!(x >= 1, "x={}, n={}", x, n);
-            x - 1
-        } else {
-            n - x/2
-        }
-    }
-
-    /// Returns the height of the tree.
-    fn build(sorted: &mut [T], idx: usize, data: &mut [Node<T>]) -> usize {
-        match sorted.len() {
-            0 => 0,
-            n => {
-                let mid = Self::build_select_root(n);
-                let (lefti, righti) = (lefti(idx), righti(idx));
-                let lh = Self::build(&mut sorted[..mid], lefti, data);
-                let rh = Self::build(&mut sorted[mid+1..], righti, data);
-
-                unsafe {
-                    let p = sorted.get_unchecked(mid);
-                    let item = ptr::read(p);
-                    ptr::write(data.get_unchecked_mut(idx), Node { item: item });
-                }
-
-                debug_assert!(rh <= lh);
-                1 + lh
-            }
-        }
-    }
-    /// Constructs a new TeardownTree<T> based on raw nodes vec.
-    pub fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TeardownTreeInternal<T> {
-        let size = nodes.iter().filter(|x| x.is_some()).count();
-        let height = Self::calc_height(&nodes, 0);
-        let capacity = nodes.len();
-
-        let mut mask = vec![false; capacity];
-        let mut data = Vec::with_capacity(capacity);
-        unsafe {
-            data.set_len(capacity);
-        }
-
-        for i in 0..capacity {
-            if let Some(node) = nodes[i].take() {
-                mask[i] = true;
-                let garbage = mem::replace(&mut data[i], node );
-                mem::forget(garbage);
-            }
-        }
-
-        let cache = DeleteRangeCache::new(height);
-        TeardownTreeInternal { data: data, mask: mask, size: size, delete_range_cache: cache }
-    }
-
-//    fn into_node_vec(self) -> Vec<Option<Node<T>>> {
-//        self.data()
-//            .into_iter()
-//            .zip(self.mask().into_iter())
-//            .map(|(node, flag)| if flag {
-//                    Some(node)
-//                } else {
-//                    None
-//                })
-//            .collect::<Vec<Option<Node<T>>>>()
-//    }
-}
-
-impl<T: Ord> Drop for TeardownTreeInternal<T> {
-    fn drop(&mut self) {
-        self.drop_items();
-        unsafe {
-            self.data.set_len(0)
-        }
-    }
-}
-
-pub trait TreeInternalBase<T: Ord> {
-    fn data(&self) -> &Vec<Node<T>>;
-    fn data_mut(&mut self) -> &mut Vec<Node<T>>;
-
-    fn mask(&self) -> &Vec<bool>;
-    fn mask_mut(&mut self) -> &mut Vec<bool>;
-
-    fn size(&self) -> usize;
-    fn size_mut(&mut self) -> &mut usize;
-
-    fn slots_min(&mut self) -> &mut SlotStack;
-    fn slots_max(&mut self) -> &mut SlotStack;
-}
-
-pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
+pub trait TreeBase<T: Ord>: TreeReprAccess<T> {
     #[inline(always)]
     fn item_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut T {
         unsafe {
@@ -267,13 +75,13 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
     }
 
     fn index_of(&self, search: &T) -> Option<usize> {
-        if self.data().is_empty() {
+        if self.data.is_empty() {
             return None;
         }
 
         let mut idx = 0;
         let mut key =
-        if self.mask()[idx] {
+        if self.mask[idx] {
             self.item(idx)
         } else {
             return None;
@@ -288,11 +96,11 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
                 Ordering::Greater => righti(idx),
             };
 
-            if idx >= self.data().len() {
+            if idx >= self.data.len() {
                 return None;
             }
 
-            if self.mask()[idx] {
+            if self.mask[idx] {
                 key = self.item(idx);
             } else {
                 return None;
@@ -319,12 +127,12 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
 
     #[inline(always)]
     fn node(&self, idx: usize) -> &Node<T> {
-        &self.data()[idx]
+        &self.data[idx]
     }
 
     #[inline(always)]
     fn node_mut(&mut self, idx: usize) -> &mut Node<T> {
-        &mut self.data_mut()[idx]
+        &mut self.data[idx]
     }
 
     #[inline(always)]
@@ -337,7 +145,7 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
         if idx == 0 {
             None
         } else {
-            Some(&self.data()[parenti(idx)])
+            Some(&self.data[parenti(idx)])
         }
     }
 
@@ -347,7 +155,7 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
         if self.is_nil(lefti) {
             None
         } else {
-            Some(&self.data()[lefti])
+            Some(&self.data[lefti])
         }
     }
 
@@ -357,7 +165,7 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
         if self.is_nil(righti) {
             None
         } else {
-            Some(&self.data()[righti])
+            Some(&self.data[righti])
         }
     }
 
@@ -366,21 +174,21 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
     fn parent(&self, idx: usize) -> &Node<T> {
         let parenti = parenti(idx);
         debug_assert!(idx > 0 && !self.is_nil(idx));
-        &self.data()[parenti]
+        &self.data[parenti]
     }
 
     #[inline(always)]
     fn left(&self, idx: usize) -> &Node<T> {
         let lefti = lefti(idx);
         debug_assert!(!self.is_nil(lefti));
-        &self.data()[lefti]
+        &self.data[lefti]
     }
 
     #[inline(always)]
     fn right(&self, idx: usize) -> &Node<T> {
         let righti = righti(idx);
         debug_assert!(!self.is_nil(righti));
-        &self.data()[righti]
+        &self.data[righti]
     }
 
 
@@ -396,7 +204,7 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
 
     #[inline(always)]
     fn is_nil(&self, idx: usize) -> bool {
-        idx >= self.data().len() || !unsafe { *self.mask().get_unchecked(idx) }
+        idx >= self.data.len() || !unsafe { *self.mask.get_unchecked(idx) }
     }
 
 
@@ -485,7 +293,7 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
 
     #[inline(never)]
     fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&mut Self, &mut A, usize) -> bool {
+                                                where F: FnMut(&mut Self, &mut A, usize) -> bool {
         if self.is_nil(root) {
             return;
         }
@@ -553,21 +361,21 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
 
     #[inline(always)]
     fn take(&mut self, idx: usize) -> T {
-        debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask()[idx]);
+        debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         let p: *const Node<T> = unsafe {
-            self.data().get_unchecked(idx)
+            self.data.get_unchecked(idx)
         };
-        self.mask_mut()[idx] = false;
-        *self.size_mut() -= 1;
+        self.mask[idx] = false;
+        self.size -= 1;
         unsafe { ptr::read(&(*p).item) }
     }
 
     #[inline(always)]
     unsafe fn move_to<S: Sink<T>>(&mut self, idx: usize, sink: &mut S) {
-        debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask()[idx]);
-        *self.mask_mut().get_unchecked_mut(idx) = false;
-        *self.size_mut() -= 1;
-        let p: *const Node<T> = self.data().get_unchecked(idx);
+        debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
+        *self.mask.get_unchecked_mut(idx) = false;
+        self.size -= 1;
+        let p: *const Node<T> = self.data.get_unchecked(idx);
 
         let item = ptr::read(&(*p).item);
         sink.consume_unchecked(item);
@@ -576,9 +384,9 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
     #[inline(always)]
     unsafe fn move_from_to(&mut self, src: usize, dst: usize) {
         debug_assert!(!self.is_nil(src) && self.is_nil(dst), "is_nil(src)={}, is_nil(dst)={}", self.is_nil(src), self.is_nil(dst));
-        *self.mask_mut().get_unchecked_mut(src) = false;
-        *self.mask_mut().get_unchecked_mut(dst) = true;
-        let pdata = self.data_mut().as_mut_ptr();
+        *self.mask.get_unchecked_mut(src) = false;
+        *self.mask.get_unchecked_mut(dst) = true;
+        let pdata = self.data.as_mut_ptr();
         let psrc: *mut Node<T> = pdata.offset(src as isize);
         let pdst: *mut Node<T> = pdata.offset(dst as isize);
         let x = ptr::read(psrc);
@@ -587,13 +395,13 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
 
     #[inline(always)]
     fn place(&mut self, idx: usize, item: T) {
-        if self.mask()[idx] {
-            self.data_mut()[idx].item = item;
+        if self.mask[idx] {
+            self.data[idx].item = item;
         } else {
-            self.mask_mut()[idx] = true;
-            *self.size_mut() += 1;
+            self.mask[idx] = true;
+            self.size += 1;
             unsafe {
-                let p = self.data_mut().get_unchecked_mut(idx);
+                let p = self.data.get_unchecked_mut(idx);
                 ptr::write(p, Node::new(item));
             };
         }
@@ -604,134 +412,46 @@ pub trait TreeInternal<T: Ord>: TreeInternalBase<T> {
     }
 
     fn drop_items(&mut self) {
-        if self.size()*2 <= self.data().len() {
+        if self.size*2 <= self.data.len() {
             self.traverse_preorder(0, &mut 0, |this: &mut Self, _, idx| {
                 unsafe {
-                    let p = this.data_mut().get_unchecked_mut(idx);
+                    let p = this.data.get_unchecked_mut(idx);
                     ptr::drop_in_place(p);
                 }
 
-                this.mask_mut()[idx] = false;
+                this.mask[idx] = false;
             })
         } else {
-            let p = self.data_mut().as_mut_ptr();
-            for i in 0..self.size() {
-                if self.mask()[i] {
+            let p = self.data.as_mut_ptr();
+            for i in 0..self.size {
+                if self.mask[i] {
                     unsafe {
                         ptr::drop_in_place(p.offset(i as isize));
                     }
 
-                    self.mask_mut()[i] = false;
+                    self.mask[i] = false;
                 }
             }
         }
 
-        *self.size_mut() = 0;
+        self.size = 0;
     }
-}
-impl<T: Ord> TreeInternal<T> for TeardownTreeInternal<T> {}
 
 
-impl<T: Ord> TreeInternalBase<T> for TeardownTreeInternal<T> {
-    fn data(&self) -> &Vec<Node<T>> { &self.data }
-    fn data_mut(&mut self) -> &mut Vec<Node<T>> { &mut self.data }
-    fn mask(&self) -> &Vec<bool> { &self.mask }
-    fn mask_mut(&mut self) -> &mut Vec<bool> { &mut self.mask }
-    fn size(&self) -> usize { self.size }
-    fn size_mut(&mut self) -> &mut usize { &mut self.size }
-    fn slots_min(&mut self) -> &mut SlotStack { &mut self.delete_range_cache.slots_min}
-    fn slots_max(&mut self) -> &mut SlotStack { &mut self.delete_range_cache.slots_max }
-}
+    fn slots_min<'a>(&'a mut self) -> &'a mut SlotStack where T: 'a {
+        &mut self.delete_range_cache.slots_min
+    }
 
+    fn slots_max<'a>(&'a mut self) -> &'a mut SlotStack where T: 'a {
+        &mut self.delete_range_cache.slots_max
+    }
 
-impl<T: Ord+Debug> Debug for TeardownTree<T> {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.internal, fmt)
+    fn size(&self) -> usize {
+        self.size
     }
 }
 
-
-impl<T: Ord+Debug> Debug for TeardownTreeInternal<T> {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        let mut nz: Vec<_> = self.mask().iter().enumerate()
-            .rev()
-            .skip_while(|&(_, flag)| !flag)
-            .map(|(i, &flag)| match (self.node(i), flag) {
-                (_, false) => String::from("0"),
-                (ref node, true) => format!("{:?}", node.item)
-            })
-            .collect();
-        nz.reverse();
-
-        let _ = write!(fmt, "[");
-        let mut sep = "";
-        for ref key in nz.iter() {
-            let _ = write!(fmt, "{}", sep);
-            sep = ", ";
-            let _ = write!(fmt, "{}", key);
-        }
-        let _ = write!(fmt, "]");
-        Ok(())
-    }
-}
-
-
-impl<T: Ord+Debug> fmt::Display for TeardownTree<T> {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.internal, fmt)
-    }
-}
-
-
-impl<T: Ord+Debug> fmt::Display for TeardownTreeInternal<T> {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        writeln!(fmt, "")?;
-        let mut ancestors = vec![];
-        self.fmt_subtree(fmt, 0, &mut ancestors)
-    }
-}
-
-impl<T: Ord+Debug> TeardownTreeInternal<T> {
-    fn fmt_branch(&self, fmt: &mut Formatter, ancestors: &Vec<bool>) -> fmt::Result {
-        for (i, c) in ancestors.iter().enumerate() {
-            if i == ancestors.len() - 1 {
-                write!(fmt, "|--")?;
-            } else {
-                if *c {
-                    write!(fmt, "|")?;
-                } else {
-                    write!(fmt, " ")?;
-                }
-                write!(fmt, "  ")?;
-            }
-        }
-
-        Ok(())
-    }
-
-    fn fmt_subtree(&self, fmt: &mut Formatter, idx: usize, ancestors: &mut Vec<bool>) -> fmt::Result {
-        self.fmt_branch(fmt, ancestors)?;
-
-        if !self.is_nil(idx) {
-            writeln!(fmt, "{:?}", self.item(idx))?;
-
-            if idx%2 == 0 && !ancestors.is_empty() {
-                *ancestors.last_mut().unwrap() = false;
-            }
-
-            if self.has_left(idx) || self.has_right(idx) {
-                ancestors.push(true);
-                self.fmt_subtree(fmt, lefti(idx), ancestors)?;
-                self.fmt_subtree(fmt, righti(idx), ancestors)?;
-                ancestors.pop();
-            }
-        } else {
-            writeln!(fmt, "X")?;
-        }
-
-        Ok(())
-    }
-}
+impl<T: Ord> TreeBase<T> for TreeWrapper<T> {}
 
 
 #[inline(always)]
@@ -747,15 +467,4 @@ pub fn lefti(idx: usize) -> usize {
 #[inline(always)]
 pub fn righti(idx: usize) -> usize {
     (idx<<1) + 2
-}
-
-
-pub trait InternalAccess<T: Ord> {
-    fn internal(&mut self) -> &mut TeardownTreeInternal<T>;
-}
-
-impl<T: Ord> InternalAccess<T> for TeardownTree<T> {
-    fn internal(&mut self) -> &mut TeardownTreeInternal<T> {
-        &mut self.internal
-    }
 }

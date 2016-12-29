@@ -2,27 +2,24 @@
 //#![feature(unique)]
 #![cfg_attr(feature = "unstable", feature(test))]
 
-//extern crate test;
 extern crate rand;
 
 mod base;
 mod applied;
-//mod unsafe_stack;
+mod external_api;
 
 mod rust_bench;
 
-pub use base::{TeardownTree, TeardownTreeRefill, Node};
-pub use self::applied::interval_tree;
-pub use self::applied::plain_tree;
+pub use self::external_api::{IntervalTeardownTree, PlainTeardownTree, TeardownTreeRefill};
 
 
 
 #[cfg(test)]
 mod plain_tests {
-    use base::{TeardownTreeInternal, TreeInternalBase, TreeInternal, Node, lefti, righti, parenti};
-    use plain_tree::{PlainDeleteRange, PlainDelete};
+    use base::{TreeBase, TreeWrapper, Node, lefti, righti, parenti};
+    use applied::plain_tree::PlainDeleteInternal;
 
-    type Tree = TeardownTreeInternal<usize>;
+    type Tree = TreeWrapper<usize>;
 
 
     #[test]
@@ -317,7 +314,7 @@ mod plain_tests {
 
         for i in 0..tree.data.len() {
             if tree.mask[i] {
-                debug_assert!(i == 0 || tree.mask[parenti(i)]);
+                debug_assert!(i == 0 || tree.mask[parenti(i)], "tree_orig: {:?}, {}", tree_orig, tree_orig);
                 noccupied += 1;
             }
         }

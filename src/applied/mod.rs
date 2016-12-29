@@ -2,9 +2,9 @@ pub mod interval_tree;
 pub mod plain_tree;
 pub mod interval;
 
-use base::TeardownTreeInternal;
+use base::TreeRepr;
 
-type Tree<T> =  TeardownTreeInternal<T>;
+type Tree<T> =  TreeRepr<T>;
 
 pub trait NodeVisitor<T: Ord> {
     fn visit(&mut self, tree: &mut Tree<T>, idx: usize);

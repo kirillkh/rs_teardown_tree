@@ -32,7 +32,7 @@ impl<K: Ord+Clone> Interval for KeyInterval<K> {
     }
 }
 
-
+#[derive(Clone)]
 pub struct IntervalNode<Iv: Interval> {
     pub ivl: Iv,
     pub maxb: Iv::K

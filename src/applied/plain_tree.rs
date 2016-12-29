@@ -1,34 +1,23 @@
-use base::{TeardownTree, TeardownTreeInternal, righti, lefti, parenti, InternalAccess};
+use base::{TreeWrapper, TreeBase, BulkDeleteCommon, EnterItem, righti, lefti, parenti};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
-use base::{BulkDeleteCommon, TreeInternal};
 use std::mem;
+use std::marker::PhantomData;
 
-pub trait PlainTeardownTree<T: Ord> {
-    fn delete(&mut self, search: &T) -> Option<T>;
-    fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>);
-    fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>);
-}
 
-impl<T: Ord> PlainTeardownTree<T> for TeardownTree<T> {
+pub trait PlainDeleteInternal<T: Ord> {
     /// Deletes the item with the given key from the tree and returns it (or None).
-    fn delete(&mut self, search: &T) -> Option<T> {
-        self.internal().delete(search)
-    }
+    fn delete(&mut self, search: &T) -> Option<T>;
 
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
     /// Vec. The items are returned in order.
-    fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>) {
-        self.internal().delete_range(from, to, output)
-    }
+    #[inline] fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>);
 
     /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
-    fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>) {
-        self.internal().delete_range_ref(from, to, output)
-    }
+    #[inline] fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>);
 }
 
 
-pub trait PlainDelete<T: Ord>: TreeInternal<T> {
+impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     fn delete(&mut self, search: &T) -> Option<T> {
         self.index_of(search).map(|idx| {
@@ -36,7 +25,31 @@ pub trait PlainDelete<T: Ord>: TreeInternal<T> {
         })
     }
 
+    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
+    /// Vec. The items are returned in order.
+    #[inline]
+    fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>) {
+        debug_assert!(output.is_empty());
+        output.truncate(0);
 
+        self.delete_with_driver(&mut RangeDriver::new(from, to, output))
+    }
+
+    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
+    #[inline]
+    fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>) {
+        debug_assert!(output.is_empty());
+        output.truncate(0);
+
+        self.delete_with_driver(&mut RangeRefDriver::new(from, to, output))
+    }
+}
+
+
+
+
+
+trait PlainDelete<T: Ord>: TreeBase<T> {
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> T {
         debug_assert!(!self.is_nil(idx));
@@ -88,29 +101,9 @@ pub trait PlainDelete<T: Ord>: TreeInternal<T> {
         }
     }
 }
-impl<T: Ord> PlainDelete<T> for TeardownTreeInternal<T> {}
-
-pub trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T> {
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
-    /// Vec. The items are returned in order.
-    #[inline]
-    fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>) {
-        debug_assert!(output.is_empty());
-        output.truncate(0);
-
-        self.delete_with_driver(&mut RangeDriver::new(from, to, output))
-    }
-
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
-    #[inline]
-    fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>) {
-        debug_assert!(output.is_empty());
-        output.truncate(0);
-
-        self.delete_with_driver(&mut RangeRefDriver::new(from, to, output))
-    }
 
 
+trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T, NoUpdate<Self>> {
     /// Delete based on driver decisions.
     /// The items are returned in order.
     #[inline]
@@ -273,4 +266,25 @@ pub trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T> {
         }
     }
 }
-impl<T: Ord> PlainDeleteRange<T> for TeardownTreeInternal<T> {}
+
+
+struct NoUpdate<Tree> {
+    _ph: PhantomData<Tree>
+}
+
+impl<Tree: BulkDeleteCommon<T, NoUpdate<Tree>>, T: Ord> EnterItem<T> for NoUpdate<Tree> {
+    type Tree = Tree;
+
+    #[inline]
+    fn enter<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
+                                                where F: FnMut(&mut Self::Tree, usize) {
+        f(tree, idx)
+    }
+}
+
+impl<T: Ord> BulkDeleteCommon<T, NoUpdate<TreeWrapper<T>>> for TreeWrapper<T> {
+//    type Update = NoUpdate;
+}
+
+impl<T: Ord> PlainDelete<T> for TreeWrapper<T> {}
+impl<T: Ord> PlainDeleteRange<T> for TreeWrapper<T> {}

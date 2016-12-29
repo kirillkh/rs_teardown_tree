@@ -127,13 +127,13 @@ fn main() {
 mod bench_delete_range {
     use std::collections::BTreeSet;
     use teardown_tree___treap::TreapMap;
-    use teardown_tree::{TeardownTree, TeardownTreeRefill};
-    use teardown_tree::plain_tree::PlainTeardownTree;
+    use teardown_tree::{TeardownTreeRefill};
+    use teardown_tree::PlainTeardownTree;
     use std::time;
     use rand::{XorShiftRng, SeedableRng, Rng};
     use super::nanos;
 
-    pub type Tree = TeardownTree<usize>;
+    pub type Tree = PlainTeardownTree<usize>;
     pub type TreeBulk = TeardownTreeBulk;
 
 
@@ -179,7 +179,7 @@ mod bench_delete_range {
 
         let tree = TeardownTreeBulk(Tree::new(elems));
         let mut copy = tree.clone();
-        let mut output = Vec::with_capacity(tree.0.size());
+        let mut output = Vec::with_capacity(tree.0.size);
 
         for _ in 0..iters {
             let keys = {
@@ -301,13 +301,13 @@ mod bench_delete_range {
 
     /// for benchmarking TeardownTree delete_range()
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeBulk(TeardownTree<usize>);
+    pub struct TeardownTreeBulk(PlainTeardownTree<usize>);
 
     impl TeardownTreeMaster for TeardownTreeBulk {
         type Cpy = TeardownTreeBulk;
 
         fn build(elems: Vec<usize>) -> Self {
-            TeardownTreeBulk(TeardownTree::new(elems))
+            TeardownTreeBulk(PlainTeardownTree::new(elems))
         }
 
         fn cpy(&self) -> Self {
@@ -315,7 +315,7 @@ mod bench_delete_range {
         }
 
         fn sz(&self) -> usize {
-            self.0.size()
+            self.0.size
         }
 
         fn descr_cycle() -> String {
@@ -350,13 +350,13 @@ mod bench_delete_range {
 
     /// for benchmarking TeardownTree delete()
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeSingle(TeardownTree<usize>);
+    pub struct TeardownTreeSingle(PlainTeardownTree<usize>);
 
     impl TeardownTreeMaster for TeardownTreeSingle {
         type Cpy = TeardownTreeSingle;
 
         fn build(elems: Vec<usize>) -> Self {
-            TeardownTreeSingle(TeardownTree::new(elems))
+            TeardownTreeSingle(PlainTeardownTree::new(elems))
         }
 
         fn cpy(&self) -> Self {
