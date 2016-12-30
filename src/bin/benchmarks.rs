@@ -179,7 +179,7 @@ mod bench_delete_range {
 
         let tree = TeardownTreeBulk(Tree::new(elems));
         let mut copy = tree.clone();
-        let mut output = Vec::with_capacity(tree.0.size);
+        let mut output = Vec::with_capacity(tree.0.size());
 
         for _ in 0..iters {
             let keys = {
@@ -315,7 +315,7 @@ mod bench_delete_range {
         }
 
         fn sz(&self) -> usize {
-            self.0.size
+            self.0.size()
         }
 
         fn descr_cycle() -> String {

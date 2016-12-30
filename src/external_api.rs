@@ -1,4 +1,3 @@
-use base::TreeWrapper;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::{Deref, DerefMut};
@@ -9,39 +8,16 @@ pub use self::interval::IntervalTeardownTree;
 pub use base::TeardownTreeRefill;
 
 
-
-trait TreeWrapperAccess<T: Ord>: Deref<Target=TreeWrapper<T>>+DerefMut<Target=TreeWrapper<T>> {}
-
-
-
-impl<T: Ord+Copy> TeardownTreeRefill<T> for TreeWrapperAccess<T, Target = TreeWrapper<T>> {
-    fn refill(&mut self, master: &Self) {
-        self.deref_mut().refill(&master.deref())
-    }
-}
-
-
-impl<T: Ord + Debug> Debug for TreeWrapperAccess<T, Target = TreeWrapper<T>> {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Debug::fmt(self.deref(), fmt)
-    }
-}
-
-impl<T: Ord + Debug> Display for TreeWrapperAccess<T, Target = TreeWrapper<T>> {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Display::fmt(self.deref(), fmt)
-    }
-}
-
-
-
 mod plain {
-    use base::{TreeBase, TreeWrapper};
+    use base::{TreeWrapper, TreeBase, TeardownTreeRefill};
+    use applied::plain_tree::PlainDeleteInternal;
+
     use std::ops::{Deref, DerefMut};
+    use std::fmt;
+    use std::fmt::{Debug, Display, Formatter};
 
-    use applied::plain_tree::{PlainDeleteInternal};
 
-    #[derive(Debug, Clone)]
+    #[derive(Clone)]
     pub struct PlainTeardownTree<T: Ord> {
         internal: TreeWrapper<T>
     }
@@ -72,28 +48,32 @@ mod plain {
         pub fn clear(&mut self) { self.internal.clear(); }
     }
 
-    impl<T: Ord> Deref for PlainTeardownTree<T> {
-        type Target = TreeWrapper<T>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.internal
+    impl<T: Ord + Debug> Debug for PlainTeardownTree<T> {
+        fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+            Debug::fmt(&self.internal, fmt)
         }
     }
 
-    impl<T: Ord> DerefMut for PlainTeardownTree<T> {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.internal
+    impl<T: Ord + Debug> Display for PlainTeardownTree<T> {
+        fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+            Display::fmt(&self.internal, fmt)
         }
     }
 
-    impl<T: Ord> super::TreeWrapperAccess<T> for PlainTeardownTree<T> {}
+    impl<T: Ord+Copy> TeardownTreeRefill<T> for PlainTeardownTree<T> {
+        fn refill(&mut self, master: &Self) {
+            self.internal.refill(&master.internal)
+        }
+    }
 }
 
 
 
 mod interval {
-    use base::{TreeBase, TreeWrapper, parenti};
+    use base::{TreeWrapper, TreeBase, TeardownTreeRefill, parenti};
     use std::ops::{Deref, DerefMut};
+    use std::fmt;
+    use std::fmt::{Debug, Display, Formatter};
 
     use applied::interval::{Interval, IntervalNode};
     use applied::interval_tree::IntervalTreeInternal;
@@ -109,13 +89,16 @@ mod interval {
                               .map(|ivl| IntervalNode{ maxb: ivl.b().clone(), ivl: ivl })
                               .collect();
             let mut tree = IntervalTeardownTree { internal: TreeWrapper::new(items) };
+            {
+                let internal = &mut tree.internal;
 
-            // initialize maxb values
-            for i in (1..tree.size()).rev() {
-                let parent = tree.item_mut_unsafe(parenti(i));
-                let item = tree.item(i);
-                if item.maxb > parent.maxb {
-                    parent.maxb = item.maxb.clone()
+                // initialize maxb values
+                for i in (1..internal.size()).rev() {
+                    let parent = internal.item_mut_unsafe(parenti(i));
+                    let item = internal.item(i);
+                    if item.maxb > parent.maxb {
+                        parent.maxb = item.maxb.clone()
+                    }
                 }
             }
 
@@ -138,20 +121,4 @@ mod interval {
             self.internal.size()
         }
     }
-
-    impl<Iv: Interval> Deref for IntervalTeardownTree<Iv> {
-        type Target = TreeWrapper<IntervalNode<Iv>>;
-
-        fn deref(&self) -> &Self::Target {
-            &self.internal
-        }
-    }
-
-    impl<Iv: Interval> DerefMut for IntervalTeardownTree<Iv> {
-        fn deref_mut(&mut self) -> &mut Self::Target {
-            &mut self.internal
-        }
-    }
-
-    impl<Iv: Interval> super::TreeWrapperAccess<IntervalNode<Iv>> for IntervalTeardownTree<Iv> {}
 }
