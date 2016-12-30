@@ -5,12 +5,7 @@ use std::{mem, cmp};
 use std::marker::PhantomData;
 
 
-pub trait IntervalTreeInternal<Iv: Interval> {
-    #[inline] fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
-    #[inline] fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>);
-}
-
-impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {
+pub trait IntervalTreeInternal<Iv: Interval>: IntervalDelete<Iv> + IntervalDeleteRange<Iv> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     // TODO: accepting IntervalNode is super ugly, temporary solution only
     #[inline]
@@ -332,3 +327,4 @@ impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
 
 impl<Iv: Interval> IntervalDelete<Iv> for TreeWrapper<IntervalNode<Iv>> {}
 impl<Iv: Interval> IntervalDeleteRange<Iv> for TreeWrapper<IntervalNode<Iv>> {}
+impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {}

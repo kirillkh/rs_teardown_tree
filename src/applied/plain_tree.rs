@@ -4,20 +4,7 @@ use std::mem;
 use std::marker::PhantomData;
 
 
-pub trait PlainDeleteInternal<T: Ord> {
-    /// Deletes the item with the given key from the tree and returns it (or None).
-    fn delete(&mut self, search: &T) -> Option<T>;
-
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
-    /// Vec. The items are returned in order.
-    #[inline] fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>);
-
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
-    #[inline] fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>);
-}
-
-
-impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
+pub trait PlainDeleteInternal<T: Ord>: PlainDelete<T> + PlainDeleteRange<T> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     fn delete(&mut self, search: &T) -> Option<T> {
         self.index_of(search).map(|idx| {
@@ -44,8 +31,6 @@ impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
         self.delete_with_driver(&mut RangeRefDriver::new(from, to, output))
     }
 }
-
-
 
 
 
@@ -301,3 +286,4 @@ impl<T: Ord> BulkDeleteCommon<T, NoUpdate<TreeWrapper<T>>> for TreeWrapper<T> {
 
 impl<T: Ord> PlainDelete<T> for TreeWrapper<T> {}
 impl<T: Ord> PlainDeleteRange<T> for TreeWrapper<T> {}
+impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {}
