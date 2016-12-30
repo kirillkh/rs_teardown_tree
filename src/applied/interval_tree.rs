@@ -183,10 +183,7 @@ trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
 }
 
 
-trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>,
-//                                                          UpdateMax<TreeWrapper<IntervalNode<Iv>>>
-                                                          UpdateMax<Iv, Self>
-                                                         > + IntervalDelete<Iv> {
+trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, UpdateMax<Iv, Self>> + IntervalDelete<Iv> {
     fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, mut min_included: bool, sink: &mut S) {
         let k: &IntervalNode<Iv> = &self.node_unsafe(idx).item;
 

@@ -60,44 +60,57 @@ trait PlainDelete<T: Ord>: TreeBase<T> {
             },
 
             (true, false)  => {
-                let left_max = self.delete_max(lefti(idx));
-                mem::replace(self.item_mut(idx), left_max)
+                let item = self.take(idx);
+                self.delete_max(idx, lefti(idx));
+                item
             },
 
             (false, true)  => {
-                let right_min = self.delete_min(righti(idx));
-                mem::replace(self.item_mut(idx), right_min)
+                let item = self.take(idx);
+                self.delete_min(idx, righti(idx));
+                item
             },
 
             (true, true)   => {
-                let left_max = self.delete_max(lefti(idx));
-                mem::replace(self.item_mut(idx), left_max)
+                let item = self.take(idx);
+                self.delete_max(idx, lefti(idx));
+                item
             },
         }
     }
 
 
     #[inline]
-    fn delete_max(&mut self, mut idx: usize) -> T {
-        idx = self.find_max(idx);
+    fn delete_max(&mut self, mut hole: usize, mut idx: usize) {
+        loop {
+            debug_assert!(self.is_nil(hole) && !self.is_nil(idx));
 
-        if self.has_left(idx) {
-            let left_max = self.delete_max(lefti(idx));
-            mem::replace(self.item_mut(idx), left_max)
-        } else {
-            self.take(idx)
+            idx = self.find_max(idx);
+            unsafe { self.move_from_to(idx, hole); }
+            hole = idx;
+
+            if self.has_left(idx) {
+                idx = lefti(idx);
+            } else {
+                break;
+            }
         }
     }
 
     #[inline]
-    fn delete_min(&mut self, mut idx: usize) -> T {
-        idx = self.find_min(idx);
+    fn delete_min(&mut self, mut hole: usize, mut idx: usize) {
+        loop {
+            debug_assert!(self.is_nil(hole) && !self.is_nil(idx));
 
-        if self.has_right(idx) {
-            let right_min = self.delete_min(righti(idx));
-            mem::replace(self.item_mut(idx), right_min)
-        } else {
-            self.take(idx)
+            idx = self.find_min(idx);
+            unsafe { self.move_from_to(idx, hole); }
+            hole = idx;
+
+            if self.has_right(idx) {
+                idx = righti(idx);
+            } else {
+                break;
+            }
         }
     }
 }
