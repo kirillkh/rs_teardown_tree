@@ -5,29 +5,27 @@ use std::{mem, cmp};
 use std::marker::PhantomData;
 
 
-pub trait IntervalTreeInternal<Iv: Interval>: IntervalDelete<Iv> + IntervalDeleteRange<Iv> {
+pub trait IntervalTreeInternal<Iv: Interval> {
+    #[inline] fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
+    #[inline] fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>);
+}
+
+
+impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     // TODO: accepting IntervalNode is super ugly, temporary solution only
     #[inline]
     fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv> {
         self.index_of(search).map(|idx| {
             let removed = self.delete_idx(idx);
-            let mut upd_idx = idx;
-            while upd_idx != 0 {
-                upd_idx = parenti(upd_idx);
-                if removed.b() == &self.item(idx).maxb {
-                    self.update_maxb(idx);
-                } else {
-                    break;
-                }
-            }
+            self.update_ancestors_after_delete(idx, &removed.b());
             removed
         })
     }
 
     #[inline]
     fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>) {
-        UpdateMax::enter(self, 0, move |this, idx|
+        UpdateMax::enter(self, idx, move |this, idx|
             this.delete_intersecting_ivl_rec(search, idx, false, &mut self::IntervalSink { output: output })
         )
     }
@@ -51,6 +49,18 @@ trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
             } else {
                 left_self_maxb
             }.clone();
+    }
+
+    #[inline]
+    fn update_ancestors_after_delete(&mut self, mut idx: usize, removed_b: &Iv::K) {
+        while idx != 0 {
+            idx = parenti(idx);
+            if removed_b == &self.item(idx).maxb {
+                self.update_maxb(idx);
+            } else {
+                break;
+            }
+        }
     }
 
     #[inline]
@@ -327,4 +337,3 @@ impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
 
 impl<Iv: Interval> IntervalDelete<Iv> for TreeWrapper<IntervalNode<Iv>> {}
 impl<Iv: Interval> IntervalDeleteRange<Iv> for TreeWrapper<IntervalNode<Iv>> {}
-impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {}

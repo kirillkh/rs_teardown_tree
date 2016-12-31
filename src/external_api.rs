@@ -1,8 +1,3 @@
-use std::fmt;
-use std::fmt::{Debug, Display, Formatter};
-use std::ops::{Deref, DerefMut};
-
-
 pub use self::plain::PlainTeardownTree;
 pub use self::interval::IntervalTeardownTree;
 pub use base::TeardownTreeRefill;
@@ -12,7 +7,6 @@ mod plain {
     use base::{TreeWrapper, TreeBase, TeardownTreeRefill};
     use applied::plain_tree::PlainDeleteInternal;
 
-    use std::ops::{Deref, DerefMut};
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
@@ -70,10 +64,7 @@ mod plain {
 
 
 mod interval {
-    use base::{TreeWrapper, TreeBase, TeardownTreeRefill, parenti};
-    use std::ops::{Deref, DerefMut};
-    use std::fmt;
-    use std::fmt::{Debug, Display, Formatter};
+    use base::{TreeWrapper, TreeBase, parenti};
 
     use applied::interval::{Interval, IntervalNode};
     use applied::interval_tree::IntervalTreeInternal;

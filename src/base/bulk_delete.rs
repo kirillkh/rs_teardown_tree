@@ -1,4 +1,4 @@
-use base::{TreeBase, TreeWrapper, Node, lefti, righti};
+use base::{TreeBase, Node, lefti, righti};
 use base::Sink;
 use base::SlotStack;
 use std::mem;
@@ -118,7 +118,7 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_left<F>(&mut self, idx: usize, with_slot: bool, mut f: F) -> bool
+    fn descend_left<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
                                                     where F: FnMut(&mut Self, usize) {
         let child_idx = lefti(idx);
         if self.is_nil(child_idx) {
@@ -141,7 +141,7 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_right<F>(&mut self, idx: usize, with_slot: bool, mut f: F) -> bool
+    fn descend_right<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
                                                     where F: FnMut(&mut Self, usize) {
         let child_idx = righti(idx);
         if self.is_nil(child_idx) {

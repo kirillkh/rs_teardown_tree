@@ -1,11 +1,23 @@
 use base::{TreeWrapper, TreeBase, BulkDeleteCommon, EnterItem, righti, lefti, parenti};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
-use std::mem;
 use std::marker::PhantomData;
 
 
-pub trait PlainDeleteInternal<T: Ord>: PlainDelete<T> + PlainDeleteRange<T> {
+pub trait PlainDeleteInternal<T: Ord> {
     /// Deletes the item with the given key from the tree and returns it (or None).
+    #[inline] fn delete(&mut self, search: &T) -> Option<T>;
+
+    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
+    /// Vec. The items are returned in order.
+    #[inline] fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>);
+
+    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
+    #[inline] fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>);
+}
+
+impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
+    /// Deletes the item with the given key from the tree and returns it (or None).
+    #[inline]
     fn delete(&mut self, search: &T) -> Option<T> {
         self.index_of(search).map(|idx| {
             self.delete_idx(idx)
@@ -39,44 +51,27 @@ trait PlainDelete<T: Ord>: TreeBase<T> {
     fn delete_idx(&mut self, idx: usize) -> T {
         debug_assert!(!self.is_nil(idx));
 
-        match (self.has_left(idx), self.has_right(idx)) {
-            (false, false) => {
-                self.take(idx)
-            },
-
-            (true, false)  => {
-                let item = self.take(idx);
-                self.delete_max(idx, lefti(idx));
-                item
-            },
-
-            (false, true)  => {
-                let item = self.take(idx);
-                self.delete_min(idx, righti(idx));
-                item
-            },
-
-            (true, true)   => {
-                let item = self.take(idx);
-                self.delete_max(idx, lefti(idx));
-                item
-            },
+        let item = self.take(idx);
+        if self.has_left(idx) {
+            self.delete_max(idx, lefti(idx));
+        } else if self.has_right(idx) {
+            self.delete_min(idx, righti(idx));
         }
+        item
     }
 
 
     #[inline]
     fn delete_max(&mut self, mut hole: usize, mut idx: usize) {
         loop {
-            debug_assert!(self.is_nil(hole) && !self.is_nil(idx));
+            debug_assert!(self.is_nil(hole) && !self.is_nil(idx) && idx == lefti(hole));
 
             idx = self.find_max(idx);
             unsafe { self.move_from_to(idx, hole); }
             hole = idx;
 
-            if self.has_left(idx) {
-                idx = lefti(idx);
-            } else {
+            idx = lefti(idx);
+            if self.is_nil(idx) {
                 break;
             }
         }
@@ -85,15 +80,14 @@ trait PlainDelete<T: Ord>: TreeBase<T> {
     #[inline]
     fn delete_min(&mut self, mut hole: usize, mut idx: usize) {
         loop {
-            debug_assert!(self.is_nil(hole) && !self.is_nil(idx));
+            debug_assert!(self.is_nil(hole) && !self.is_nil(idx) && idx == righti(hole));
 
             idx = self.find_min(idx);
             unsafe { self.move_from_to(idx, hole); }
             hole = idx;
 
-            if self.has_right(idx) {
-                idx = righti(idx);
-            } else {
+            idx = righti(idx);
+            if self.is_nil(idx) {
                 break;
             }
         }
@@ -286,4 +280,3 @@ impl<T: Ord> BulkDeleteCommon<T, NoUpdate<TreeWrapper<T>>> for TreeWrapper<T> {
 
 impl<T: Ord> PlainDelete<T> for TreeWrapper<T> {}
 impl<T: Ord> PlainDeleteRange<T> for TreeWrapper<T> {}
-impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {}
