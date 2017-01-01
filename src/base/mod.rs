@@ -211,38 +211,35 @@ pub trait TreeBase<T: Ord>: TreeReprAccess<T> {
     /// Returns the closest subtree A enclosing `idx`, such that A is the left child (or 0 if no such
     /// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the left
     /// child.
+    /// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
     #[inline(always)]
     fn left_enclosing(idx: usize) -> usize {
-        debug_assert!((idx+2) & (idx+1) != 0, "idx={}", idx);
-
         if idx & 1 == 0 {
-            if idx & 2 == 0 {
-                parenti(idx)
-            } else {
-                let t = idx + 2;
-                let shift = t.trailing_zeros();
-                (idx >> shift) - 1
-            }
-        } else {
             idx
+        } else if idx & 2 == 0 {
+            idx >> 1
+        } else {
+            let shift = (idx + 1).trailing_zeros();
+            idx >> shift
         }
     }
+
+
+
 
     /// Returns the closest subtree A enclosing `idx`, such that A is the right child (or 0 if no such
     /// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the right
     /// child.
+    /// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
     #[inline(always)]
     fn right_enclosing(idx: usize) -> usize {
-        if idx & 1 == 0 {
+        if idx & 1 == 1 {
             idx
+        } else if idx & 2 == 1 {
+            idx >> 1
         } else {
-            if idx & 2 == 0 {
-                parenti(idx)
-            } else {
-                let t = idx + 1;
-                let shift = t.trailing_zeros();
-                (idx >> shift) - 1
-            }
+            let shift = idx.trailing_zeros();
+            idx >> shift
         }
     }
 
@@ -271,9 +268,9 @@ pub trait TreeBase<T: Ord>: TreeReprAccess<T> {
                             if z == z & (!z+1) {
                                 0
                             } else {
-                                Self::left_enclosing(next)
+                                Self::left_enclosing(next+1)-1
                             }
-                        } ;
+                        };
 
                         if l_enclosing <= root {
                             // done
@@ -310,20 +307,14 @@ pub trait TreeBase<T: Ord>: TreeReprAccess<T> {
                 if self.has_right(next) {
                     self.find_min(righti(next))
                 } else {
-                    // handle the case where we are on strictly right-hand path from the root.
-                    // we don't need this in the current user code, but it can happen generally
-//                    if (next+2) & (next+1) == 0 {
-//                        break;
-//                    }
+                    let l_enclosing = Self::left_enclosing(next+1);
 
-                    let l_enclosing = Self::left_enclosing(next);
-
-                    if l_enclosing <= root {
+                    if l_enclosing <= root+1 {
                         // done
                         break;
                     }
 
-                    parenti(l_enclosing)
+                    parenti(l_enclosing-1)
                 }
             }
         }
@@ -467,4 +458,60 @@ pub fn lefti(idx: usize) -> usize {
 #[inline(always)]
 pub fn righti(idx: usize) -> usize {
     (idx<<1) + 2
+}
+
+
+
+
+#[cfg(test)]
+pub mod validation {
+    use std::fmt::{Display, Debug};
+    use base::{lefti, righti, parenti, TreeWrapper, TreeBase};
+
+    /// Validates the BST property.
+    pub fn check_bst<'a, T: Ord+Debug+Display>(tree: &'a TreeWrapper<T>, output: &Vec<T>, tree_orig: &TreeWrapper<T>, idx: usize) -> Option<(&'a T, &'a T)> {
+        if tree.size() == 0 || !tree.is_nil(idx) {
+            return None;
+        }
+
+        let node = tree.node_opt(idx);
+        if node.is_none() {
+            return None;
+        } else {
+            let item = &node.unwrap().item;
+            let left = check_bst(tree, output, tree_orig, lefti(idx));
+            let right = check_bst(tree, output, tree_orig, righti(idx));
+
+            let min =
+            if let Some((lmin, lmax)) = left {
+                debug_assert!(lmax < item, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                lmin
+            } else {
+                item
+            };
+            let max =
+            if let Some((rmin, rmax)) = right {
+                debug_assert!(item < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                rmax
+            } else {
+                item
+            };
+
+            return Some((min, max));
+        }
+    }
+
+    /// Checks that there are no dangling items (the parent of every item marked as present is also marked as present).
+    pub fn check_integrity<T: Ord+Debug+Display>(tree: &TreeWrapper<T>, tree_orig: &TreeWrapper<T>) {
+        let mut noccupied = 0;
+
+        for i in 0..tree.data.len() {
+            if tree.mask[i] {
+                debug_assert!(i == 0 || tree.mask[parenti(i)], "tree_orig: {:?}, {}", tree_orig, tree_orig);
+                noccupied += 1;
+            }
+        }
+
+        debug_assert!(noccupied == tree.size());
+    }
 }

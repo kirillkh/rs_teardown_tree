@@ -2,6 +2,11 @@
 //#![feature(unique)]
 #![cfg_attr(feature = "unstable", feature(test))]
 
+//#![cfg_attr(test, feature(plugin))]
+//#![cfg_attr(test, plugin(quickcheck_macros))]
+#[cfg(test)] #[macro_use] extern crate quickcheck;
+
+
 extern crate rand;
 
 mod base;
@@ -17,6 +22,7 @@ pub use self::external_api::{IntervalTeardownTree, PlainTeardownTree, TeardownTr
 #[cfg(test)]
 mod plain_tests {
     use base::{TreeBase, TreeWrapper, Node, lefti, righti, parenti};
+    use base::validation::{check_bst, check_integrity};
     use applied::plain_tree::PlainDeleteInternal;
 
     type Tree = TreeWrapper<usize>;
@@ -171,14 +177,14 @@ mod plain_tests {
 
     #[test]
     fn delete_range_exhaustive() {
-        for i in 1..9 {
+        for i in 1..8 {
             delete_range_exhaustive_n(i);
         }
     }
 
     #[test]
     fn delete_single_exhaustive() {
-        for i in 1..9 {
+        for i in 1..8 {
             delete_single_exhaustive_n(i);
         }
     }
@@ -274,51 +280,6 @@ mod plain_tests {
 //        output.sort();
         assert_eq!(output, &(from..to+1).collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         check_bst(&tree_mod, &output, tree_orig, 0);
-        check_items(&tree_mod, &tree_orig);
-    }
-
-    fn check_bst(tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, idx: usize) -> Option<(usize, usize)> {
-        if tree.size() == 0 || !tree.is_nil(idx) {
-            return None;
-        }
-
-        let node = tree.node_opt(idx);
-        if node.is_none() {
-            return None;
-        } else {
-            let item = node.unwrap().item;
-            let left = check_bst(tree, output, tree_orig, lefti(idx));
-            let right = check_bst(tree, output, tree_orig, righti(idx));
-
-            let min =
-                if let Some((lmin, lmax)) = left {
-                    debug_assert!(lmax < item, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
-                    lmin
-                } else {
-                    item
-                };
-            let max =
-                if let Some((rmin, rmax)) = right {
-                    debug_assert!(item < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
-                    rmax
-                } else {
-                    item
-                };
-
-            return Some((min, max));
-        }
-    }
-
-    fn check_items(tree: &Tree, tree_orig: &Tree) {
-        let mut noccupied = 0;
-
-        for i in 0..tree.data.len() {
-            if tree.mask[i] {
-                debug_assert!(i == 0 || tree.mask[parenti(i)], "tree_orig: {:?}, {}", tree_orig, tree_orig);
-                noccupied += 1;
-            }
-        }
-
-        debug_assert!(noccupied == tree.size());
+        check_integrity(&tree_mod, &tree_orig);
     }
 }

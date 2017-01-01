@@ -1,6 +1,20 @@
+use applied::interval::{Interval, IntervalNode};
+use base::TreeWrapper;
+
 pub use self::plain::PlainTeardownTree;
 pub use self::interval::IntervalTeardownTree;
 pub use base::TeardownTreeRefill;
+
+
+
+pub trait PlainTreeWrapperAccess<T: Ord> {
+    fn internal(&mut self) -> &mut TreeWrapper<T>;
+}
+
+
+pub trait IntervalTreeWrapperAccess<Iv: Interval> {
+    fn internal(&mut self) -> &mut TreeWrapper<IntervalNode<Iv>>;
+}
 
 
 mod plain {
@@ -59,6 +73,13 @@ mod plain {
             self.internal.refill(&master.internal)
         }
     }
+
+
+    impl<T: Ord> super::PlainTreeWrapperAccess<T> for PlainTeardownTree<T> {
+        fn internal(&mut self) -> &mut TreeWrapper<T> {
+            &mut self.internal
+        }
+    }
 }
 
 
@@ -104,12 +125,19 @@ mod interval {
         }
 
         #[inline]
-        pub fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>) {
-            self.internal.delete_intersecting(search, idx, output)
+        pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>) {
+            self.internal.delete_intersecting(search, output)
         }
 
         pub fn size(&self) -> usize {
             self.internal.size()
+        }
+    }
+
+
+    impl<Iv: Interval> super::IntervalTreeWrapperAccess<Iv> for IntervalTeardownTree<Iv> {
+        fn internal(&mut self) -> &mut TreeWrapper<IntervalNode<Iv>> {
+            &mut self.internal
         }
     }
 }
