@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 
 pub trait IntervalTreeInternal<Iv: Interval> {
     #[inline] fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
-    #[inline] fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>);
+    #[inline] fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>);
 }
 
 
@@ -24,10 +24,12 @@ impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {
     }
 
     #[inline]
-    fn delete_intersecting(&mut self, search: &Iv, idx: usize, output: &mut Vec<Iv>) {
-        UpdateMax::enter(self, idx, move |this, idx|
-            this.delete_intersecting_ivl_rec(search, idx, false, &mut self::IntervalSink { output: output })
-        )
+    fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>) {
+        if self.size() != 0 {
+            UpdateMax::enter(self, 0, move |this, _|
+                this.delete_intersecting_ivl_rec(search, 0, false, &mut self::IntervalSink { output: output })
+            )
+        }
     }
 }
 
@@ -252,7 +254,7 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
 
             // fill the remaining open slots_max from the left subtree
             if removed && self.slots_max().has_open() {
-                self.descend_fill_max_left(righti(idx), true);
+                self.descend_fill_max_left(idx, true);
             }
         }
     }
@@ -337,3 +339,61 @@ impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
 
 impl<Iv: Interval> IntervalDelete<Iv> for TreeWrapper<IntervalNode<Iv>> {}
 impl<Iv: Interval> IntervalDeleteRange<Iv> for TreeWrapper<IntervalNode<Iv>> {}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::AsRef;
+    use std::ops::Range;
+    use quickcheck::{Testable, Arbitrary, Gen};
+
+    use base::{TreeWrapper, TreeBase};
+    use base::validation::{check_bst, check_integrity};
+    use applied::interval::{Interval, IntervalNode, KeyInterval};
+    use applied::interval_tree::{IntervalTreeInternal, IntervalDelete, IntervalDeleteRange};
+    use external_api::{IntervalTeardownTree, IntervalTreeWrapperAccess};
+
+    type Iv = KeyInterval<usize>;
+
+    quickcheck! {
+        fn check_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
+            check_interval_tree(xs, rm)
+        }
+    }
+
+    fn check_interval_tree(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
+        let mut intervals = xs.into_iter()
+                              .map(|r| if r.start<=r.end {
+                                  Iv::new(r.start, r.end)
+                              } else {
+                                  Iv::new(r.end, r.start)
+                              })
+                              .collect::<Vec<_>>();
+        intervals.sort();
+
+        let mut tree = IntervalTeardownTree::new(intervals);
+        let rm = if rm.start <= rm.end {
+            Iv::new(rm.start, rm.end)
+        } else {
+            Iv::new(rm.end, rm.start)
+        };
+        {
+            let wrapper = tree.internal();
+            println!("tree={:?}, \n{}", wrapper, wrapper);
+        }
+        check_tree(tree, rm)
+    }
+
+    fn check_tree(mut tree: IntervalTeardownTree<Iv>, rm: Iv) -> bool {
+        let tree: &mut TreeWrapper<IntervalNode<Iv>> = tree.internal();
+        let mut output = Vec::with_capacity(tree.size());
+        tree.delete_intersecting(&rm, &mut output);
+        true
+    }
+
+    #[test]
+    fn prebuilt() {
+        check_interval_tree(vec![0..0, 0..0, 0..1], 0..1);
+        check_interval_tree(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2);
+        check_interval_tree(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2);
+    }
+}

@@ -1,4 +1,6 @@
 use std::cmp::Ordering;
+use std::fmt::{Formatter, Debug};
+use std::fmt;
 
 
 pub trait Interval: Sized+Ord {
@@ -8,6 +10,7 @@ pub trait Interval: Sized+Ord {
     fn b(&self) -> &Self::K;
 }
 
+#[derive(Debug, Clone)]
 pub struct KeyInterval<K: Ord+Clone> {
     a: K,
     b: K
@@ -97,5 +100,13 @@ impl<Iv: Interval> Ord for IntervalNode<Iv> {
             Ordering::Greater => Ordering::Greater,
             Ordering::Equal => self.b().cmp(other.b())
         }
+    }
+}
+
+impl<Iv: Interval+Debug> Debug for IntervalNode<Iv> where Iv::K: Debug {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        write!(fmt, "(");
+        self.ivl.fmt(fmt);
+        write!(fmt, ", maxb={:?})", self.maxb)
     }
 }

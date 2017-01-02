@@ -24,6 +24,7 @@ mod plain_tests {
     use base::{TreeBase, TreeWrapper, Node, lefti, righti, parenti};
     use base::validation::{check_bst, check_integrity};
     use applied::plain_tree::PlainDeleteInternal;
+    use external_api::{PlainTeardownTree, PlainTreeWrapperAccess};
 
     type Tree = TreeWrapper<usize>;
 
@@ -281,5 +282,36 @@ mod plain_tests {
         assert_eq!(output, &(from..to+1).collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         check_bst(&tree_mod, &output, tree_orig, 0);
         check_integrity(&tree_mod, &tree_orig);
+    }
+
+
+
+
+
+    quickcheck! {
+        fn quickcheck_plain_(xs: Vec<usize>, rm: Range<usize>) -> bool {
+            check_plain_tree(xs, rm)
+        }
+    }
+
+    fn check_plain_tree(mut xs: Vec<usize>, rm: Range<usize>) -> bool {
+        xs.sort();
+        let rm = if rm.start <= rm.end { rm } else {rm.end .. rm.start};
+
+        let tree = PlainTeardownTree::new(xs);
+        check_tree(tree, rm)
+    }
+
+    fn check_tree(mut tree: PlainTeardownTree<usize>, rm: Range<usize>) -> bool {
+        let tree: &mut TreeWrapper<usize> = tree.internal();
+        let orig = tree.clone();
+
+        let mut output = Vec::with_capacity(tree.size());
+        tree.delete_range(rm.start, rm.end, &mut output);
+
+        check_bst(&tree, &output, &orig, 0);
+        check_integrity(&tree, &orig);
+
+        true
     }
 }

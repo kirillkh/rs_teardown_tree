@@ -120,9 +120,9 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
     #[inline(always)]
     fn descend_left<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
                                                     where F: FnMut(&mut Self, usize) {
+        debug_assert!(self.is_nil(idx) == with_slot, "idx={}, with_slot={}", idx, with_slot);
         let child_idx = lefti(idx);
         if self.is_nil(child_idx) {
-            debug_assert!(self.is_nil(idx) == with_slot);
             return with_slot;
         }
 
@@ -143,9 +143,9 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
     #[inline(always)]
     fn descend_right<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
                                                     where F: FnMut(&mut Self, usize) {
+        debug_assert!(self.is_nil(idx) == with_slot);
         let child_idx = righti(idx);
         if self.is_nil(child_idx) {
-            debug_assert!(self.is_nil(idx) == with_slot);
             return with_slot;
         }
 
