@@ -66,7 +66,7 @@ mod plain_tests {
 
 
     fn test_prebuilt(items: &[usize], from_to: (usize, usize),
-                     expect_tree: &[usize], expect_out: &[usize]) {
+                     expect_out: &[usize]) {
 
         let nodes: Vec<Option<Node<usize>>> = mk_prebuilt(items);
         let mut tree = Tree::with_nodes(nodes);
@@ -84,73 +84,72 @@ mod plain_tests {
         let tree_mod = tree.clone();
         delete_range_check(items.iter().filter(|&&x| x!=0).count(), from, to, &mut output, tree_mod, &tree_orig);
 
-        assert_eq!(format!("{:?}", &tree), format!("{:?}", expect_tree));
         assert_eq!(format!("{:?}", &output), format!("{:?}", expect));
     }
 
     #[test]
     fn delete_range_prebuilt() {
         test_prebuilt(&[1], (1,1),
-                      &[], &[1]);
+                      &[1]);
 
         test_prebuilt(&[1, 0, 2], (1,1),
-                      &[2], &[1]);
+                      &[1]);
 
         test_prebuilt(&[1, 0, 2], (2,2),
-                      &[1], &[2]);
+                      &[2]);
 
         test_prebuilt(&[3, 2, 0, 1], (1,3),
-                      &[], &[3,2,1]);
+                      &[3,2,1]);
 
         test_prebuilt(&[3, 2, 4, 1], (1,3),
-                      &[4], &[3,2,1]);
+                      &[3,2,1]);
 
         test_prebuilt(&[3, 1, 4, 0, 2], (2,4),
-                      &[1], &[3,4,2]);
+                      &[3,4,2]);
 
         test_prebuilt(&[4, 2, 0, 1, 3], (3,4),
-                      &[2, 1], &[4,3]);
+                      &[4,3]);
 
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (1,1),
-                      &[4, 3, 0, 2], &[1]);
+                      &[1]);
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (2,2),
-                      &[4, 3, 0, 1], &[2]);
+                      &[2]);
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (3,3),
-                      &[4, 2, 0, 1], &[3]);
+                      &[3]);
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], (4,4),
-                      &[3, 2, 0, 1], &[4]);
+                      &[4]);
 
         test_prebuilt(&[1, 0, 3, 0, 0, 2, 4], (1,2),
-                      &[3, 0, 4], &[1, 2]);
+                      &[1, 2]);
 
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (1,1),
-                      &[2, 0, 3, 0, 0, 0, 4], &[1]);
+                      &[1]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (2,2),
-                      &[1, 0, 3, 0, 0, 0, 4], &[2]);
+                      &[2]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (3,3),
-                      &[1, 0, 2, 0, 0, 0, 4], &[3]);
+                      &[3]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 4], (4,4),
-                      &[1, 0, 2, 0, 0, 0, 3], &[4]);
+                      &[4]);
 
         test_prebuilt(&[1, 0, 4, 0, 0, 2, 0, 0, 0, 0, 0, 0, 3], (1,4),
-                      &[], &[1,2,3,4]);
+                      &[1,2,3,4]);
 
         test_prebuilt(&[6, 4, 0, 1, 5, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3], (4,6),
-                      &[3, 2, 0, 1], &[6,4,5]);
+                      &[6,4,5]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0, 3], (1,1),
-                      &[2, 0, 3, 0, 0, 0, 4], &[1]);
+                      &[1]);
 
         test_prebuilt(&[1, 0, 2, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4], (1,2),
-                      &[3, 0, 4, 0, 0, 0, 5], &[1,2]);
+                      &[1,2]);
     }
 
 

@@ -201,7 +201,7 @@ impl<T: Ord+Debug> Debug for TreeWrapper<T> {
             .collect();
         nz.reverse();
 
-        let _ = write!(fmt, "[");
+        let _ = write!(fmt, "[size={}: ", self.size);
         let mut sep = "";
         for ref key in nz.iter() {
             let _ = write!(fmt, "{}", sep);

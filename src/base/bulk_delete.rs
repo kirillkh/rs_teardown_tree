@@ -97,6 +97,7 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
 
     #[inline(always)]
     fn fill_slot_min(&mut self, idx: usize) {
+        debug_assert!(self.slots_min().has_open());
         let dst_idx = self.slots_min().fill();
         unsafe {
             self.move_from_to(idx, dst_idx);
@@ -105,6 +106,7 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
 
     #[inline(always)]
     fn fill_slot_max(&mut self, idx: usize) {
+        debug_assert!(self.slots_max().has_open());
         let dst_idx = self.slots_max().fill();
         unsafe {
             self.move_from_to(idx, dst_idx);

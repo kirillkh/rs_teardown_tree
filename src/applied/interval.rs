@@ -42,6 +42,10 @@ pub struct IntervalNode<Iv: Interval> {
 }
 
 impl<Iv: Interval> IntervalNode<Iv> {
+    #[inline] pub fn new(ivl: Iv) -> IntervalNode<Iv> {
+        IntervalNode { maxb: ivl.b().clone(), ivl: ivl }
+    }
+
     #[inline] pub fn a(&self) -> &Iv::K {
         self.ivl.a()
     }
@@ -105,8 +109,8 @@ impl<Iv: Interval> Ord for IntervalNode<Iv> {
 
 impl<Iv: Interval+Debug> Debug for IntervalNode<Iv> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        write!(fmt, "(");
-        self.ivl.fmt(fmt);
+        try!(write!(fmt, "("));
+        try!(self.ivl.fmt(fmt));
         write!(fmt, ", maxb={:?})", self.maxb)
     }
 }

@@ -219,7 +219,8 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
             }
         } else {
             // consume root if necessary
-            let consume = search.a() < k.b() && k.a() < search.b();
+            let consume = search.a() < k.b() && k.a() < search.b()
+                       || search.a()==k.a(); // interpret empty intervals as points
             let item = if consume
                 { Some(self.take(idx)) }
             else
@@ -237,19 +238,28 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
                 sink.consume_unchecked(item.unwrap());
             } else {
                 removed = self.descend_delete_intersecting_ivl_left(search, idx, false, min_included, sink);
+                if !removed && self.slots_min().has_open() {
+                    removed = true;
+                    self.fill_slot_min(idx);
+                }
             }
 
             // right subtree
-            min_included = min_included || search.a() <= k.a();
-            if min_included {
-                let max_included = k.max() <= search.b();
-                if max_included {
+            let right_min_included = min_included || search.a() <= k.a();
+            if right_min_included {
+                let right_max_included = k.max() <= search.b();
+                if right_max_included {
                     self.consume_subtree(righti(idx), sink);
                 } else {
-                    removed = self.descend_delete_intersecting_ivl_right(search, idx, removed, min_included, sink);
+                    removed = self.descend_delete_intersecting_ivl_right(search, idx, removed, true, sink);
                 }
             } else {
                 removed = self.descend_delete_intersecting_ivl_right(search, idx, removed, false, sink);
+            }
+
+            if !removed && self.slots_max().has_open() {
+                removed = true;
+                self.fill_slot_max(idx);
             }
 
             // fill the remaining open slots_max from the left subtree
@@ -344,9 +354,11 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for TreeWrapper<IntervalNode<Iv>> {}
 mod tests {
     use std::convert::AsRef;
     use std::ops::Range;
+    use std::cmp;
+    use rand::{Rng, XorShiftRng, SeedableRng};
     use quickcheck::{Testable, Arbitrary, Gen};
 
-    use base::{TreeWrapper, TreeBase};
+    use base::{TreeWrapper, Node, TreeBase, lefti, righti, parenti};
     use base::validation::{check_bst, check_integrity};
     use applied::interval::{Interval, IntervalNode, KeyInterval};
     use applied::interval_tree::{IntervalTreeInternal, IntervalDelete, IntervalDeleteRange};
@@ -355,12 +367,12 @@ mod tests {
     type Iv = KeyInterval<usize>;
 
     quickcheck! {
-        fn check_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
-            check_interval_tree(xs, rm)
+        fn quickcheck_interval_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
+            test_interval_tree(xs, rm)
         }
     }
 
-    fn check_interval_tree(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
+    fn test_interval_tree(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
         let mut intervals = xs.into_iter()
                               .map(|r| if r.start<=r.end {
                                   Iv::new(r.start, r.end)
@@ -370,30 +382,72 @@ mod tests {
                               .collect::<Vec<_>>();
         intervals.sort();
 
-        let mut tree = IntervalTeardownTree::new(intervals);
+        let mut tree = gen_tree(intervals);
+
         let rm = if rm.start <= rm.end {
             Iv::new(rm.start, rm.end)
         } else {
             Iv::new(rm.end, rm.start)
         };
-        {
-            let wrapper = tree.internal();
-            println!("tree={:?}, \n{}", wrapper, wrapper);
-        }
         check_tree(tree, rm)
     }
 
-    fn check_tree(mut tree: IntervalTeardownTree<Iv>, rm: Iv) -> bool {
-        let tree: &mut TreeWrapper<IntervalNode<Iv>> = tree.internal();
+    fn gen_tree<Iv: Interval+Clone>(intervals: Vec<Iv>) -> TreeWrapper<IntervalNode<Iv>> {
+        let mut items = vec![None; 1 << 18];
+        let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
+        gen_subtree(&intervals, 0, &mut items, &mut rng);
+
+        let mut nodes = items.into_iter()
+                             .rev()
+                             .skip_while(|opt| opt.is_none())
+                             .map(|opt| opt.map(|it| IntervalNode::new(it)))
+                             .collect::<Vec<_>>();
+        nodes.reverse();
+        for i in (1..nodes.len()).rev() {
+            let maxb = if let Some(ref mut nd) = nodes[i] {
+                nd.maxb.clone()
+            } else {
+                continue
+            };
+
+            let parent = nodes[parenti(i)].as_mut().unwrap();
+            parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
+        }
+        let nodes = nodes.into_iter().map(|opt| opt.map(|nd| Node::new(nd))).collect();
+        TreeWrapper::with_nodes(nodes)
+    }
+
+    fn gen_subtree<Iv: Interval+Clone>(intervals: &[Iv], idx: usize, output: &mut Vec<Option<Iv>>, rng: &mut XorShiftRng) {
+        if intervals.len() == 0 {
+            return;
+        }
+
+        // hack
+        if idx >= output.len() {
+            return;
+        }
+
+        let root = rng.gen_range(0, intervals.len());
+        output[idx] = Some(intervals[root].clone());
+        gen_subtree(&intervals[..root], lefti(idx), output, rng);
+        gen_subtree(&intervals[root+1..], righti(idx), output, rng);
+    }
+
+    fn check_tree(mut tree: TreeWrapper<IntervalNode<Iv>>, rm: Iv) -> bool {
+        let orig = tree.clone();
         let mut output = Vec::with_capacity(tree.size());
         tree.delete_intersecting(&rm, &mut output);
+
+        check_bst(&tree, &output, &orig, 0);
+        check_integrity(&tree, &orig);
         true
     }
 
     #[test]
     fn prebuilt() {
-        check_interval_tree(vec![0..0, 0..0, 0..1], 0..1);
-        check_interval_tree(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2);
-        check_interval_tree(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2);
+        test_interval_tree(vec![0..0, 0..0, 0..1], 0..1);
+        test_interval_tree(vec![0..2, 1..2, 1..1, 1..2], 1..2);
+        test_interval_tree(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2);
+        test_interval_tree(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2);
     }
 }

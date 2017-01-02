@@ -469,7 +469,7 @@ pub mod validation {
     use base::{lefti, righti, parenti, TreeWrapper, TreeBase};
 
     /// Validates the BST property.
-    pub fn check_bst<'a, T: Ord+Debug+Display>(tree: &'a TreeWrapper<T>, output: &Vec<T>, tree_orig: &TreeWrapper<T>, idx: usize) -> Option<(&'a T, &'a T)> {
+    pub fn check_bst<'a, T: Ord+Debug, U: Ord+Debug>(tree: &'a TreeWrapper<T>, output: &Vec<U>, tree_orig: &TreeWrapper<T>, idx: usize) -> Option<(&'a T, &'a T)> {
         if tree.size() == 0 || !tree.is_nil(idx) {
             return None;
         }
@@ -483,31 +483,31 @@ pub mod validation {
             let right = check_bst(tree, output, tree_orig, righti(idx));
 
             let min =
-            if let Some((lmin, lmax)) = left {
-                debug_assert!(lmax < item, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
-                lmin
-            } else {
-                item
-            };
+                if let Some((lmin, lmax)) = left {
+                    debug_assert!(lmax < item, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    lmin
+                } else {
+                    item
+                };
             let max =
-            if let Some((rmin, rmax)) = right {
-                debug_assert!(item < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
-                rmax
-            } else {
-                item
-            };
+                if let Some((rmin, rmax)) = right {
+                    debug_assert!(item < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    rmax
+                } else {
+                    item
+                };
 
             return Some((min, max));
         }
     }
 
     /// Checks that there are no dangling items (the parent of every item marked as present is also marked as present).
-    pub fn check_integrity<T: Ord+Debug+Display>(tree: &TreeWrapper<T>, tree_orig: &TreeWrapper<T>) {
+    pub fn check_integrity<T: Ord+Debug>(tree: &TreeWrapper<T>, tree_orig: &TreeWrapper<T>) {
         let mut noccupied = 0;
 
         for i in 0..tree.data.len() {
             if tree.mask[i] {
-                debug_assert!(i == 0 || tree.mask[parenti(i)], "tree_orig: {:?}, {}", tree_orig, tree_orig);
+                debug_assert!(i == 0 || tree.mask[parenti(i)], "tree_orig: {:?}, {}, tree: {:?}", tree_orig, tree_orig, tree);
                 noccupied += 1;
             }
         }
