@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IntervalNode};
-use base::{TreeWrapper, TreeBase, BulkDeleteCommon, EnterItem, lefti, righti, parenti, Sink};
+use base::{TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, lefti, righti, parenti, Sink};
 use base::drivers::{consume_ptr, consume_unchecked};
 use std::{mem, cmp};
 use std::marker::PhantomData;
@@ -26,7 +26,7 @@ impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {
     #[inline]
     fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>) {
         if self.size() != 0 {
-            UpdateMax::enter(self, 0, move |this, _|
+            UpdateMax::visit(self, 0, move |this, _|
                 this.delete_intersecting_ivl_rec(search, 0, false, &mut self::IntervalSink { output: output })
             )
         }
@@ -310,13 +310,12 @@ struct UpdateMax<Iv: Interval, Tree: TreeBase<IntervalNode<Iv>>> {
     _ph: PhantomData<(Iv, Tree)>
 }
 
-impl<Iv: Interval, Tree> EnterItem<IntervalNode<Iv>> for UpdateMax<Iv, Tree>
-                                            where Tree: BulkDeleteCommon<IntervalNode<Iv>,
-                                                                         UpdateMax<Iv, Tree>> {
+impl<Iv: Interval, Tree> ItemVisitor<IntervalNode<Iv>> for UpdateMax<Iv, Tree>
+                               where Tree: BulkDeleteCommon<IntervalNode<Iv>, UpdateMax<Iv, Tree>> {
     type Tree = Tree;
 
     #[inline]
-    fn enter<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
+    fn visit<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
                                                     where F: FnMut(&mut Self::Tree, usize) {
         f(tree, idx);
 
@@ -349,6 +348,8 @@ impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
 
 impl<Iv: Interval> IntervalDelete<Iv> for TreeWrapper<IntervalNode<Iv>> {}
 impl<Iv: Interval> IntervalDeleteRange<Iv> for TreeWrapper<IntervalNode<Iv>> {}
+
+
 
 #[cfg(test)]
 mod tests {

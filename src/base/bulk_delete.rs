@@ -27,20 +27,18 @@ impl DeleteRangeCache {
 
 
 
-pub trait EnterItem<T: Ord>: Sized {
+pub trait ItemVisitor<T: Ord>: Sized {
     type Tree: BulkDeleteCommon<T, Self>;
 
     #[inline]
-    fn enter<F>(arg: &mut Self::Tree, idx: usize, f: F)
+    fn visit<F>(arg: &mut Self::Tree, idx: usize, f: F)
                                 where F: FnMut(&mut Self::Tree, usize);
 }
 
 
 
 //==== generic methods =============================================================================
-pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+Sized  {
-//    type Enter: EnterItem<T, Tree=Self>;
-
+pub trait BulkDeleteCommon<T: Ord, Visitor: ItemVisitor<T, Tree=Self>>: TreeBase<T>+Sized  {
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline]
     fn consume_subtree<S: Sink<T>>(&mut self, root: usize, sink: &mut S) {
@@ -131,12 +129,12 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
         if with_slot {
             self.slots_max().push(idx);
 
-            Enter::enter(self, child_idx, f);
+            Visitor::visit(self, child_idx, f);
 
             self.slots_max().pop();
             self.is_nil(idx)
         } else {
-            Enter::enter(self, child_idx, f);
+            Visitor::visit(self, child_idx, f);
             false
         }
     }
@@ -154,12 +152,12 @@ pub trait BulkDeleteCommon<T: Ord, Enter: EnterItem<T, Tree=Self>>: TreeBase<T>+
         if with_slot {
             self.slots_min().push(idx);
 
-            Enter::enter(self, child_idx, f);
+            Visitor::visit(self, child_idx, f);
 
             self.slots_min().pop();
             self.is_nil(idx)
         } else {
-            Enter::enter(self, child_idx, f);
+            Visitor::visit(self, child_idx, f);
             false
         }
     }

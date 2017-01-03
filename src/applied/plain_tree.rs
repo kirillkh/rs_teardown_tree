@@ -1,4 +1,4 @@
-use base::{TreeWrapper, TreeBase, BulkDeleteCommon, EnterItem, righti, lefti, parenti};
+use base::{TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, righti, lefti, parenti};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::marker::PhantomData;
 
@@ -264,11 +264,11 @@ struct NoUpdate<Tree> {
     _ph: PhantomData<Tree>
 }
 
-impl<Tree: BulkDeleteCommon<T, NoUpdate<Tree>>, T: Ord> EnterItem<T> for NoUpdate<Tree> {
+impl<Tree: BulkDeleteCommon<T, NoUpdate<Tree>>, T: Ord> ItemVisitor<T> for NoUpdate<Tree> {
     type Tree = Tree;
 
     #[inline]
-    fn enter<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
+    fn visit<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
                                                 where F: FnMut(&mut Self::Tree, usize) {
         f(tree, idx)
     }
