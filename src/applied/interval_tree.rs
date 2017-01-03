@@ -191,7 +191,7 @@ trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
 
 
 trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, UpdateMax<Iv, Self>> + IntervalDelete<Iv> {
-    fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, mut min_included: bool, sink: &mut S) {
+    fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, min_included: bool, sink: &mut S) {
         let k: &IntervalNode<Iv> = &self.node_unsafe(idx).item;
 
         if k.max() <= search.a() {
@@ -355,11 +355,10 @@ mod tests {
     use std::convert::AsRef;
     use std::ops::Range;
     use std::cmp;
-    use rand::{Rng, XorShiftRng, SeedableRng};
     use quickcheck::{Testable, Arbitrary, Gen};
 
     use base::{TreeWrapper, Node, TreeBase, lefti, righti, parenti};
-    use base::validation::{check_bst, check_integrity};
+    use base::validation::{check_bst, check_integrity, gen_tree_items};
     use applied::interval::{Interval, IntervalNode, KeyInterval};
     use applied::interval_tree::{IntervalTreeInternal, IntervalDelete, IntervalDeleteRange};
     use external_api::{IntervalTeardownTree, IntervalTreeWrapperAccess};
@@ -392,17 +391,12 @@ mod tests {
         check_tree(tree, rm)
     }
 
-    fn gen_tree<Iv: Interval+Clone>(intervals: Vec<Iv>) -> TreeWrapper<IntervalNode<Iv>> {
-        let mut items = vec![None; 1 << 18];
-        let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
-        gen_subtree(&intervals, 0, &mut items, &mut rng);
 
+    fn gen_tree<Iv: Interval+Clone>(items: Vec<Iv>) -> TreeWrapper<IntervalNode<Iv>> {
+        let items = gen_tree_items(items);
         let mut nodes = items.into_iter()
-                             .rev()
-                             .skip_while(|opt| opt.is_none())
                              .map(|opt| opt.map(|it| IntervalNode::new(it)))
                              .collect::<Vec<_>>();
-        nodes.reverse();
         for i in (1..nodes.len()).rev() {
             let maxb = if let Some(ref mut nd) = nodes[i] {
                 nd.maxb.clone()
@@ -415,22 +409,6 @@ mod tests {
         }
         let nodes = nodes.into_iter().map(|opt| opt.map(|nd| Node::new(nd))).collect();
         TreeWrapper::with_nodes(nodes)
-    }
-
-    fn gen_subtree<Iv: Interval+Clone>(intervals: &[Iv], idx: usize, output: &mut Vec<Option<Iv>>, rng: &mut XorShiftRng) {
-        if intervals.len() == 0 {
-            return;
-        }
-
-        // hack
-        if idx >= output.len() {
-            return;
-        }
-
-        let root = rng.gen_range(0, intervals.len());
-        output[idx] = Some(intervals[root].clone());
-        gen_subtree(&intervals[..root], lefti(idx), output, rng);
-        gen_subtree(&intervals[root+1..], righti(idx), output, rng);
     }
 
     fn check_tree(mut tree: TreeWrapper<IntervalNode<Iv>>, rm: Iv) -> bool {

@@ -465,6 +465,7 @@ pub fn righti(idx: usize) -> usize {
 
 #[cfg(test)]
 pub mod validation {
+    use rand::{Rng, XorShiftRng, SeedableRng};
     use std::fmt::{Display, Debug};
     use base::{lefti, righti, parenti, TreeWrapper, TreeBase};
 
@@ -513,5 +514,35 @@ pub mod validation {
         }
 
         debug_assert!(noccupied == tree.size());
+    }
+
+
+    pub fn gen_tree_items<T: Ord+Clone>(items: Vec<T>) -> Vec<Option<T>> {
+        let mut shaped = vec![None; 1 << 18];
+        let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
+        gen_subtree_items(&items, 0, &mut shaped, &mut rng);
+
+        let mut items = shaped.into_iter()
+            .rev()
+            .skip_while(|opt| opt.is_none())
+            .collect::<Vec<_>>();
+        items.reverse();
+        items
+    }
+
+    fn gen_subtree_items<T: Ord+Clone>(items: &[T], idx: usize, output: &mut Vec<Option<T>>, rng: &mut XorShiftRng) {
+        if items.len() == 0 {
+            return;
+        }
+
+        // hack
+        if idx >= output.len() {
+            return;
+        }
+
+        let root = rng.gen_range(0, items.len());
+        output[idx] = Some(items[root].clone());
+        gen_subtree_items(&items[..root], lefti(idx), output, rng);
+        gen_subtree_items(&items[root+1..], righti(idx), output, rng);
     }
 }
