@@ -4,6 +4,7 @@ use base::drivers::{consume_ptr, consume_unchecked};
 use std::{mem, cmp};
 use std::marker::PhantomData;
 
+type IvTree<Iv> = TreeWrapper<IntervalNode<Iv>>;
 
 pub trait IntervalTreeInternal<Iv: Interval> {
     #[inline] fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
@@ -11,7 +12,7 @@ pub trait IntervalTreeInternal<Iv: Interval> {
 }
 
 
-impl<Iv: Interval> IntervalTreeInternal<Iv> for TreeWrapper<IntervalNode<Iv>> {
+impl<Iv: Interval> IntervalTreeInternal<Iv> for IvTree<Iv> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     // TODO: accepting IntervalNode is super ugly, temporary solution only
     #[inline]
@@ -338,15 +339,14 @@ impl<Iv: Interval, Tree> ItemVisitor<IntervalNode<Iv>> for UpdateMax<Iv, Tree>
 }
 
 impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
-                                    UpdateMax<Iv, TreeWrapper<IntervalNode<Iv>>>
-                                   > for TreeWrapper<IntervalNode<Iv>> {
+                                    UpdateMax<Iv, IvTree<Iv>>> for IvTree<Iv> {
 //    type Update = UpdateMax;
 }
 
 
 
-impl<Iv: Interval> IntervalDelete<Iv> for TreeWrapper<IntervalNode<Iv>> {}
-impl<Iv: Interval> IntervalDeleteRange<Iv> for TreeWrapper<IntervalNode<Iv>> {}
+impl<Iv: Interval> IntervalDelete<Iv> for IvTree<Iv> {}
+impl<Iv: Interval> IntervalDeleteRange<Iv> for IvTree<Iv> {}
 
 
 
@@ -364,6 +364,7 @@ mod tests {
     use external_api::{IntervalTeardownTree, IntervalTreeWrapperAccess};
 
     type Iv = KeyInterval<usize>;
+    type IvTree = TreeWrapper<IntervalNode<Iv>>;
 
     quickcheck! {
         fn quickcheck_interval_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
@@ -374,10 +375,11 @@ mod tests {
     fn test_interval_tree(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
         let mut intervals = xs.into_iter()
                               .map(|r| if r.start<=r.end {
-                                  Iv::new(r.start, r.end)
-                              } else {
-                                  Iv::new(r.end, r.start)
-                              })
+                                           Iv::new(r.start, r.end)
+                                       } else {
+                                           Iv::new(r.end, r.start)
+                                       }
+                              )
                               .collect::<Vec<_>>();
         intervals.sort();
 
@@ -392,7 +394,7 @@ mod tests {
     }
 
 
-    fn gen_tree<Iv: Interval+Clone>(items: Vec<Iv>) -> TreeWrapper<IntervalNode<Iv>> {
+    fn gen_tree(items: Vec<Iv>) -> IvTree {
         let items = gen_tree_items(items);
         let mut nodes = items.into_iter()
                              .map(|opt| opt.map(|it| IntervalNode::new(it)))
@@ -408,10 +410,10 @@ mod tests {
             parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
         }
         let nodes = nodes.into_iter().map(|opt| opt.map(|nd| Node::new(nd))).collect();
-        TreeWrapper::with_nodes(nodes)
+        IvTree::with_nodes(nodes)
     }
 
-    fn check_tree(mut tree: TreeWrapper<IntervalNode<Iv>>, rm: Iv) -> bool {
+    fn check_tree(mut tree: IvTree, rm: Iv) -> bool {
         let orig = tree.clone();
         let mut output = Vec::with_capacity(tree.size());
         tree.delete_intersecting(&rm, &mut output);
@@ -430,8 +432,8 @@ mod tests {
         }
     }
 
-    fn check_tree_doesnt_intersect(search: &Iv, tree: &mut TreeWrapper<IntervalNode<Iv>>) {
-        tree.traverse_inorder(0, &mut (), |this: &mut TreeWrapper<IntervalNode<Iv>>, _, idx| {
+    fn check_tree_doesnt_intersect(search: &Iv, tree: &mut IvTree) {
+        tree.traverse_inorder(0, &mut (), |this: &mut IvTree, _, idx| {
             assert!(!this.item(idx).ivl.intersects(&search));
             false
         });
