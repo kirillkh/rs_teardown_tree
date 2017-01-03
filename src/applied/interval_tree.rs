@@ -194,7 +194,7 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
     fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, min_included: bool, sink: &mut S) {
         let k: &IntervalNode<Iv> = &self.node_unsafe(idx).item;
 
-        if k.max() <= search.a() {
+        if k.max() <= search.a() && k.a() != search.a() {
             // whole subtree outside the range
             if self.slots_min().has_open() {
                 self.fill_slots_min(idx);
@@ -202,7 +202,7 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
             if self.slots_max().has_open() && !self.is_nil(idx) {
                 self.fill_slots_max(idx);
             }
-        } else if search.b() <= k.a() {
+        } else if search.b() <= k.a() && k.a() != search.a() {
             // root and right are outside the range
             self.descend_delete_intersecting_ivl_left(search, idx, false, min_included, sink);
 
@@ -219,8 +219,7 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
             }
         } else {
             // consume root if necessary
-            let consume = search.a() < k.b() && k.a() < search.b()
-                       || search.a()==k.a(); // interpret empty intervals as points
+            let consume = search.intersects(&k.ivl);
             let item = if consume
                 { Some(self.take(idx)) }
             else
@@ -419,11 +418,29 @@ mod tests {
 
         check_bst(&tree, &output, &orig, 0);
         check_integrity(&tree, &orig);
+        check_output_intersects(&rm, &output);
+        check_tree_doesnt_intersect(&rm, &mut tree);
+        assert!(output.len() + tree.size() == orig.size());
         true
     }
 
+    fn check_output_intersects(search: &Iv, output: &Vec<Iv>) {
+        for iv in output.iter() {
+            assert!(search.intersects(iv));
+        }
+    }
+
+    fn check_tree_doesnt_intersect(search: &Iv, tree: &mut TreeWrapper<IntervalNode<Iv>>) {
+        tree.traverse_inorder(0, &mut (), |this: &mut TreeWrapper<IntervalNode<Iv>>, _, idx| {
+            assert!(!this.item(idx).ivl.intersects(&search));
+            false
+        });
+    }
+
+
     #[test]
     fn prebuilt() {
+        test_interval_tree(vec![0..0], 0..0);
         test_interval_tree(vec![0..0, 0..0, 0..1], 0..1);
         test_interval_tree(vec![0..2, 1..2, 1..1, 1..2], 1..2);
         test_interval_tree(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2);
