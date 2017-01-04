@@ -21,6 +21,7 @@ path = "src/bin/benchmarks.rs"
 rand = "0.3.14"
 #wio = "0.1.2"
 teardown_tree___treap = "0.0.2"
+splay = { git = "https://github.com/kirillkh/splay-rs.git" }
 
 [dev-dependencies]
 quickcheck = "0.4.1"

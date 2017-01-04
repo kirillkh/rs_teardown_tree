@@ -1,10 +1,11 @@
 extern crate rand;
 extern crate teardown_tree___treap;
 extern crate teardown_tree;
+extern crate splay;
 //extern crate wio;
 
 use std::collections::BTreeSet;
-use bench_delete_range::{TreapMaster, TreeBulk, TeardownTreeSingle};
+use bench_delete_range::{TreapMaster, TreeBulk, TeardownTreeSingle, SplayMaster};
 use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
 
 use std::time::Duration;
@@ -67,6 +68,20 @@ fn main() {
     bench_refill_teardown_cycle::<BTreeSet<usize>>(10000000, 1000, 4);
 
 
+    bench_refill_teardown_cycle::<SplayMaster>(100, 100, 500000);
+    bench_refill_teardown_cycle::<SplayMaster>(1000, 100, 50000);
+    bench_refill_teardown_cycle::<SplayMaster>(10000, 100, 4000);
+    bench_refill_teardown_cycle::<SplayMaster>(100000, 100, 350);
+    bench_refill_teardown_cycle::<SplayMaster>(1000000, 100, 30);
+    bench_refill_teardown_cycle::<SplayMaster>(10000000, 100, 4);
+
+    bench_refill_teardown_cycle::<SplayMaster>(1000, 1000, 50000);
+    bench_refill_teardown_cycle::<SplayMaster>(10000, 1000, 6000);
+    bench_refill_teardown_cycle::<SplayMaster>(100000, 1000, 600);
+    bench_refill_teardown_cycle::<SplayMaster>(1000000, 1000, 40);
+    bench_refill_teardown_cycle::<SplayMaster>(10000000, 1000, 4);
+
+
     bench_refill_teardown_cycle::<TeardownTreeSingle>(100, 100, 2000000);
     bench_refill_teardown_cycle::<TeardownTreeSingle>(1000, 100,  60000);
     bench_refill_teardown_cycle::<TeardownTreeSingle>(10000, 100,  6000);
@@ -105,6 +120,14 @@ fn main() {
     bench_refill::<BTreeSet<usize>>(10000000, 8);
 
 
+    bench_refill::<SplayMaster>(100, 260000);
+    bench_refill::<SplayMaster>(1000, 28000);
+    bench_refill::<SplayMaster>(10000, 3000);
+    bench_refill::<SplayMaster>(100000, 220);
+    bench_refill::<SplayMaster>(1000000, 25);
+    bench_refill::<SplayMaster>(10000000, 3);
+
+
     imptree_single_elem_range_n(100, 100,    200000);
     imptree_single_elem_range_n(1000, 100,   150000);
     imptree_single_elem_range_n(10000, 100,  100000);
@@ -130,6 +153,7 @@ mod bench_delete_range {
     use teardown_tree::{TeardownTreeRefill};
     use teardown_tree::PlainTeardownTree;
     use std::time;
+    use std::iter::FromIterator;
     use rand::{XorShiftRng, SeedableRng, Rng};
     use super::nanos;
 
@@ -214,7 +238,7 @@ mod bench_delete_range {
 
     pub fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) {
         let elems: Vec<_> = (0..n).collect();
-        let tree = M::build(elems);
+        let tree = build::<M>(elems);
         let mut copy = tree.cpy();
         let mut elapsed_nanos = 0;
 
@@ -255,7 +279,7 @@ mod bench_delete_range {
         };
 
 
-        let tree = M::build(elems);
+        let tree = build::<M>(elems);
         let mut copy = tree.cpy();
         let mut output = Vec::with_capacity(tree.sz());
         copy.del_range(0, n-1, &mut output);
@@ -276,6 +300,22 @@ mod bench_delete_range {
         let elapsed = start.elapsed().unwrap();
         let elapsed_nanos = nanos(elapsed);
         println!("average time to refill/tear down {}, {} elements in bulks of {} elements: {}ns, total: {}ms", M::descr_cycle(), n, rm_items, elapsed_nanos/iters, elapsed_nanos/1000000)
+    }
+
+
+    fn build<M: TeardownTreeMaster>(mut elems: Vec<usize>) -> M {
+        let mut rng = XorShiftRng::from_seed([42,142,1,7832]);
+
+        // shuffle the elements, so that the tree comes out balanced
+        for i in 0..elems.len() {
+            let pos = rng.gen_range(i, elems.len());
+
+            let tmp = elems[pos];
+            elems[pos] = elems[i];
+            elems[i] = tmp;
+        }
+
+        M::build(elems)
     }
 
 
@@ -306,7 +346,8 @@ mod bench_delete_range {
     impl TeardownTreeMaster for TeardownTreeBulk {
         type Cpy = TeardownTreeBulk;
 
-        fn build(elems: Vec<usize>) -> Self {
+        fn build(mut elems: Vec<usize>) -> Self {
+            elems.sort();
             TeardownTreeBulk(PlainTeardownTree::new(elems))
         }
 
@@ -355,7 +396,8 @@ mod bench_delete_range {
     impl TeardownTreeMaster for TeardownTreeSingle {
         type Cpy = TeardownTreeSingle;
 
-        fn build(elems: Vec<usize>) -> Self {
+        fn build(mut elems: Vec<usize>) -> Self {
+            elems.sort();
             TeardownTreeSingle(PlainTeardownTree::new(elems))
         }
 
@@ -475,8 +517,6 @@ mod bench_delete_range {
 
 
     //---- benchmarking Treap split/join ---------------------------------------------------------------
-    use std::iter::FromIterator;
-
     pub struct TreapMaster(TreapMap<usize, ()>);
 
     pub struct TreapCopy(TreapMap<usize, ()>);
@@ -525,6 +565,56 @@ mod bench_delete_range {
             self.0.clear();
         }
     }
+
+
+    //---- benchmarking SplayTree split/join ---------------------------------------------------------------
+    use splay::SplaySet;
+
+    pub struct SplayMaster(SplaySet<usize>);
+
+    pub struct SplayCopy(SplaySet<usize>);
+
+    impl TeardownTreeMaster for SplayMaster {
+        type Cpy = SplayCopy;
+
+        fn build(elems: Vec<usize>) -> Self {
+            SplayMaster(SplaySet::from_iter(elems.into_iter()))
+        }
+
+        fn cpy(&self) -> Self::Cpy {
+            SplayCopy(self.0.clone())
+        }
+
+        fn sz(&self) -> usize {
+            self.0.len()
+        }
+
+        fn descr_cycle() -> String {
+            "SplayTree using remove_range()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "SplayTree".to_string()
+        }
+    }
+
+    impl TeardownTreeCopy for SplayCopy {
+        type Master = SplayMaster;
+
+        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
+            self.0.remove_range(&from, &(to + 1), output);
+        }
+
+        fn rfill(&mut self, master: &Self::Master) {
+            self.0 = master.0.clone()
+        }
+
+        fn sz(&self) -> usize {
+            self.0.len()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+    }
 }
-
-

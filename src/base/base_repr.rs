@@ -125,6 +125,7 @@ impl<T: Ord> TreeWrapper<T> {
             }
         }
     }
+
     /// Constructs a new TeardownTree<T> based on raw nodes vec.
     pub fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TreeWrapper<T> {
         let size = nodes.iter().filter(|x| x.is_some()).count();
