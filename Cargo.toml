@@ -13,15 +13,9 @@ keywords = ["BST", "tree", "teardown"]
 name = "teardown_tree"
 path = "src/lib.rs"
 
-[[bin]]
-name = "benchmarks"
-path = "src/bin/benchmarks.rs"
-
 [dependencies]
 rand = "0.3.14"
 #wio = "0.1.2"
-teardown_tree___treap = "0.0.2"
-splay = { git = "https://github.com/kirillkh/splay-rs.git" }
 
 [dev-dependencies]
 quickcheck = "0.4.1"

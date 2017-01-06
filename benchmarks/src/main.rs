@@ -1,5 +1,5 @@
 extern crate rand;
-extern crate teardown_tree___treap;
+extern crate treap;
 extern crate teardown_tree;
 extern crate splay;
 //extern crate wio;
@@ -149,7 +149,7 @@ fn main() {
 
 mod bench_delete_range {
     use std::collections::BTreeSet;
-    use teardown_tree___treap::TreapMap;
+    use treap::TreapMap;
     use teardown_tree::{TeardownTreeRefill};
     use teardown_tree::PlainTeardownTree;
     use std::time;
