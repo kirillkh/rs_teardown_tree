@@ -95,8 +95,8 @@ I made straightforward modifications to ``Treap`` and ``SplayTree`` in order to 
 ``BTreeSet`` lacks an equivalent operation (it has an ``O(log n)`` ``split``, but not ``merge``, see
 `Rust #34666 <https://github.com/rust-lang/rust/issues/34666>`_), therefore ``BTreeSet::remove()`` is used instead.
 
-As the graph above shows, on my machine the whole clone/teardown sequence on a tree of 1,000,000 items (we clone the tree,
-then delete 1000 items at a time until the tree is empty), is ~20 times faster with ``TeardownTree::delete_range()``
-than with ``BTreeSet::remove()``. It also uses 45% less memory (u64 items).
+As the graph above shows, on my machine the whole clone/teardown sequence on a tree of 1,000,000 u64 items (we clone the
+tree, then delete 1000 items at a time until the tree is empty), is ~20 times faster with ``TeardownTree::delete_range()``
+than with ``BTreeSet::remove()``. It also uses 45% less memory.
 
 More benchmarks can be found `here <benchmarks/benchmarks.md>`_.

@@ -57,6 +57,8 @@ mod plain {
         /// Returns the number of items in this tree.
         pub fn size(&self) -> usize { self.internal.size() }
 
+        pub fn is_empty(&self) -> bool { self.size() == 0 }
+
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         pub fn clear(&mut self) { self.internal.clear(); }
     }
@@ -142,6 +144,8 @@ mod interval {
         pub fn size(&self) -> usize {
             self.internal.size()
         }
+
+        pub fn is_empty(&self) -> bool { self.size() == 0 }
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         pub fn clear(&mut self) { self.internal.clear(); }

@@ -7,33 +7,7 @@ use std::ptr;
 use std::cmp::{max};
 use std::ops::{Deref, DerefMut};
 
-pub trait TreeReprAccess<T: Ord>: Deref<Target=TreeRepr<T>>+DerefMut<Target=TreeRepr<T>>
-{
-
-//    fn base(&self) -> &TreeData<T>; // TODO: rename to data(), and rename current data() to nodes()
-//    fn base_mut(&mut self) -> &mut TreeData<T>; // TODO: rename to data(), and rename current data() to nodes()
-
-//    fn data(&self) -> &Vec<Node<T>>;
-//    fn data_mut(&mut self) -> &mut Vec<Node<T>>;
-//
-//    fn mask(&self) -> &Vec<bool>;
-//    fn mask_mut(&mut self) -> &mut Vec<bool>;
-//
-//    fn size(&self) -> usize;
-//    fn size_mut(&mut self) -> &mut usize;
-//
-//    fn slots_min(&mut self) -> &mut SlotStack;
-//    fn slots_max(&mut self) -> &mut SlotStack;
-
-//    fn data(&self) -> &Vec<Node<T>> { &self.repr().data }
-//    fn data_mut(&mut self) -> &mut Vec<Node<T>> { &mut self.repr_mut().data }
-//    fn mask(&self) -> &Vec<bool> { &self.repr().mask }
-//    fn mask_mut(&mut self) -> &mut Vec<bool> { &mut self.repr_mut().mask }
-//    fn size(&self) -> usize { self.repr().size }
-//    fn size_mut(&mut self) -> &mut usize { &mut self.repr_Mut().size }
-//    fn slots_min(&mut self) -> &mut SlotStack { &mut self.repr_mut().delete_range_cache.slots_min}
-//    fn slots_max(&mut self) -> &mut SlotStack { &mut self.repr_mut().delete_range_cache.slots_max }
-}
+pub trait TreeReprAccess<T: Ord>: Deref<Target=TreeRepr<T>>+DerefMut<Target=TreeRepr<T>> {}
 
 
 #[derive(Debug, Clone)]
