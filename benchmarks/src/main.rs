@@ -149,12 +149,14 @@ fn main() {
 
 mod bench_delete_range {
     use std::collections::BTreeSet;
-    use treap::TreapMap;
-    use teardown_tree::{TeardownTreeRefill};
-    use teardown_tree::TeardownTree;
+    use std::ops::Range;
     use std::time;
     use std::iter::FromIterator;
     use rand::{XorShiftRng, SeedableRng, Rng};
+
+    use treap::TreapMap;
+    use teardown_tree::{TeardownTreeRefill};
+    use teardown_tree::TeardownTree;
     use super::nanos;
 
     pub type Tree = TeardownTree<usize>;
@@ -225,7 +227,7 @@ mod bench_delete_range {
             let start = time::SystemTime::now();
             for i in 0..rm_items {
                 output.truncate(0);
-                let x = copy.0.delete_range(keys[i], keys[i], &mut output);
+                let x = copy.0.delete_range(keys[i]..keys[i]+1, &mut output);
                 black_box(x);
             }
             let elapsed = start.elapsed().unwrap();
@@ -271,8 +273,8 @@ mod bench_delete_range {
                 let k = rng.gen_range(0, nranges-i);
                 let range_idx = pool.swap_remove(k);
                 let from = range_idx * rm_items;
-                let to = ::std::cmp::min(from + rm_items-1, n-1);
-                ranges.push((from, to));
+                let to = ::std::cmp::min(from + rm_items, n);
+                ranges.push(from..to);
             }
 
             ranges
@@ -282,7 +284,7 @@ mod bench_delete_range {
         let tree = build::<M>(elems);
         let mut copy = tree.cpy();
         let mut output = Vec::with_capacity(tree.sz());
-        copy.del_range(0, n-1, &mut output);
+        copy.del_range(0..n, &mut output);
         output.truncate(0);
 
         let start = time::SystemTime::now();
@@ -290,10 +292,10 @@ mod bench_delete_range {
             copy.rfill(&tree);
             for i in 0..nranges {
                 output.truncate(0);
-                let (ref from, ref to) = ranges[i];
-                copy.del_range(*from, *to, &mut output);
+                copy.del_range(ranges[i].clone(), &mut output);
                 output = black_box(output);
-                assert!(output.len() == *to  - *from + 1, "from={}, to={}, expected: {}, len: {}", *from, *to, *to  - *from + 1, output.len());
+                let expected_len = ranges[i].end - ranges[i].start;
+                assert!(output.len() == expected_len, "range={:?}, expected: {}, len: {}", ranges[i], expected_len, output.len());
             }
             assert!(copy.sz() == 0);
         }
@@ -332,7 +334,7 @@ mod bench_delete_range {
     pub trait TeardownTreeCopy {
         type Master: TeardownTreeMaster;
 
-        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>);
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>);
         fn rfill(&mut self, master: &Self::Master);
         fn sz(&self) -> usize;
         fn clear(&mut self);
@@ -371,8 +373,8 @@ mod bench_delete_range {
     impl TeardownTreeCopy for TeardownTreeBulk {
         type Master = TeardownTreeBulk;
 
-        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-            self.0.delete_range(from, to, output);
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            self.0.delete_range(range, output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -421,8 +423,8 @@ mod bench_delete_range {
     impl TeardownTreeCopy for TeardownTreeSingle {
         type Master = TeardownTreeSingle;
 
-        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-            for i in from..to + 1 {
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            for i in range {
                 if let Some(x) = self.0.delete(&i) {
                     output.push(x);
                 }
@@ -481,8 +483,8 @@ mod bench_delete_range {
     impl TeardownTreeCopy for BTreeSetCopy {
         type Master = BTreeSet<usize>;
 
-        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-            for i in from..to + 1 {
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            for i in range {
                 if self.set.remove(&i) {
                     output.push(i);
                 }
@@ -549,8 +551,8 @@ mod bench_delete_range {
     impl TeardownTreeCopy for TreapCopy {
         type Master = TreapMaster;
 
-        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-            self.0.delete_range(from, to + 1, output);
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            self.0.remove_range(range, output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -601,8 +603,8 @@ mod bench_delete_range {
     impl TeardownTreeCopy for SplayCopy {
         type Master = SplayMaster;
 
-        fn del_range(&mut self, from: usize, to: usize, output: &mut Vec<usize>) {
-            self.0.remove_range(&from, &(to + 1), output);
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            self.0.remove_range(&range.start .. &range.end, output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {

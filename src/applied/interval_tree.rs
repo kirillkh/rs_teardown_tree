@@ -220,22 +220,21 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
             }
         } else {
             // consume root if necessary
-            let consume = search.intersects(&k.ivl);
-            let item = if consume
+            let consumed = if search.intersects(&k.ivl)
                 { Some(self.take(idx)) }
             else
                 { None };
 
             // left subtree
-            let mut removed = consume;
-            if consume {
+            let mut removed = consumed.is_some();
+            if removed {
                 if min_included {
                     self.consume_subtree(lefti(idx), sink)
                 } else {
                     removed = self.descend_delete_intersecting_ivl_left(search, idx, true, false, sink);
                 }
 
-                sink.consume_unchecked(item.unwrap());
+                sink.consume_unchecked(consumed.unwrap());
             } else {
                 removed = self.descend_delete_intersecting_ivl_left(search, idx, false, min_included, sink);
                 if !removed && self.slots_min().has_open() {
@@ -344,112 +343,5 @@ impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
 }
 
 
-
 impl<Iv: Interval> IntervalDelete<Iv> for IvTree<Iv> {}
 impl<Iv: Interval> IntervalDeleteRange<Iv> for IvTree<Iv> {}
-
-
-
-#[cfg(test)]
-mod tests {
-    use std::ops::Range;
-    use std::cmp;
-
-    use base::{TreeWrapper, Node, TreeBase, parenti};
-    use base::validation::{check_bst, check_integrity, gen_tree_items};
-    use applied::interval::{Interval, IntervalNode, KeyInterval};
-    use applied::interval_tree::IntervalTreeInternal;
-
-    type Iv = KeyInterval<usize>;
-    type IvTree = TreeWrapper<IntervalNode<Iv>>;
-
-    quickcheck! {
-        fn quickcheck_interval_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
-            test_interval_tree(xs, rm)
-        }
-    }
-
-    fn test_interval_tree(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
-        let mut intervals = xs.into_iter()
-                              .map(|r| if r.start<=r.end {
-                                           Iv::new(r.start, r.end)
-                                       } else {
-                                           Iv::new(r.end, r.start)
-                                       }
-                              )
-                              .collect::<Vec<_>>();
-        intervals.sort();
-
-        let tree = gen_tree(intervals);
-
-        let rm = if rm.start <= rm.end {
-            Iv::new(rm.start, rm.end)
-        } else {
-            Iv::new(rm.end, rm.start)
-        };
-        check_tree(tree, rm)
-    }
-
-
-    fn gen_tree(items: Vec<Iv>) -> IvTree {
-        let items = gen_tree_items(items);
-        let mut nodes = items.into_iter()
-                             .map(|opt| opt.map(|it| IntervalNode::new(it)))
-                             .collect::<Vec<_>>();
-        for i in (1..nodes.len()).rev() {
-            let maxb = if let Some(ref mut nd) = nodes[i] {
-                nd.maxb.clone()
-            } else {
-                continue
-            };
-
-            let parent = nodes[parenti(i)].as_mut().unwrap();
-            parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
-        }
-        let nodes = nodes.into_iter().map(|opt| opt.map(|nd| Node::new(nd))).collect();
-        IvTree::with_nodes(nodes)
-    }
-
-    fn check_tree(mut tree: IvTree, rm: Iv) -> bool {
-        let orig = tree.clone();
-        let mut output = Vec::with_capacity(tree.size());
-        tree.delete_intersecting(&rm, &mut output);
-
-        check_bst(&tree, &output, &orig, 0);
-        check_integrity(&tree, &orig);
-        check_output_intersects(&rm, &output);
-        check_tree_doesnt_intersect(&rm, &mut tree);
-        assert!(output.len() + tree.size() == orig.size());
-        true
-    }
-
-    fn check_output_intersects(search: &Iv, output: &Vec<Iv>) {
-        for iv in output.iter() {
-            assert!(search.intersects(iv));
-        }
-    }
-
-    fn check_tree_doesnt_intersect(search: &Iv, tree: &mut IvTree) {
-        tree.traverse_inorder(0, &mut (), |this: &mut IvTree, _, idx| {
-            assert!(!this.item(idx).ivl.intersects(&search));
-            false
-        });
-    }
-
-
-    #[test]
-    fn prebuilt() {
-        test_interval_tree(vec![0..0], 0..0);
-        test_interval_tree(vec![0..0, 0..0, 0..1], 0..1);
-
-        test_interval_tree(vec![1..1, 0..0, 0..0, 0..0], 0..1);
-        test_interval_tree(vec![0..0, 1..1, 0..0, 0..0], 0..1);
-        test_interval_tree(vec![0..0, 0..0, 1..1, 0..0], 0..1);
-        test_interval_tree(vec![0..0, 0..0, 0..0, 1..1], 0..1);
-        test_interval_tree(vec![1..1, 1..1, 1..1, 1..1], 0..1);
-
-        test_interval_tree(vec![0..2, 1..2, 1..1, 1..2], 1..2);
-        test_interval_tree(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2);
-        test_interval_tree(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2);
-    }
-}

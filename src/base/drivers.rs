@@ -1,4 +1,5 @@
 use std::ptr;
+use std::ops::Range;
 
 pub trait Sink<T: Ord> {
     fn consume(&mut self, item: T);
@@ -65,14 +66,21 @@ impl<T: Ord> Sink<T> for Vec<T> {
 
 
 pub struct RangeRefDriver<'a, T: Ord +'a> {
-    from: &'a T,
-    to: &'a T,
+    range: Range<&'a T>,
     output: &'a mut Vec<T>
 }
 
 impl<'a, T: Ord +'a> RangeRefDriver<'a, T> {
-    pub fn new(from: &'a T, to: &'a T, output: &'a mut Vec<T>) -> RangeRefDriver<'a, T> {
-        RangeRefDriver { from:from, to:to, output:output }
+    pub fn new(range: Range<&'a T>, output: &'a mut Vec<T>) -> RangeRefDriver<'a, T> {
+        RangeRefDriver { range:range, output:output }
+    }
+
+    pub fn from(&self) -> &'a T {
+        self.range.start
+    }
+
+    pub fn to(&self) -> &'a T {
+        self.range.end
     }
 }
 
@@ -81,8 +89,8 @@ impl<'a, T: Ord +'a> TraversalDriver<T> for RangeRefDriver<'a, T> {
 
     #[inline(always)]
     fn decide(&self, x: &T) -> Self::Decision {
-        let left = self.from <= x;
-        let right = x <= self.to;
+        let left = self.from() <= x;
+        let right = x < self.to();
 
         RangeDecision { left: left, right: right }
     }
@@ -108,14 +116,21 @@ impl<'a, T: Ord +'a> Sink<T> for RangeRefDriver<'a, T> {
 
 
 pub struct RangeDriver<'a, T: Ord +'a> {
-    from: T,
-    to: T,
+    range: Range<T>,
     output: &'a mut Vec<T>
 }
 
 impl<'a, T: Ord +'a> RangeDriver<'a, T> {
-    pub fn new(from: T, to: T, output: &'a mut Vec<T>) -> RangeDriver<T> {
-        RangeDriver { from:from, to:to, output: output }
+    pub fn new(range: Range<T>, output: &'a mut Vec<T>) -> RangeDriver<T> {
+        RangeDriver { range:range, output: output }
+    }
+
+    pub fn from(&self) -> &T {
+        &self.range.start
+    }
+
+    pub fn to(&self) -> &T {
+        &self.range.end
     }
 }
 
@@ -124,8 +139,8 @@ impl<'a, T: Ord +'a> TraversalDriver<T> for RangeDriver<'a, T> {
 
     #[inline(always)]
     fn decide(&self, x: &T) -> Self::Decision {
-        let left = self.from <= *x;
-        let right = *x <= self.to;
+        let left = self.from() <= x;
+        let right = x < self.to();
 
         RangeDecision { left: left, right: right }
     }

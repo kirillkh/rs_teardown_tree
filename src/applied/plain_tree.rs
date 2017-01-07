@@ -1,18 +1,19 @@
 use base::{TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, righti, lefti, parenti};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::marker::PhantomData;
+use std::ops::Range;
 
 
 pub trait PlainDeleteInternal<T: Ord> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline] fn delete(&mut self, search: &T) -> Option<T>;
 
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
+    /// Deletes all items inside the half-open `range` from the tree and stores them in the output
     /// Vec. The items are returned in order.
-    #[inline] fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>);
+    #[inline] fn delete_range(&mut self, range: Range<T>, output: &mut Vec<T>);
 
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
-    #[inline] fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>);
+    /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
+    #[inline] fn delete_range_ref(&mut self, range: Range<&T>, output: &mut Vec<T>);
 }
 
 impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
@@ -24,23 +25,23 @@ impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
         })
     }
 
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
+    /// Deletes all items inside the half-open `range` from the tree and stores them in the output
     /// Vec. The items are returned in order.
     #[inline]
-    fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>) {
+    fn delete_range(&mut self, range: Range<T>, output: &mut Vec<T>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
-        self.delete_with_driver(&mut RangeDriver::new(from, to, output))
+        self.delete_with_driver(&mut RangeDriver::new(range, output))
     }
 
-    /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
+    /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
     #[inline]
-    fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>) {
+    fn delete_range_ref(&mut self, range: Range<&T>, output: &mut Vec<T>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
-        self.delete_with_driver(&mut RangeRefDriver::new(from, to, output))
+        self.delete_with_driver(&mut RangeRefDriver::new(range, output))
     }
 }
 

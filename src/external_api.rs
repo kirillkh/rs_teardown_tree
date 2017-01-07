@@ -23,6 +23,7 @@ mod plain {
 
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
+    use std::ops::Range;
 
 
     #[derive(Clone)]
@@ -31,6 +32,8 @@ mod plain {
     }
 
     impl<T: Ord> TeardownTree<T> {
+        /// Creates a new TeardownTree with the given set of items.
+        /// **Note**: the items are assumed to be sorted!
         pub fn new(sorted: Vec<T>) -> TeardownTree<T> {
             TeardownTree { internal: TreeWrapper::new(sorted) }
         }
@@ -40,19 +43,21 @@ mod plain {
             self.internal.delete(search)
         }
 
-        /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output
+        /// Deletes all items inside the half-open `range` from the tree and stores them in the output
         /// Vec. The items are returned in order.
-        pub fn delete_range(&mut self, from: T, to: T, output: &mut Vec<T>) {
-            self.internal.delete_range(from, to, output)
+        pub fn delete_range(&mut self, range: Range<T>, output: &mut Vec<T>) {
+            self.internal.delete_range(range, output)
         }
 
-        /// Deletes all items inside the closed [from,to] range from the tree and stores them in the output Vec.
-        pub fn delete_range_ref(&mut self, from: &T, to: &T, output: &mut Vec<T>) {
-            self.internal.delete_range_ref(from, to, output)
+        /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
+        pub fn delete_range_ref(&mut self, range: Range<&T>, output: &mut Vec<T>) {
+            self.internal.delete_range_ref(range, output)
         }
 
+        /// Returns the number of items in this tree.
         pub fn size(&self) -> usize { self.internal.size() }
 
+        /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         pub fn clear(&mut self) { self.internal.clear(); }
     }
 
@@ -96,6 +101,8 @@ mod interval {
     }
 
     impl<Iv: Interval> IntervalTeardownTree<Iv> {
+        /// Creates a new `IntervalTeardownTree` with the given set of intervals.
+        /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         pub fn new(sorted: Vec<Iv>) -> IntervalTeardownTree<Iv> {
             let items = sorted.into_iter()
                               .map(|ivl| IntervalNode{ maxb: ivl.b().clone(), ivl: ivl })
@@ -124,14 +131,20 @@ mod interval {
             self.internal.delete(search)
         }
 
+        /// Deletes all intervals intersecting with the `search` interval from the tree and stores them
+        /// in the output Vec. The items are returned in order.
         #[inline]
         pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>) {
             self.internal.delete_intersecting(search, output)
         }
 
+        /// Returns the number of items in this tree.
         pub fn size(&self) -> usize {
             self.internal.size()
         }
+
+        /// Removes all items from the tree (the items are dropped, but the internal storage is not).
+        pub fn clear(&mut self) { self.internal.clear(); }
     }
 
 
