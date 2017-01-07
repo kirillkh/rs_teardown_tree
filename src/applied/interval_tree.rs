@@ -247,7 +247,7 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
             // right subtree
             let right_min_included = min_included || search.a() <= k.a();
             if right_min_included {
-                let right_max_included = k.max() <= search.b();
+                let right_max_included = k.max() < search.b();
                 if right_max_included {
                     self.consume_subtree(righti(idx), sink);
                 } else {
@@ -441,6 +441,13 @@ mod tests {
     fn prebuilt() {
         test_interval_tree(vec![0..0], 0..0);
         test_interval_tree(vec![0..0, 0..0, 0..1], 0..1);
+
+        test_interval_tree(vec![1..1, 0..0, 0..0, 0..0], 0..1);
+        test_interval_tree(vec![0..0, 1..1, 0..0, 0..0], 0..1);
+        test_interval_tree(vec![0..0, 0..0, 1..1, 0..0], 0..1);
+        test_interval_tree(vec![0..0, 0..0, 0..0, 1..1], 0..1);
+        test_interval_tree(vec![1..1, 1..1, 1..1, 1..1], 0..1);
+
         test_interval_tree(vec![0..2, 1..2, 1..1, 1..2], 1..2);
         test_interval_tree(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2);
         test_interval_tree(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2);
