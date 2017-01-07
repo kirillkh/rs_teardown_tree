@@ -1,7 +1,7 @@
 use applied::interval::{Interval, IntervalNode};
 use base::TreeWrapper;
 
-pub use self::plain::PlainTeardownTree;
+pub use self::plain::TeardownTree;
 pub use self::interval::IntervalTeardownTree;
 pub use base::TeardownTreeRefill;
 
@@ -26,13 +26,13 @@ mod plain {
 
 
     #[derive(Clone)]
-    pub struct PlainTeardownTree<T: Ord> {
+    pub struct TeardownTree<T: Ord> {
         internal: TreeWrapper<T>
     }
 
-    impl<T: Ord> PlainTeardownTree<T> {
-        pub fn new(sorted: Vec<T>) -> PlainTeardownTree<T> {
-            PlainTeardownTree { internal: TreeWrapper::new(sorted) }
+    impl<T: Ord> TeardownTree<T> {
+        pub fn new(sorted: Vec<T>) -> TeardownTree<T> {
+            TeardownTree { internal: TreeWrapper::new(sorted) }
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -56,26 +56,26 @@ mod plain {
         pub fn clear(&mut self) { self.internal.clear(); }
     }
 
-    impl<T: Ord + Debug> Debug for PlainTeardownTree<T> {
+    impl<T: Ord + Debug> Debug for TeardownTree<T> {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Debug::fmt(&self.internal, fmt)
         }
     }
 
-    impl<T: Ord + Debug> Display for PlainTeardownTree<T> {
+    impl<T: Ord + Debug> Display for TeardownTree<T> {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Display::fmt(&self.internal, fmt)
         }
     }
 
-    impl<T: Ord+Copy> TeardownTreeRefill<T> for PlainTeardownTree<T> {
+    impl<T: Ord+Copy> TeardownTreeRefill<T> for TeardownTree<T> {
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
         }
     }
 
 
-    impl<T: Ord> super::PlainTreeWrapperAccess<T> for PlainTeardownTree<T> {
+    impl<T: Ord> super::PlainTreeWrapperAccess<T> for TeardownTree<T> {
         fn internal(&mut self) -> &mut TreeWrapper<T> {
             &mut self.internal
         }

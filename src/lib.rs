@@ -15,16 +15,16 @@ mod external_api;
 
 mod rust_bench;
 
-pub use self::external_api::{IntervalTeardownTree, PlainTeardownTree, TeardownTreeRefill};
+pub use self::external_api::{IntervalTeardownTree, TeardownTree, TeardownTreeRefill};
 
 
 
 #[cfg(test)]
 mod plain_tests {
-    use base::{TreeBase, TreeWrapper, Node, lefti, righti, parenti};
+    use base::{TreeBase, TreeWrapper, Node, lefti, righti};
     use base::validation::{check_bst, check_integrity};
     use applied::plain_tree::PlainDeleteInternal;
-    use external_api::{PlainTeardownTree, PlainTreeWrapperAccess};
+    use external_api::{TeardownTree, PlainTreeWrapperAccess};
 
     type Tree = TreeWrapper<usize>;
 
@@ -297,11 +297,11 @@ mod plain_tests {
         xs.sort();
         let rm = if rm.start <= rm.end { rm } else {rm.end .. rm.start};
 
-        let tree = PlainTeardownTree::new(xs);
+        let tree = TeardownTree::new(xs);
         check_tree(tree, rm)
     }
 
-    fn check_tree(mut tree: PlainTeardownTree<usize>, rm: Range<usize>) -> bool {
+    fn check_tree(mut tree: TeardownTree<usize>, rm: Range<usize>) -> bool {
         let tree: &mut TreeWrapper<usize> = tree.internal();
         let orig = tree.clone();
 

@@ -19,7 +19,7 @@ pattern is to build a master copy of the tree, then
 2. tear the tree down with a series of **delete-range** operations (and do something with the retrieved items)
 3. rinse, repeat
 
-Two variations are currently implemented: **PlainTeardownTree** and **IntervalTeardownTree** (an |IntervalTree|_).
+Two variations are currently implemented: **TeardownTree** and **IntervalTeardownTree** (an |IntervalTree|_).
 
 The tree does not use any kind of self-balancing and does not support insert operation.
 

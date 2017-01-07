@@ -352,16 +352,13 @@ impl<Iv: Interval> IntervalDeleteRange<Iv> for IvTree<Iv> {}
 
 #[cfg(test)]
 mod tests {
-    use std::convert::AsRef;
     use std::ops::Range;
     use std::cmp;
-    use quickcheck::{Testable, Arbitrary, Gen};
 
-    use base::{TreeWrapper, Node, TreeBase, lefti, righti, parenti};
+    use base::{TreeWrapper, Node, TreeBase, parenti};
     use base::validation::{check_bst, check_integrity, gen_tree_items};
     use applied::interval::{Interval, IntervalNode, KeyInterval};
-    use applied::interval_tree::{IntervalTreeInternal, IntervalDelete, IntervalDeleteRange};
-    use external_api::{IntervalTeardownTree, IntervalTreeWrapperAccess};
+    use applied::interval_tree::IntervalTreeInternal;
 
     type Iv = KeyInterval<usize>;
     type IvTree = TreeWrapper<IntervalNode<Iv>>;
@@ -383,7 +380,7 @@ mod tests {
                               .collect::<Vec<_>>();
         intervals.sort();
 
-        let mut tree = gen_tree(intervals);
+        let tree = gen_tree(intervals);
 
         let rm = if rm.start <= rm.end {
             Iv::new(rm.start, rm.end)

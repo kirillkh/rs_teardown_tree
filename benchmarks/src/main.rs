@@ -151,13 +151,13 @@ mod bench_delete_range {
     use std::collections::BTreeSet;
     use treap::TreapMap;
     use teardown_tree::{TeardownTreeRefill};
-    use teardown_tree::PlainTeardownTree;
+    use teardown_tree::TeardownTree;
     use std::time;
     use std::iter::FromIterator;
     use rand::{XorShiftRng, SeedableRng, Rng};
     use super::nanos;
 
-    pub type Tree = PlainTeardownTree<usize>;
+    pub type Tree = TeardownTree<usize>;
     pub type TreeBulk = TeardownTreeBulk;
 
 
@@ -341,14 +341,14 @@ mod bench_delete_range {
 
     /// for benchmarking TeardownTree delete_range()
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeBulk(PlainTeardownTree<usize>);
+    pub struct TeardownTreeBulk(TeardownTree<usize>);
 
     impl TeardownTreeMaster for TeardownTreeBulk {
         type Cpy = TeardownTreeBulk;
 
         fn build(mut elems: Vec<usize>) -> Self {
             elems.sort();
-            TeardownTreeBulk(PlainTeardownTree::new(elems))
+            TeardownTreeBulk(TeardownTree::new(elems))
         }
 
         fn cpy(&self) -> Self {
@@ -391,14 +391,14 @@ mod bench_delete_range {
 
     /// for benchmarking TeardownTree delete()
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeSingle(PlainTeardownTree<usize>);
+    pub struct TeardownTreeSingle(TeardownTree<usize>);
 
     impl TeardownTreeMaster for TeardownTreeSingle {
         type Cpy = TeardownTreeSingle;
 
         fn build(mut elems: Vec<usize>) -> Self {
             elems.sort();
-            TeardownTreeSingle(PlainTeardownTree::new(elems))
+            TeardownTreeSingle(TeardownTree::new(elems))
         }
 
         fn cpy(&self) -> Self {

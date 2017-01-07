@@ -1,6 +1,6 @@
 [package]
 name = "teardown_tree_bench"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 license-file = "LICENSE-MIT"
 homepage = "https://github.com/kirillkh/rs_teardown_tree"

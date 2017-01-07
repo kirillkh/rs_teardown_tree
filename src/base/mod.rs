@@ -466,7 +466,7 @@ pub fn righti(idx: usize) -> usize {
 #[cfg(test)]
 pub mod validation {
     use rand::{Rng, XorShiftRng, SeedableRng};
-    use std::fmt::{Display, Debug};
+    use std::fmt::Debug;
     use base::{lefti, righti, parenti, TreeWrapper, TreeBase};
 
     /// Validates the BST property.
