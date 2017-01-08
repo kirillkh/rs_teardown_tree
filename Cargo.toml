@@ -1,6 +1,6 @@
 [package]
 name = "teardown_tree"
-version = "0.4.8"
+version = "0.5.2"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 description = "A binary search tree that supports fast clone and delete-range operations"
 readme = "README.rst"
@@ -9,20 +9,21 @@ homepage = "https://github.com/kirillkh/rs_teardown_tree"
 repository = "https://github.com/kirillkh/rs_teardown_tree.git"
 keywords = ["BST", "tree", "teardown"]
 
+[workspace]
+members = [".", "benchmarks"]
+
 [lib]
 name = "teardown_tree"
 path = "src/lib.rs"
-
-[[bin]]
-name = "benchmarks"
-path = "src/bin/benchmarks.rs"
 
 [dependencies]
 rand = "0.3.14"
 cpuprofiler = "0.0.2"
 #wio = "0.1.2"
-teardown_tree___treap = "0.0.2"
 
+[dev-dependencies]
+quickcheck = "0.4.1"
+#quickcheck_macros = "0.4"
 
 [profile.release]
 opt-level = 3

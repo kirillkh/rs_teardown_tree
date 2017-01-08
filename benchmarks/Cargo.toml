@@ -1,0 +1,20 @@
+[package]
+name = "teardown_tree_bench"
+version = "0.5.2"
+authors = ["Kirill Khazan <kirillkh@gmail.com>"]
+license-file = "LICENSE-MIT"
+homepage = "https://github.com/kirillkh/rs_teardown_tree"
+repository = "https://github.com/kirillkh/rs_teardown_tree.git"
+
+workspace = ".."
+
+[[bin]]
+name = "benchmarks"
+path = "src/main.rs"
+
+[dependencies]
+rand = "0.3.14"
+splay = { git = "https://github.com/kirillkh/splay-rs.git" }
+treap = { git = "https://github.com/kirillkh/treap-rs.git" }
+teardown_tree = { path = ".." }
+##wio = "0.1.2"

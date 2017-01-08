@@ -1,17 +1,17 @@
-use base::Item;
 use std::ptr;
+use std::ops::Range;
 
-pub trait Sink<T: Item> {
+pub trait Sink<T: Ord> {
     fn consume(&mut self, item: T);
     fn consume_unchecked(&mut self, item: T);
     fn consume_ptr(&mut self, src: *const T);
 }
 
-pub trait TraversalDriver<T: Item>: Sink<T> {
+pub trait TraversalDriver<T: Ord>: Sink<T> {
     type Decision: TraversalDecision;
 
     #[inline(always)]
-    fn decide(&self, key: &T::Key) -> Self::Decision;
+    fn decide(&self, key: &T) -> Self::Decision;
 }
 
 
@@ -46,32 +46,57 @@ impl TraversalDecision for RangeDecision {
 
 
 
+impl<T: Ord> Sink<T> for Vec<T> {
+    #[inline(always)]
+    fn consume(&mut self, item: T) {
+        self.push(item)
+    }
 
-pub struct RangeRefDriver<'a, T: Item+'a> {
-    from: &'a T::Key,
-    to: &'a T::Key,
-    output: &'a mut Vec<T>
-}
+    #[inline(always)]
+    fn consume_unchecked(&mut self, item: T) {
+        consume_unchecked(self, item);
+    }
 
-impl<'a, T: Item+'a> RangeRefDriver<'a, T> {
-    pub fn new(from: &'a T::Key, to: &'a T::Key, output: &'a mut Vec<T>) -> RangeRefDriver<'a, T> {
-        RangeRefDriver { from:from, to:to, output:output }
+    #[inline(always)]
+    fn consume_ptr(&mut self, src: *const T) {
+        consume_ptr(self, src);
     }
 }
 
-impl<'a, T: Item+'a> TraversalDriver<T> for RangeRefDriver<'a, T> {
+
+
+pub struct RangeRefDriver<'a, T: Ord +'a> {
+    range: Range<&'a T>,
+    output: &'a mut Vec<T>
+}
+
+impl<'a, T: Ord +'a> RangeRefDriver<'a, T> {
+    pub fn new(range: Range<&'a T>, output: &'a mut Vec<T>) -> RangeRefDriver<'a, T> {
+        RangeRefDriver { range:range, output:output }
+    }
+
+    pub fn from(&self) -> &'a T {
+        self.range.start
+    }
+
+    pub fn to(&self) -> &'a T {
+        self.range.end
+    }
+}
+
+impl<'a, T: Ord +'a> TraversalDriver<T> for RangeRefDriver<'a, T> {
     type Decision = RangeDecision;
 
     #[inline(always)]
-    fn decide(&self, x: &T::Key) -> Self::Decision {
-        let left = self.from <= x;
-        let right = x <= self.to;
+    fn decide(&self, x: &T) -> Self::Decision {
+        let left = self.from() <= x;
+        let right = x < self.to();
 
         RangeDecision { left: left, right: right }
     }
 }
 
-impl<'a, T: Item+'a> Sink<T> for RangeRefDriver<'a, T> {
+impl<'a, T: Ord +'a> Sink<T> for RangeRefDriver<'a, T> {
     #[inline(always)]
     fn consume(&mut self, item: T) {
         self.output.push(item)
@@ -90,31 +115,38 @@ impl<'a, T: Item+'a> Sink<T> for RangeRefDriver<'a, T> {
 
 
 
-pub struct RangeDriver<'a, T: Item+'a> {
-    from: T::Key,
-    to: T::Key,
+pub struct RangeDriver<'a, T: Ord +'a> {
+    range: Range<T>,
     output: &'a mut Vec<T>
 }
 
-impl<'a, T: Item+'a> RangeDriver<'a, T> {
-    pub fn new(from: T::Key, to: T::Key, output: &'a mut Vec<T>) -> RangeDriver<T> {
-        RangeDriver { from:from, to:to, output: output }
+impl<'a, T: Ord +'a> RangeDriver<'a, T> {
+    pub fn new(range: Range<T>, output: &'a mut Vec<T>) -> RangeDriver<T> {
+        RangeDriver { range:range, output: output }
+    }
+
+    pub fn from(&self) -> &T {
+        &self.range.start
+    }
+
+    pub fn to(&self) -> &T {
+        &self.range.end
     }
 }
 
-impl<'a, T: Item+'a> TraversalDriver<T> for RangeDriver<'a, T> {
+impl<'a, T: Ord +'a> TraversalDriver<T> for RangeDriver<'a, T> {
     type Decision = RangeDecision;
 
     #[inline(always)]
-    fn decide(&self, x: &T::Key) -> Self::Decision {
-        let left = self.from <= *x;
-        let right = *x <= self.to;
+    fn decide(&self, x: &T) -> Self::Decision {
+        let left = self.from() <= x;
+        let right = x < self.to();
 
         RangeDecision { left: left, right: right }
     }
 }
 
-impl<'a, T: Item+'a> Sink<T> for RangeDriver<'a, T> {
+impl<'a, T: Ord +'a> Sink<T> for RangeDriver<'a, T> {
     #[inline(always)]
     fn consume(&mut self, item: T) {
         self.output.push(item);
@@ -133,7 +165,7 @@ impl<'a, T: Item+'a> Sink<T> for RangeDriver<'a, T> {
 
 
 #[inline(always)]
-fn consume_unchecked<T>(output: &mut Vec<T>, item: T) {
+pub fn consume_unchecked<T>(output: &mut Vec<T>, item: T) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
@@ -145,7 +177,7 @@ fn consume_unchecked<T>(output: &mut Vec<T>, item: T) {
 
 
 #[inline(always)]
-fn consume_ptr<T>(output: &mut Vec<T>, src: *const T) {
+pub fn consume_ptr<T>(output: &mut Vec<T>, src: *const T) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
