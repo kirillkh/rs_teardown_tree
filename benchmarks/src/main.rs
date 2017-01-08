@@ -9,7 +9,6 @@ extern crate cpuprofiler;
 use std::collections::BTreeSet;
 use bench_delete_range::{TreapMaster, TreeBulk, TeardownTreeSingle, SplayMaster};
 use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
-use cpuprofiler::PROFILER;
 
 use std::time::Duration;
 
@@ -164,6 +163,7 @@ mod bench_delete_range {
     use teardown_tree::{TeardownTreeRefill};
     use teardown_tree::TeardownTree;
     use super::nanos;
+    use cpuprofiler::PROFILER;
 
     pub type Tree = TeardownTree<usize>;
     pub type TreeBulk = TeardownTreeBulk;

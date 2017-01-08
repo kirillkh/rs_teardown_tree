@@ -18,7 +18,6 @@ path = "src/lib.rs"
 
 [dependencies]
 rand = "0.3.14"
-cpuprofiler = "0.0.2"
 #wio = "0.1.2"
 
 [dev-dependencies]

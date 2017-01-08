@@ -18,3 +18,4 @@ splay = { git = "https://github.com/kirillkh/splay-rs.git" }
 treap = { git = "https://github.com/kirillkh/treap-rs.git" }
 teardown_tree = { path = ".." }
 ##wio = "0.1.2"
+cpuprofiler = "0.0.2"
