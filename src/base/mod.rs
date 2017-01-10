@@ -351,14 +351,14 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    fn take(&mut self, idx: usize) -> K {
+    fn take(&mut self, idx: usize) -> Node<K, V> {
         debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         let p: *const Node<K, V> = unsafe {
             self.data.get_unchecked(idx)
         };
         self.mask[idx] = false;
         self.size -= 1;
-        unsafe { ptr::read(&(*p).item) }
+        unsafe { ptr::read(&(*p)) }
     }
 
     #[inline(always)]
@@ -385,9 +385,9 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    fn place(&mut self, idx: usize, item: K) {
+    fn place(&mut self, idx: usize, item: Node<K, V>) {
         if self.mask[idx] {
-            self.data[idx].item = item;
+            self.data[idx] = item;
         } else {
             self.mask[idx] = true;
             self.size += 1;
