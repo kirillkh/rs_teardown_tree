@@ -4,22 +4,22 @@ use std::marker::PhantomData;
 use std::ops::Range;
 
 
-pub trait PlainDeleteInternal<T: Ord> {
+pub trait PlainDeleteInternal<K: Ord, V> {
     /// Deletes the item with the given key from the tree and returns it (or None).
-    #[inline] fn delete(&mut self, search: &T) -> Option<T>;
+    #[inline] fn delete(&mut self, search: &K) -> Option<V>;
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output
     /// Vec. The items are returned in order.
-    #[inline] fn delete_range(&mut self, range: Range<T>, output: &mut Vec<T>);
+    #[inline] fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>);
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
-    #[inline] fn delete_range_ref(&mut self, range: Range<&T>, output: &mut Vec<T>);
+    #[inline] fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>);
 }
 
-impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
+impl<K: Ord, V> PlainDeleteInternal<K, V> for TreeWrapper<K, V> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
-    fn delete(&mut self, search: &T) -> Option<T> {
+    fn delete(&mut self, search: &K) -> Option<V> {
         self.index_of(search).map(|idx| {
             self.delete_idx(idx)
         })
@@ -28,7 +28,7 @@ impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output
     /// Vec. The items are returned in order.
     #[inline]
-    fn delete_range(&mut self, range: Range<T>, output: &mut Vec<T>) {
+    fn delete_range(&mut self, range: Range<K>, output: &mut Vec<K>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
@@ -37,7 +37,7 @@ impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
     #[inline]
-    fn delete_range_ref(&mut self, range: Range<&T>, output: &mut Vec<T>) {
+    fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<K>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
@@ -47,9 +47,9 @@ impl<T: Ord> PlainDeleteInternal<T> for TreeWrapper<T> {
 
 
 
-trait PlainDelete<T: Ord>: TreeBase<T> {
+trait PlainDelete<K: Ord, V>: TreeBase<K, V> {
     #[inline]
-    fn delete_idx(&mut self, idx: usize) -> T {
+    fn delete_idx(&mut self, idx: usize) -> V {
         debug_assert!(!self.is_nil(idx));
 
         let item = self.take(idx);
@@ -96,18 +96,18 @@ trait PlainDelete<T: Ord>: TreeBase<T> {
 }
 
 
-trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T, NoUpdate<Self>> {
+trait PlainDeleteRange<K: Ord, V>: BulkDeleteCommon<K, V, NoUpdate<Self>> {
     /// Delete based on driver decisions.
     /// The items are returned in order.
     #[inline]
-    fn delete_with_driver<D: TraversalDriver<T>>(&mut self, drv: &mut D) {
+    fn delete_with_driver<D: TraversalDriver<K, V>>(&mut self, drv: &mut D) {
         self.delete_range_loop(drv, 0);
         debug_assert!(self.slots_min().is_empty(), "slots_min={:?}", self.slots_min());
         debug_assert!(self.slots_max().is_empty());
     }
 
     #[inline]
-    fn delete_range_loop<D: TraversalDriver<T>>(&mut self, drv: &mut D, mut idx: usize) {
+    fn delete_range_loop<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, mut idx: usize) {
         loop {
             if self.is_nil(idx) {
                 return;
@@ -131,7 +131,7 @@ trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T, NoUpdate<Self>> {
     }
 
     #[inline(never)]
-    fn delete_range_min<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize) {
+    fn delete_range_min<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
         let decision = drv.decide(&self.item(idx));
         debug_assert!(decision.left());
 
@@ -156,7 +156,7 @@ trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T, NoUpdate<Self>> {
     }
 
     #[inline(never)]
-    fn delete_range_max<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize) {
+    fn delete_range_max<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
         let decision = drv.decide(&self.item(idx));
         debug_assert!(decision.right(), "idx={}", idx);
 
@@ -180,14 +180,14 @@ trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T, NoUpdate<Self>> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_min_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_min_left<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
         self.descend_left(idx, with_slot,
                           |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_max_left<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_max_left<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
         self.descend_left(idx, with_slot,
                           |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
     }
@@ -195,14 +195,14 @@ trait PlainDeleteRange<T: Ord>: BulkDeleteCommon<T, NoUpdate<Self>> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_min_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_min_right<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
         self.descend_right(idx, with_slot,
                            |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_max_right<D: TraversalDriver<T>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_max_right<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
         self.descend_right(idx, with_slot,
                            |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
     }
@@ -265,7 +265,7 @@ struct NoUpdate<Tree> {
     _ph: PhantomData<Tree>
 }
 
-impl<Tree: BulkDeleteCommon<T, NoUpdate<Tree>>, T: Ord> ItemVisitor<T> for NoUpdate<Tree> {
+impl<Tree: BulkDeleteCommon<K, V, NoUpdate<Tree>>, K: Ord, V> ItemVisitor<K, V> for NoUpdate<Tree> {
     type Tree = Tree;
 
     #[inline]
@@ -275,9 +275,9 @@ impl<Tree: BulkDeleteCommon<T, NoUpdate<Tree>>, T: Ord> ItemVisitor<T> for NoUpd
     }
 }
 
-impl<T: Ord> BulkDeleteCommon<T, NoUpdate<TreeWrapper<T>>> for TreeWrapper<T> {
+impl<K: Ord, V> BulkDeleteCommon<K, V, NoUpdate<TreeWrapper<K, V>>> for TreeWrapper<K, V> {
 //    type Update = NoUpdate;
 }
 
-impl<T: Ord> PlainDelete<T> for TreeWrapper<T> {}
-impl<T: Ord> PlainDeleteRange<T> for TreeWrapper<T> {}
+impl<K: Ord, V> PlainDelete<K, V> for TreeWrapper<K, V> {}
+impl<K: Ord, V> PlainDeleteRange<K, V> for TreeWrapper<K, V> {}

@@ -27,8 +27,8 @@ impl DeleteRangeCache {
 
 
 
-pub trait ItemVisitor<T: Ord>: Sized {
-    type Tree: BulkDeleteCommon<T, Self>;
+pub trait ItemVisitor<K: Ord, V>: Sized {
+    type Tree: BulkDeleteCommon<K, V, Self>;
 
     #[inline]
     fn visit<F>(arg: &mut Self::Tree, idx: usize, f: F)
@@ -38,10 +38,10 @@ pub trait ItemVisitor<T: Ord>: Sized {
 
 
 //==== generic methods =============================================================================
-pub trait BulkDeleteCommon<T: Ord, Visitor: ItemVisitor<T, Tree=Self>>: TreeBase<T>+Sized  {
+pub trait BulkDeleteCommon<K: Ord, V, Visitor: ItemVisitor<K, V, Tree=Self>>: TreeBase<K, V>+Sized  {
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline]
-    fn consume_subtree<S: Sink<T>>(&mut self, root: usize, sink: &mut S) {
+    fn consume_subtree<S: Sink<K, V>>(&mut self, root: usize, sink: &mut S) {
         self.traverse_inorder(root, sink, |this, sink, idx| {
             unsafe {
                 this.move_to(idx, sink);
@@ -193,7 +193,7 @@ pub trait BulkDeleteCommon<T: Ord, Visitor: ItemVisitor<T, Tree=Self>>: TreeBase
     }
 
     #[inline(always)]
-    fn node_unsafe<'b>(&self, idx: usize) -> &'b Node<T> {
+    fn node_unsafe<'b>(&self, idx: usize) -> &'b Node<K, V> {
         unsafe {
             mem::transmute(self.node(idx))
         }

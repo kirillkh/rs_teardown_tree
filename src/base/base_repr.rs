@@ -7,24 +7,25 @@ use std::ptr;
 use std::cmp::{max};
 use std::ops::{Deref, DerefMut};
 
-pub trait TreeReprAccess<T: Ord>: Deref<Target=TreeRepr<T>>+DerefMut<Target=TreeRepr<T>> {}
+pub trait TreeReprAccess<K: Ord, V>: Deref<Target=TreeRepr<K, V>>+DerefMut<Target=TreeRepr<K, V>> {}
 
 
 #[derive(Debug, Clone)]
-pub struct Node<T: Ord> {
-    pub item: T,
+pub struct Node<K: Ord, V> {
+    pub key: K,
+    pub val: V
 }
 
-impl<T: Ord> Node<T> {
-    pub fn new(item: T) -> Self {
-        Node { item: item }
+impl<K: Ord, V> Node<K, V> {
+    pub fn new(key: K, val: V) -> Self {
+        Node { key: key, val: val }
     }
 }
 
 
 #[derive(Clone)]
-pub struct TreeRepr<T: Ord> {
-    pub data: Vec<Node<T>>,
+pub struct TreeRepr<K: Ord, V> {
+    pub data: Vec<Node<K, V>>,
     pub mask: Vec<bool>,
     pub size: usize,
 
@@ -32,14 +33,20 @@ pub struct TreeRepr<T: Ord> {
 }
 
 #[derive(Clone)]
-pub struct TreeWrapper<T: Ord> {
-    repr: TreeRepr<T>
+pub struct TreeWrapper<K: Ord, V> {
+    repr: TreeRepr<K, V>
 }
 
-impl<T: Ord> TreeWrapper<T> {
+impl<K: Ord, V> TreeWrapper<K, V> {
+    pub fn new(mut items: Vec<(K, V)>) -> TreeWrapper<K, V> {
+        items.sort();
+        Self::with_sorted(items)
+    }
+
+
     /// Constructs a new TeardownTree<T>
     /// Note: the argument must be sorted!
-    pub fn new(mut sorted: Vec<T>) -> TreeWrapper<T> {
+    pub fn with_sorted(mut sorted: Vec<(K, V)>) -> TreeWrapper<K, V> {
         let size = sorted.len();
 
         let capacity = size;
@@ -54,7 +61,7 @@ impl<T: Ord> TreeWrapper<T> {
         TreeWrapper { repr: TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache }}
     }
 
-    pub fn calc_height(nodes: &Vec<Option<Node<T>>>, idx: usize) -> usize {
+    pub fn calc_height(nodes: &Vec<Option<Node<K, V>>>, idx: usize) -> usize {
         if idx < nodes.len() && nodes[idx].is_some() {
             1 + max(Self::calc_height(nodes, lefti(idx)),
                     Self::calc_height(nodes, righti(idx)))
@@ -79,7 +86,7 @@ impl<T: Ord> TreeWrapper<T> {
     }
 
     /// Returns the height of the tree.
-    pub fn build(sorted: &mut [T], idx: usize, data: &mut [Node<T>]) -> usize {
+    pub fn build(sorted: &mut [(K, V)], idx: usize, data: &mut [Node<K, V>]) -> usize {
         match sorted.len() {
             0 => 0,
             n => {
@@ -90,8 +97,8 @@ impl<T: Ord> TreeWrapper<T> {
 
                 unsafe {
                     let p = sorted.get_unchecked(mid);
-                    let item = ptr::read(p);
-                    ptr::write(data.get_unchecked_mut(idx), Node { item: item });
+                    let (k, v) = ptr::read(p);
+                    ptr::write(data.get_unchecked_mut(idx), Node { key: k, val: v });
                 }
 
                 debug_assert!(rh <= lh);
@@ -101,7 +108,7 @@ impl<T: Ord> TreeWrapper<T> {
     }
 
     /// Constructs a new TeardownTree<T> based on raw nodes vec.
-    pub fn with_nodes(mut nodes: Vec<Option<Node<T>>>) -> TreeWrapper<T> {
+    pub fn with_nodes(mut nodes: Vec<Option<Node<K, V>>>) -> TreeWrapper<K, V> {
         let size = nodes.iter().filter(|x| x.is_some()).count();
         let height = Self::calc_height(&nodes, 0);
         let capacity = nodes.len();
@@ -137,24 +144,24 @@ impl<T: Ord> TreeWrapper<T> {
 //    }
 }
 
-impl<T: Ord> Deref for TreeWrapper<T> {
-    type Target = TreeRepr<T>;
+impl<K: Ord, V> Deref for TreeWrapper<K, V> {
+    type Target = TreeRepr<K, V>;
 
     fn deref(&self) -> &Self::Target {
         &self.repr
     }
 }
 
-impl<T: Ord> DerefMut for TreeWrapper<T> {
+impl<K: Ord, V> DerefMut for TreeWrapper<K, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
     }
 }
 
-impl<T: Ord> TreeReprAccess<T> for TreeWrapper<T> {}
+impl<K: Ord, V> TreeReprAccess<K, V> for TreeWrapper<K, V> {}
 
 
-impl<T: Ord> Drop for TreeWrapper<T> {
+impl<K: Ord, V> Drop for TreeWrapper<K, V> {
     fn drop(&mut self) {
         self.drop_items();
         unsafe {
@@ -164,7 +171,7 @@ impl<T: Ord> Drop for TreeWrapper<T> {
 }
 
 
-impl<T: Ord+Debug> Debug for TreeWrapper<T> {
+impl<K: Ord+Debug, V> Debug for TreeWrapper<K, V> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         let mut nz: Vec<_> = self.mask.iter().enumerate()
             .rev()
@@ -188,7 +195,7 @@ impl<T: Ord+Debug> Debug for TreeWrapper<T> {
     }
 }
 
-impl<T: Ord+Debug> fmt::Display for TreeWrapper<T> {
+impl<K: Ord+Debug, V> fmt::Display for TreeWrapper<K, V> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         writeln!(fmt, "")?;
         let mut ancestors = vec![];
@@ -197,7 +204,7 @@ impl<T: Ord+Debug> fmt::Display for TreeWrapper<T> {
 }
 
 
-impl<T: Ord+Debug> TreeWrapper<T> {
+impl<K: Ord+Debug, V> TreeWrapper<K, V> {
     fn fmt_branch(&self, fmt: &mut Formatter, ancestors: &Vec<bool>) -> fmt::Result {
         for (i, c) in ancestors.iter().enumerate() {
             if i == ancestors.len() - 1 {
