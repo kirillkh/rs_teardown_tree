@@ -16,13 +16,13 @@ use std::cmp::{Ordering};
 
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
-pub trait TeardownTreeRefill<K: Copy+Ord, V> {
+pub trait TeardownTreeRefill<K: Copy+Ord> {
     fn refill(&mut self, master: &Self);
 }
 
 
 
-impl<K: Copy+Ord, V> TeardownTreeRefill<K, V> for TreeWrapper<K, V> {
+impl<K: Copy+Ord, V> TeardownTreeRefill<K> for TreeWrapper<K, V> {
     fn refill(&mut self, master: &TreeWrapper<K, V>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
@@ -52,26 +52,38 @@ impl<K: Copy+Ord, V> TeardownTreeRefill<K, V> for TreeWrapper<K, V> {
 
 pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     #[inline(always)]
-    fn item_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut K {
+    fn node_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut Node<K, V> {
         unsafe {
-            mem::transmute(&mut self.node_mut(idx).item)
+            mem::transmute(&mut self.node_mut(idx))
         }
     }
 
     #[inline(always)]
-    fn item_mut(&mut self, idx: usize) -> &mut K {
-        &mut self.node_mut(idx).item
+    fn key_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut K {
+        unsafe {
+            mem::transmute(&mut self.node_mut(idx).key)
+        }
     }
 
     #[inline(always)]
-    fn item(&self, idx: usize) -> &K {
-        &self.node(idx).item
+    fn key_mut<'a>(&'a mut self, idx: usize) -> &'a mut K where V: 'a{
+        &mut self.node_mut(idx).key
+    }
+
+    #[inline(always)]
+    fn key<'a>(&'a self, idx: usize) -> &'a K where V: 'a {
+        &self.node(idx).key
+    }
+
+    #[inline(always)]
+    fn val<'a>(&'a self, idx: usize) -> &'a V where K: 'a {
+        &self.data[idx].val
     }
 
 
     /// Finds the item with the given key and returns it (or None).
-    fn lookup(&self, search: &K) -> Option<&K> {
-        self.index_of(search).map(|idx| self.item(idx))
+    fn lookup<'a>(&'a self, search: &'a K) -> Option<&'a V> where K: 'a{
+        self.index_of(search).map(|idx| self.val(idx))
     }
 
     fn index_of(&self, search: &K) -> Option<usize> {
@@ -81,11 +93,11 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
 
         let mut idx = 0;
         let mut key =
-        if self.mask[idx] {
-            self.item(idx)
-        } else {
-            return None;
-        };
+            if self.mask[idx] {
+                self.key(idx)
+            } else {
+                return None;
+            };
 
         loop {
             let ordering = search.cmp(&key);
@@ -101,7 +113,7 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
             }
 
             if self.mask[idx] {
-                key = self.item(idx);
+                key = self.key(idx);
             } else {
                 return None;
             }
@@ -368,7 +380,7 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
         self.size -= 1;
         let p: *const Node<K, V> = self.data.get_unchecked(idx);
 
-        let item = ptr::read(&(*p).item);
+        let item = ptr::read(&*p);
         sink.consume_unchecked(item);
     }
 
@@ -393,7 +405,7 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
             self.size += 1;
             unsafe {
                 let p = self.data.get_unchecked_mut(idx);
-                ptr::write(p, Node::new(item));
+                ptr::write(p, item);
             };
         }
     }
@@ -429,11 +441,11 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
 
-    fn slots_min<'a>(&'a mut self) -> &'a mut SlotStack where K: 'a {
+    fn slots_min<'a>(&'a mut self) -> &'a mut SlotStack where K: 'a, V: 'a {
         &mut self.delete_range_cache.slots_min
     }
 
-    fn slots_max<'a>(&'a mut self) -> &'a mut SlotStack where K: 'a {
+    fn slots_max<'a>(&'a mut self) -> &'a mut SlotStack where K: 'a, V: 'a {
         &mut self.delete_range_cache.slots_max
     }
 
@@ -469,8 +481,10 @@ pub mod validation {
     use std::fmt::Debug;
     use base::{lefti, righti, parenti, TreeWrapper, TreeBase};
 
+    type Tree<K, V> = TreeWrapper<K, V>;
+
     /// Validates the BST property.
-    pub fn check_bst<'a, T: Ord+Debug, U: Ord+Debug>(tree: &'a TreeWrapper<T>, output: &Vec<U>, tree_orig: &TreeWrapper<T>, idx: usize) -> Option<(&'a T, &'a T)> {
+    pub fn check_bst<'a, K: Ord+Debug, V, U: Ord+Debug>(tree: &'a Tree<K, V>, output: &Vec<U>, tree_orig: &Tree<K, V>, idx: usize) -> Option<(&'a K, &'a K)> {
         if tree.size() == 0 || !tree.is_nil(idx) {
             return None;
         }
@@ -479,23 +493,23 @@ pub mod validation {
         if node.is_none() {
             return None;
         } else {
-            let item = &node.unwrap().item;
+            let key = &node.unwrap().key;
             let left = check_bst(tree, output, tree_orig, lefti(idx));
             let right = check_bst(tree, output, tree_orig, righti(idx));
 
             let min =
                 if let Some((lmin, lmax)) = left {
-                    debug_assert!(lmax < item, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    debug_assert!(lmax < key, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
                     lmin
                 } else {
-                    item
+                    key
                 };
             let max =
                 if let Some((rmin, rmax)) = right {
-                    debug_assert!(item < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    debug_assert!(key < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
                     rmax
                 } else {
-                    item
+                    key
                 };
 
             return Some((min, max));
@@ -503,7 +517,7 @@ pub mod validation {
     }
 
     /// Checks that there are no dangling items (the parent of every item marked as present is also marked as present).
-    pub fn check_integrity<T: Ord+Debug>(tree: &TreeWrapper<T>, tree_orig: &TreeWrapper<T>) {
+    pub fn check_integrity<K: Ord+Debug, V>(tree: &Tree<K, V>, tree_orig: &Tree<K, V>) {
         let mut noccupied = 0;
 
         for i in 0..tree.data.len() {
@@ -517,10 +531,10 @@ pub mod validation {
     }
 
 
-    pub fn gen_tree_items<T: Ord+Clone>(items: Vec<T>) -> Vec<Option<T>> {
+    pub fn gen_tree_keys<T: Ord+Clone>(items: Vec<T>) -> Vec<Option<T>> {
         let mut shaped = vec![None; 1 << 18];
         let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
-        gen_subtree_items(&items, 0, &mut shaped, &mut rng);
+        gen_subtree_keys(&items, 0, &mut shaped, &mut rng);
 
         let mut items = shaped.into_iter()
             .rev()
@@ -530,7 +544,7 @@ pub mod validation {
         items
     }
 
-    fn gen_subtree_items<T: Ord+Clone>(items: &[T], idx: usize, output: &mut Vec<Option<T>>, rng: &mut XorShiftRng) {
+    fn gen_subtree_keys<T: Ord+Clone>(items: &[T], idx: usize, output: &mut Vec<Option<T>>, rng: &mut XorShiftRng) {
         if items.len() == 0 {
             return;
         }
@@ -542,7 +556,7 @@ pub mod validation {
 
         let root = rng.gen_range(0, items.len());
         output[idx] = Some(items[root].clone());
-        gen_subtree_items(&items[..root], lefti(idx), output, rng);
-        gen_subtree_items(&items[root+1..], righti(idx), output, rng);
+        gen_subtree_keys(&items[..root], lefti(idx), output, rng);
+        gen_subtree_keys(&items[root+1..], righti(idx), output, rng);
     }
 }

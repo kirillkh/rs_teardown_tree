@@ -66,7 +66,7 @@ impl<K: Ord, V> Sink<K, V> for Vec<(K, V)> {
 
 
 
-pub struct RangeRefDriver<'a, K: Ord +'a, V> {
+pub struct RangeRefDriver<'a, K: Ord +'a, V: 'a> {
     range: Range<&'a K>,
     output: &'a mut Vec<(K, V)>
 }
@@ -116,7 +116,7 @@ impl<'a, K: Ord +'a, V> Sink<K, V> for RangeRefDriver<'a, K, V> {
 
 
 
-pub struct RangeDriver<'a, K: Ord +'a, V> {
+pub struct RangeDriver<'a, K: Ord +'a, V: 'a> {
     range: Range<K>,
     output: &'a mut Vec<(K, V)>
 }
@@ -150,23 +150,23 @@ impl<'a, K: Ord +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
 impl<'a, K: Ord +'a, V> Sink<K, V> for RangeDriver<'a, K, V> {
     #[inline(always)]
     fn consume(&mut self, item: Node<K, V>) {
-        self.output.push(item);
+        self.output.push(item.into_tuple());
     }
 
     #[inline(always)]
-    fn consume_unchecked(&mut self, item: K) {
+    fn consume_unchecked(&mut self, item: Node<K, V>) {
         consume_unchecked(&mut self.output, item);
     }
 
     #[inline(always)]
-    fn consume_ptr(&mut self, src: *const K) {
+    fn consume_ptr(&mut self, src: *const Node<K, V>) {
         consume_ptr(&mut self.output, src);
     }
 }
 
 
 #[inline(always)]
-pub fn consume_unchecked<K, V>(output: &mut Vec<(K, V)>, item: Node<K, V>) {
+pub fn consume_unchecked<K: Ord, V>(output: &mut Vec<(K, V)>, item: Node<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
@@ -181,7 +181,7 @@ pub fn consume_unchecked<K, V>(output: &mut Vec<(K, V)>, item: Node<K, V>) {
 
 
 #[inline(always)]
-pub fn consume_ptr<K, V>(output: &mut Vec<(K, V)>, src: *const Node<K, V>) {
+pub fn consume_ptr<K: Ord, V>(output: &mut Vec<(K, V)>, src: *const Node<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());

@@ -28,7 +28,7 @@ impl<K: Ord, V> PlainDeleteInternal<K, V> for TreeWrapper<K, V> {
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output
     /// Vec. The items are returned in order.
     #[inline]
-    fn delete_range(&mut self, range: Range<K>, output: &mut Vec<K>) {
+    fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
@@ -37,7 +37,7 @@ impl<K: Ord, V> PlainDeleteInternal<K, V> for TreeWrapper<K, V> {
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
     #[inline]
-    fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<K>) {
+    fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
         debug_assert!(output.is_empty());
         output.truncate(0);
 
@@ -58,7 +58,7 @@ trait PlainDelete<K: Ord, V>: TreeBase<K, V> {
         } else if self.has_right(idx) {
             self.delete_min(idx, righti(idx));
         }
-        item
+        item.val
     }
 
 
@@ -113,7 +113,7 @@ trait PlainDeleteRange<K: Ord, V>: BulkDeleteCommon<K, V, NoUpdate<Self>> {
                 return;
             }
 
-            let decision = drv.decide(&self.item(idx));
+            let decision = drv.decide(&self.key(idx));
 
             if decision.left() && decision.right() {
                 let item = self.take(idx);
@@ -132,7 +132,7 @@ trait PlainDeleteRange<K: Ord, V>: BulkDeleteCommon<K, V, NoUpdate<Self>> {
 
     #[inline(never)]
     fn delete_range_min<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
-        let decision = drv.decide(&self.item(idx));
+        let decision = drv.decide(&self.key(idx));
         debug_assert!(decision.left());
 
         if decision.right() {
@@ -157,7 +157,7 @@ trait PlainDeleteRange<K: Ord, V>: BulkDeleteCommon<K, V, NoUpdate<Self>> {
 
     #[inline(never)]
     fn delete_range_max<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
-        let decision = drv.decide(&self.item(idx));
+        let decision = drv.decide(&self.key(idx));
         debug_assert!(decision.right(), "idx={}", idx);
 
         if decision.left() {

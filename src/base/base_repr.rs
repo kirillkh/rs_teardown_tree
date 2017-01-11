@@ -20,6 +20,10 @@ impl<K: Ord, V> Node<K, V> {
     pub fn new(key: K, val: V) -> Self {
         Node { key: key, val: val }
     }
+
+    pub fn into_tuple(self) -> (K, V) {
+        (self.key, self.val)
+    }
 }
 
 
@@ -39,7 +43,7 @@ pub struct TreeWrapper<K: Ord, V> {
 
 impl<K: Ord, V> TreeWrapper<K, V> {
     pub fn new(mut items: Vec<(K, V)>) -> TreeWrapper<K, V> {
-        items.sort();
+        items.sort_by(|a, b| a.0.cmp(&b.0));
         Self::with_sorted(items)
     }
 
@@ -178,7 +182,7 @@ impl<K: Ord+Debug, V> Debug for TreeWrapper<K, V> {
             .skip_while(|&(_, flag)| !flag)
             .map(|(i, &flag)| match (self.node(i), flag) {
                 (_, false) => String::from("0"),
-                (ref node, true) => format!("{:?}", node.item)
+                (ref node, true) => format!("{:?}", node.key)
             })
             .collect();
         nz.reverse();
@@ -226,7 +230,7 @@ impl<K: Ord+Debug, V> TreeWrapper<K, V> {
         self.fmt_branch(fmt, ancestors)?;
 
         if !self.is_nil(idx) {
-            writeln!(fmt, "{:?}", self.item(idx))?;
+            writeln!(fmt, "{:?}", self.key(idx))?;
 
             if idx%2 == 0 && !ancestors.is_empty() {
                 *ancestors.last_mut().unwrap() = false;

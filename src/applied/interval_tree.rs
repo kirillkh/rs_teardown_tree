@@ -1,31 +1,31 @@
-use applied::interval::{Interval, IntervalNode};
-use base::{TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, lefti, righti, parenti, Sink};
+use applied::interval::{Interval, AugValue};
+use base::{TreeWrapper, TreeBase, Node, BulkDeleteCommon, ItemVisitor, lefti, righti, parenti, Sink};
 use base::drivers::{consume_ptr, consume_unchecked};
 use std::{mem, cmp};
 use std::marker::PhantomData;
 
-type IvTree<Iv> = TreeWrapper<IntervalNode<Iv>>;
+type IvTree<Iv, V> = TreeWrapper<Iv, AugValue<Iv, V>>;
 
-pub trait IntervalTreeInternal<Iv: Interval> {
-    #[inline] fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv>;
-    #[inline] fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>);
+pub trait IntervalTreeInternal<Iv: Interval, V> {
+    #[inline] fn delete(&mut self, search: &Iv) -> Option<V>;
+    #[inline] fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>);
 }
 
 
-impl<Iv: Interval> IntervalTreeInternal<Iv> for IvTree<Iv> {
+impl<Iv: Interval, V> IntervalTreeInternal<Iv, V> for IvTree<Iv, V> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     // TODO: accepting IntervalNode is super ugly, temporary solution only
     #[inline]
-    fn delete(&mut self, search: &IntervalNode<Iv>) -> Option<Iv> {
+    fn delete(&mut self, search: &Iv) -> Option<V> {
         self.index_of(search).map(|idx| {
-            let removed = self.delete_idx(idx);
-            self.update_ancestors_after_delete(idx, &removed.b());
-            removed
+            let (ivl, val) = self.delete_idx(idx);
+            self.update_ancestors_after_delete(idx, &ivl.b());
+            val
         })
     }
 
     #[inline]
-    fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>) {
+    fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
         if self.size() != 0 {
             UpdateMax::visit(self, 0, move |this, _|
                 this.delete_intersecting_ivl_rec(search, 0, false, &mut self::IntervalSink { output: output })
@@ -35,20 +35,20 @@ impl<Iv: Interval> IntervalTreeInternal<Iv> for IvTree<Iv> {
 }
 
 
-trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
+trait IntervalDelete<Iv: Interval, V>: TreeBase<Iv, AugValue<Iv, V>> {
     #[inline]
     fn update_maxb(&mut self, idx: usize) {
-        let item = self.item_mut_unsafe(idx);
+        let node = self.node_mut_unsafe(idx);
 
         let left_self_maxb =
             if self.has_left(idx) {
-                cmp::max(&self.left(idx).item.maxb, item.ivl.b())
+                cmp::max(&self.left(idx).val.maxb, node.key.b())
             } else {
-                item.ivl.b()
+                node.key.b()
             };
-        item.maxb =
+        node.val.maxb =
             if self.has_right(idx) {
-                cmp::max(&self.right(idx).item.maxb, left_self_maxb)
+                cmp::max(&self.right(idx).val.maxb, left_self_maxb)
             } else {
                 left_self_maxb
             }.clone();
@@ -58,7 +58,7 @@ trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
     fn update_ancestors_after_delete(&mut self, mut idx: usize, removed_b: &Iv::K) {
         while idx != 0 {
             idx = parenti(idx);
-            if removed_b == &self.item(idx).maxb {
+            if removed_b == &self.val(idx).maxb {
                 self.update_maxb(idx);
             } else {
                 break;
@@ -67,66 +67,69 @@ trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
     }
 
     #[inline]
-    fn delete_idx(&mut self, idx: usize) -> Iv {
+    fn delete_idx(&mut self, idx: usize) -> (Iv, V) {
         debug_assert!(!self.is_nil(idx));
 
-        let item = self.item_mut_unsafe(idx);
+        let node = self.node_mut_unsafe(idx);
 
-        let replacement: Iv = match (self.has_left(idx), self.has_right(idx)) {
+        let (repl_ivl, repl_val): (Iv, V) = match (self.has_left(idx), self.has_right(idx)) {
             (false, false) => {
                 let item = self.take(idx);
-                return item.ivl
+                return (item.key, item.val.val)
             },
 
             (true, false)  => {
-                let (removed, left_maxb) = self.delete_max(lefti(idx));
-                item.maxb = left_maxb;
-                removed
+                let (ivl, val, left_maxb) = self.delete_max(lefti(idx));
+                node.val.maxb = left_maxb;
+                (ivl, val)
             },
 
             (false, true)  => {
 //                let (removed, right_maxb) = self.delete_min(righti(idx));
 //                item.maxb = right_maxb;
-                let removed = self.delete_min(righti(idx));
-                if &item.maxb == removed.b() {
+                let (ivl, val) = self.delete_min(righti(idx));
+                if &node.val.maxb == ivl.b() {
                     self.update_maxb(idx)
                 } else { // maxb remains the same
-                    debug_assert!(removed.b() < &item.maxb);
+                    debug_assert!(ivl.b() < &node.val.maxb);
                 }
-                removed
+                (ivl, val)
             },
 
             (true, true)   => {
-                let (removed, left_maxb) = self.delete_max(lefti(idx));
-                if &item.maxb == removed.b() {
-                    item.maxb = cmp::max(left_maxb, self.right(idx).item.maxb.clone());
+                let (ivl, val, left_maxb) = self.delete_max(lefti(idx));
+                if &node.val.maxb == ivl.b() {
+                    node.val.maxb = cmp::max(left_maxb, self.right(idx).val.maxb.clone());
                 } else { // maxb remains the same
-                    debug_assert!(removed.b() < &item.maxb);
+                    debug_assert!(ivl.b() < &node.val.maxb);
                 }
-                removed
+                (ivl, val)
             },
         };
 
-        mem::replace(&mut item.ivl, replacement)
+        let ivl = mem::replace(&mut node.key, repl_ivl);
+        let key = mem::replace(&mut node.val.val, repl_val);
+        (ivl, key)
     }
 
 
     /// returns the removed max-item of this subtree and the old maxb (before removal)
     #[inline]
     // we attempt to reduce the number of memory accesses as much as possible; might be overengineered
-    fn delete_max(&mut self, idx: usize) -> (Iv, Iv::K) {
+    fn delete_max(&mut self, idx: usize) -> (Iv, V, Iv::K) {
         let max_idx = self.find_max(idx);
 
-        let (removed, mut old_maxb, mut new_maxb) = if self.has_left(max_idx) {
-            let item = self.item_mut_unsafe(max_idx);
-            let (left_max, left_maxb) = self.delete_max(lefti(max_idx));
-            let removed = mem::replace(&mut item.ivl, left_max);
+        let (ivl, val, mut old_maxb, mut new_maxb) = if self.has_left(max_idx) {
+            let node = self.node_mut_unsafe(max_idx);
+            let (left_max, left_maxv, left_maxb) = self.delete_max(lefti(max_idx));
+            let ivl = mem::replace(&mut node.key, left_max);
+            let val = mem::replace(&mut node.val.val, left_maxv);
 
-            let old_maxb = mem::replace(&mut item.maxb, left_maxb.clone());
-            (removed, old_maxb, Some(left_maxb))
+            let old_maxb = mem::replace(&mut node.val.maxb, left_maxb.clone());
+            (ivl, val, old_maxb, Some(left_maxb))
         } else {
-            let IntervalNode { ivl, maxb:old_maxb } = self.take(max_idx);
-            (ivl, old_maxb, None)
+            let Node { key: ivl, val: AugValue{maxb:old_maxb, val} } = self.take(max_idx);
+            (ivl, val, old_maxb, None)
         };
 
         // update ancestors
@@ -134,49 +137,52 @@ trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
         while upd_idx != idx {
             upd_idx = parenti(upd_idx);
 
-            let item = self.item_mut_unsafe(upd_idx);
-            old_maxb = item.maxb.clone();
-            if &item.maxb == removed.b() {
+            let node = self.node_mut_unsafe(upd_idx);
+            old_maxb = node.val.maxb.clone();
+            if &node.val.maxb == ivl.b() {
                 let mb = {
                     let self_left_maxb =
                         if self.has_left(upd_idx) {
-                            cmp::max(&self.left(upd_idx).item.maxb, &item.maxb)
+                            cmp::max(&self.left(upd_idx).val.maxb, &node.val.maxb)
                         } else {
-                            &item.maxb
+                            &node.val.maxb
                         };
 
                     new_maxb.map_or(self_left_maxb.clone(),
                                     |mb| cmp::max(mb, self_left_maxb.clone()))
                 };
-                item.maxb = mb.clone();
+                node.val.maxb = mb.clone();
                 new_maxb = Some(mb);
             } else {
                 new_maxb = Some(old_maxb.clone());
             }
         }
 
-        (removed, old_maxb)
+        (ivl, val, old_maxb)
     }
 
     // TODO: check whether optimizations similar to delete_max() are worth it
     #[inline]
-    fn delete_min(&mut self, idx: usize) -> Iv {
+    fn delete_min(&mut self, idx: usize) -> (Iv, V) {
         let min_idx = self.find_min(idx);
 
-        let removed = if self.has_right(min_idx) {
-            let right_min = self.delete_min(righti(min_idx));
-            let item = self.item_mut_unsafe(min_idx);
+        let (ivl, val) = if self.has_right(min_idx) {
+            let (right_min, right_minv) = self.delete_min(righti(min_idx));
+            let node = self.node_mut_unsafe(min_idx);
 
             if self.has_right(min_idx) {
-                let right_maxb = &self.right(min_idx).item.maxb;
-                item.maxb = cmp::max(right_maxb, right_min.b()).clone();
+                let right_maxb = &self.right(min_idx).val.maxb;
+                node.val.maxb = cmp::max(right_maxb, right_min.b()).clone();
             } else {
-                item.maxb = right_min.b().clone();
+                node.val.maxb = right_min.b().clone();
             }
 
-            mem::replace(&mut item.ivl, right_min)
+            let ivl = mem::replace(&mut node.key, right_min);
+            let val = mem::replace(&mut node.val.val, right_minv);
+            (ivl, val)
         } else {
-            self.take(min_idx).ivl
+            let item = self.take(min_idx);
+            (item.key, item.val.val)
         };
 
         // update ancestors
@@ -186,16 +192,17 @@ trait IntervalDelete<Iv: Interval>: TreeBase<IntervalNode<Iv>> {
             self.update_maxb(upd_idx);
         }
 
-        removed
+        (ivl, val)
     }
 }
 
 
-trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, UpdateMax<Iv, Self>> + IntervalDelete<Iv> {
-    fn delete_intersecting_ivl_rec<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, min_included: bool, sink: &mut S) {
-        let k: &IntervalNode<Iv> = &self.node_unsafe(idx).item;
+trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<Iv, AugValue<Iv, V>, UpdateMax<Iv, V, Self>> + IntervalDelete<Iv, V> {
+    fn delete_intersecting_ivl_rec<S: Sink<Iv, AugValue<Iv, V>>>(&mut self, search: &Iv, idx: usize, min_included: bool, sink: &mut S) {
+        let node = self.node_unsafe(idx);
+        let k: &Iv = &node.key;
 
-        if k.max() <= search.a() && k.a() != search.a() {
+        if node.val.maxb() <= search.a() && k.a() != search.a() {
             // whole subtree outside the range
             if self.slots_min().has_open() {
                 self.fill_slots_min(idx);
@@ -220,7 +227,7 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
             }
         } else {
             // consume root if necessary
-            let consumed = if search.intersects(&k.ivl)
+            let consumed = if search.intersects(k)
                 { Some(self.take(idx)) }
             else
                 { None };
@@ -246,7 +253,7 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
             // right subtree
             let right_min_included = min_included || search.a() <= k.a();
             if right_min_included {
-                let right_max_included = k.max() < search.b();
+                let right_max_included = node.val.maxb() < search.b();
                 if right_max_included {
                     self.consume_subtree(righti(idx), sink);
                 } else {
@@ -271,46 +278,48 @@ trait IntervalDeleteRange<Iv: Interval>: BulkDeleteCommon<IntervalNode<Iv>, Upda
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_intersecting_ivl_left<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool {
+    fn descend_delete_intersecting_ivl_left<S: Sink<Iv, AugValue<Iv, V>>>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool {
         self.descend_left(idx, with_slot,
                           |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_intersecting_ivl_right<S: Sink<IntervalNode<Iv>>>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool {
+    fn descend_delete_intersecting_ivl_right<S: Sink<Iv, AugValue<Iv, V>>>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool {
         self.descend_right(idx, with_slot,
                            |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, sink))
     }
 }
 
 
-struct IntervalSink<'a, Iv: Interval+'a> {
-    output: &'a mut Vec<Iv>
+struct IntervalSink<'a, Iv: Interval+'a, V: 'a> {
+    output: &'a mut Vec<(Iv, V)>
 }
 
-impl<'a, Iv: Interval> Sink<IntervalNode<Iv>> for IntervalSink<'a, Iv> {
-    fn consume(&mut self, item: IntervalNode<Iv>) {
-        self.output.push(item.ivl)
+impl<'a, Iv: Interval, V> Sink<Iv, AugValue<Iv, V>> for IntervalSink<'a, Iv, V> {
+    fn consume(&mut self, item: Node<Iv, AugValue<Iv, V>>) {
+        self.output.push((item.key, item.val.val));
     }
 
-    fn consume_unchecked(&mut self, item: IntervalNode<Iv>) {
-        consume_unchecked(&mut self.output, item.ivl);
+    fn consume_unchecked(&mut self, node: Node<Iv, AugValue<Iv, V>>) {
+        // TODO
+        consume_unchecked(&mut self.output, Node::new(node.key, node.val.val));
     }
 
-    fn consume_ptr(&mut self, src: *const IntervalNode<Iv>) {
-        let p = unsafe { &(*src).ivl };
-        consume_ptr(&mut self.output, p)
+    fn consume_ptr(&mut self, src: *const Node<Iv, AugValue<Iv, V>>) {
+        // TODO
+        unimplemented!();
+//        consume_ptr(&mut self.output, src)
     }
 }
 
 
-struct UpdateMax<Iv: Interval, Tree: TreeBase<IntervalNode<Iv>>> {
-    _ph: PhantomData<(Iv, Tree)>
+struct UpdateMax<Iv: Interval, V, Tree: TreeBase<Iv, AugValue<Iv, V>>> {
+    _ph: PhantomData<(Iv, V, Tree)>
 }
 
-impl<Iv: Interval, Tree> ItemVisitor<IntervalNode<Iv>> for UpdateMax<Iv, Tree>
-                               where Tree: BulkDeleteCommon<IntervalNode<Iv>, UpdateMax<Iv, Tree>> {
+impl<Iv: Interval, V, Tree> ItemVisitor<Iv, AugValue<Iv, V>> for UpdateMax<Iv, V, Tree>
+                               where Tree: BulkDeleteCommon<Iv, AugValue<Iv, V>, UpdateMax<Iv, V, Tree>> {
     type Tree = Tree;
 
     #[inline]
@@ -322,26 +331,26 @@ impl<Iv: Interval, Tree> ItemVisitor<IntervalNode<Iv>> for UpdateMax<Iv, Tree>
             return;
         }
 
-        let item = tree.item_mut_unsafe(idx);
+        let val = &mut tree.node_mut_unsafe(idx).val;
         match (tree.has_left(idx), tree.has_right(idx)) {
             (false, false) => {},
             (false, true) =>
-                item.maxb = cmp::max(&item.maxb, &tree.item(righti(idx)).maxb).clone(),
+                val.maxb = cmp::max(&val.maxb, &tree.node(righti(idx)).val.maxb).clone(),
             (true, false) =>
-                item.maxb = cmp::max(&item.maxb, &tree.item(lefti(idx)).maxb).clone(),
+                val.maxb = cmp::max(&val.maxb, &tree.node(lefti(idx)).val.maxb).clone(),
             (true, true) =>
-                item.maxb = cmp::max(&item.maxb,
-                                     cmp::max(&tree.item(lefti(idx)).maxb, &tree.item(righti(idx)).maxb))
+                val.maxb = cmp::max(&val.maxb,
+                                     cmp::max(&tree.node(lefti(idx)).val.maxb, &tree.node(righti(idx)).val.maxb))
                                     .clone(),
         }
     }
 }
 
-impl<Iv: Interval> BulkDeleteCommon<IntervalNode<Iv>,
-                                    UpdateMax<Iv, IvTree<Iv>>> for IvTree<Iv> {
+impl<Iv: Interval, V> BulkDeleteCommon<Iv, AugValue<Iv, V>,
+                                    UpdateMax<Iv, V, IvTree<Iv, V>>> for IvTree<Iv, V> {
 //    type Update = UpdateMax;
 }
 
 
-impl<Iv: Interval> IntervalDelete<Iv> for IvTree<Iv> {}
-impl<Iv: Interval> IntervalDeleteRange<Iv> for IvTree<Iv> {}
+impl<Iv: Interval, V> IntervalDelete<Iv, V> for IvTree<Iv, V> {}
+impl<Iv: Interval, V> IntervalDeleteRange<Iv, V> for IvTree<Iv, V> {}

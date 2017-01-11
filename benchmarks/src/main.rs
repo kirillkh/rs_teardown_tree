@@ -156,10 +156,10 @@ mod bench_delete_range {
 
     use treap::TreapMap;
     use teardown_tree::{TeardownTreeRefill};
-    use teardown_tree::TeardownTree;
+    use teardown_tree::TeardownTreeSet;
     use super::nanos;
 
-    pub type Tree = TeardownTree<usize>;
+    pub type Tree = TeardownTreeSet<usize>;
     pub type TreeBulk = TeardownTreeBulk;
 
 
@@ -343,14 +343,13 @@ mod bench_delete_range {
 
     /// for benchmarking TeardownTree delete_range()
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeBulk(TeardownTree<usize>);
+    pub struct TeardownTreeBulk(TeardownTreeSet<usize>);
 
     impl TeardownTreeMaster for TeardownTreeBulk {
         type Cpy = TeardownTreeBulk;
 
-        fn build(mut elems: Vec<usize>) -> Self {
-            elems.sort();
-            TeardownTreeBulk(TeardownTree::new(elems))
+        fn build(elems: Vec<usize>) -> Self {
+            TeardownTreeBulk(TeardownTreeSet::new(elems))
         }
 
         fn cpy(&self) -> Self {
@@ -393,14 +392,13 @@ mod bench_delete_range {
 
     /// for benchmarking TeardownTree delete()
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeSingle(TeardownTree<usize>);
+    pub struct TeardownTreeSingle(TeardownTreeSet<usize>);
 
     impl TeardownTreeMaster for TeardownTreeSingle {
         type Cpy = TeardownTreeSingle;
 
-        fn build(mut elems: Vec<usize>) -> Self {
-            elems.sort();
-            TeardownTreeSingle(TeardownTree::new(elems))
+        fn build(elems: Vec<usize>) -> Self {
+            TeardownTreeSingle(TeardownTreeSet::new(elems))
         }
 
         fn cpy(&self) -> Self {
@@ -425,8 +423,8 @@ mod bench_delete_range {
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
             for i in range {
-                if let Some(x) = self.0.delete(&i) {
-                    output.push(x);
+                if self.0.delete(&i) {
+                    output.push(i);
                 }
             }
         }
