@@ -1,7 +1,41 @@
-use base::{TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, righti, lefti, parenti};
+use base::{TreeReprAccess, Node, TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::marker::PhantomData;
 use std::ops::Range;
+use std::ops::{Deref, DerefMut};
+
+#[derive(Clone)]
+pub struct PlNode<K: Ord, V> {
+    pub kv: KeyVal<K, V>,
+}
+
+
+impl<K: Ord, V> Deref for PlNode<K, V> {
+    type Target = KeyVal<K, V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.kv
+    }
+}
+
+impl<K: Ord, V> DerefMut for PlNode<K, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.kv
+    }
+}
+
+
+impl<K: Ord, V> Node<K, V> for PlNode<K, V> {
+    fn new(key: K, val: V) -> Self {
+        PlNode { kv: KeyVal::new(key, val) }
+    }
+
+    fn into_kv(self) -> KeyVal<K, V> {
+        self.kv
+    }
+}
+
+
 
 
 pub trait PlainDeleteInternal<K: Ord, V> {
@@ -16,7 +50,7 @@ pub trait PlainDeleteInternal<K: Ord, V> {
     #[inline] fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>);
 }
 
-impl<K: Ord, V> PlainDeleteInternal<K, V> for TreeWrapper<K, V> {
+impl<K: Ord, V> PlainDeleteInternal<K, V> for TreeWrapper<K, V, PlNode<K,V>> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
     fn delete(&mut self, search: &K) -> Option<V> {
@@ -47,18 +81,18 @@ impl<K: Ord, V> PlainDeleteInternal<K, V> for TreeWrapper<K, V> {
 
 
 
-trait PlainDelete<K: Ord, V>: TreeBase<K, V> {
+trait PlainDelete<K: Ord, V>: TreeBase<K, V, N=PlNode<K,V>> {
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> V {
         debug_assert!(!self.is_nil(idx));
 
-        let item = self.take(idx);
+        let node = self.take(idx);
         if self.has_left(idx) {
             self.delete_max(idx, lefti(idx));
         } else if self.has_right(idx) {
             self.delete_min(idx, righti(idx));
         }
-        item.val
+        node.kv.val
     }
 
 
@@ -118,7 +152,7 @@ trait PlainDeleteRange<K: Ord, V>: BulkDeleteCommon<K, V, NoUpdate<Self>> {
             if decision.left() && decision.right() {
                 let item = self.take(idx);
                 let removed = self.descend_delete_max_left(drv, idx, true);
-                drv.consume_unchecked(item);
+                consume_unchecked(drv.output(), item.into_kv());
                 self.descend_delete_min_right(drv, idx, removed);
                 return;
             } else if decision.left() {
@@ -138,8 +172,8 @@ trait PlainDeleteRange<K: Ord, V>: BulkDeleteCommon<K, V, NoUpdate<Self>> {
         if decision.right() {
             // the root and the whole left subtree are inside the range
             let item = self.take(idx);
-            self.consume_subtree(lefti(idx), drv);
-            drv.consume_unchecked(item);
+            self.consume_subtree(lefti(idx), drv.output());
+            consume_unchecked(drv.output(), item.into_kv());
             self.descend_delete_min_right(drv, idx, true);
         } else {
             // the root and the right subtree are outside the range
@@ -164,8 +198,8 @@ trait PlainDeleteRange<K: Ord, V>: BulkDeleteCommon<K, V, NoUpdate<Self>> {
             // the root and the whole right subtree are inside the range
             let item = self.take(idx);
             self.descend_delete_max_left(drv, idx, true);
-            drv.consume_unchecked(item);
-            self.consume_subtree(righti(idx), drv);
+            consume_unchecked(drv.output(), item.into_kv());
+            self.consume_subtree(righti(idx), drv.output());
         } else {
             // the root and the left subtree are outside the range
             self.descend_delete_max_right(drv, idx, false);
@@ -275,9 +309,16 @@ impl<Tree: BulkDeleteCommon<K, V, NoUpdate<Tree>>, K: Ord, V> ItemVisitor<K, V> 
     }
 }
 
-impl<K: Ord, V> BulkDeleteCommon<K, V, NoUpdate<TreeWrapper<K, V>>> for TreeWrapper<K, V> {
+
+impl<K: Ord, V> TreeReprAccess<K, V> for TreeWrapper<K, V, PlNode<K, V>> {
+    type N = PlNode<K, V>;
+}
+
+impl<K: Ord, V> TreeBase<K, V> for TreeWrapper<K, V, PlNode<K, V>> {}
+
+impl<K: Ord, V> BulkDeleteCommon<K, V, NoUpdate<TreeWrapper<K, V, PlNode<K,V>>>> for TreeWrapper<K, V, PlNode<K,V>> {
 //    type Update = NoUpdate;
 }
 
-impl<K: Ord, V> PlainDelete<K, V> for TreeWrapper<K, V> {}
-impl<K: Ord, V> PlainDeleteRange<K, V> for TreeWrapper<K, V> {}
+impl<K: Ord, V> PlainDelete<K, V> for TreeWrapper<K, V, PlNode<K,V>> {}
+impl<K: Ord, V> PlainDeleteRange<K, V> for TreeWrapper<K, V, PlNode<K,V>> {}

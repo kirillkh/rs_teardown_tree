@@ -1,5 +1,4 @@
-use base::{TreeBase, Node, lefti, righti};
-use base::Sink;
+use base::{TreeBase, lefti, righti};
 use base::SlotStack;
 use std::mem;
 
@@ -41,10 +40,10 @@ pub trait ItemVisitor<K: Ord, V>: Sized {
 pub trait BulkDeleteCommon<K: Ord, V, Visitor: ItemVisitor<K, V, Tree=Self>>: TreeBase<K, V>+Sized  {
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline]
-    fn consume_subtree<S: Sink<K, V>>(&mut self, root: usize, sink: &mut S) {
-        self.traverse_inorder(root, sink, |this, sink, idx| {
+    fn consume_subtree(&mut self, root: usize, output: &mut Vec<(K, V)>) {
+        self.traverse_inorder(root, output, |this, output, idx| {
             unsafe {
-                this.move_to(idx, sink);
+                this.move_to(idx, output);
             }
             false
         });
@@ -193,7 +192,7 @@ pub trait BulkDeleteCommon<K: Ord, V, Visitor: ItemVisitor<K, V, Tree=Self>>: Tr
     }
 
     #[inline(always)]
-    fn node_unsafe<'b>(&self, idx: usize) -> &'b Node<K, V> {
+    fn node_unsafe<'b>(&self, idx: usize) -> &'b Self::N {
         unsafe {
             mem::transmute(self.node(idx))
         }

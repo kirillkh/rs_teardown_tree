@@ -1,18 +1,15 @@
 use std::ptr;
 use std::ops::Range;
-use base::Node;
+use base::{KeyVal};
 
-pub trait Sink<K: Ord, V> {
-    fn consume(&mut self, item: Node<K, V>);
-    fn consume_unchecked(&mut self, item: Node<K, V>);
-    fn consume_ptr(&mut self, src: *const Node<K, V>);
-}
-
-pub trait TraversalDriver<K: Ord, V>: Sink<K, V> {
+pub trait TraversalDriver<K: Ord, V> {
     type Decision: TraversalDecision;
 
     #[inline(always)]
     fn decide(&self, key: &K) -> Self::Decision;
+
+    #[inline(always)]
+    fn output(&mut self) -> &mut Vec<(K, V)>;
 }
 
 
@@ -47,24 +44,6 @@ impl TraversalDecision for RangeDecision {
 
 
 
-impl<K: Ord, V> Sink<K, V> for Vec<(K, V)> {
-    #[inline(always)]
-    fn consume(&mut self, Node{key, val}: Node<K, V>) {
-        self.push((key, val))
-    }
-
-    #[inline(always)]
-    fn consume_unchecked(&mut self, item: Node<K, V>) {
-        consume_unchecked(self, item);
-    }
-
-    #[inline(always)]
-    fn consume_ptr(&mut self, src: *const Node<K, V>) {
-        consume_ptr(self, src);
-    }
-}
-
-
 
 pub struct RangeRefDriver<'a, K: Ord +'a, V: 'a> {
     range: Range<&'a K>,
@@ -95,25 +74,12 @@ impl<'a, K: Ord +'a, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, V> {
 
         RangeDecision { left: left, right: right }
     }
-}
-
-impl<'a, K: Ord +'a, V> Sink<K, V> for RangeRefDriver<'a, K, V> {
-    #[inline(always)]
-    fn consume(&mut self, Node{key, val}: Node<K, V>) {
-        self.output.push((key, val))
-    }
 
     #[inline(always)]
-    fn consume_unchecked(&mut self, item: Node<K, V>) {
-        consume_unchecked(&mut self.output, item);
-    }
-
-    #[inline(always)]
-    fn consume_ptr(&mut self, src: *const Node<K, V>) {
-        consume_ptr(&mut self.output, src);
+    fn output(&mut self) -> &mut Vec<(K, V)> {
+        &mut self.output
     }
 }
-
 
 
 pub struct RangeDriver<'a, K: Ord +'a, V: 'a> {
@@ -145,28 +111,16 @@ impl<'a, K: Ord +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
 
         RangeDecision { left: left, right: right }
     }
-}
-
-impl<'a, K: Ord +'a, V> Sink<K, V> for RangeDriver<'a, K, V> {
-    #[inline(always)]
-    fn consume(&mut self, item: Node<K, V>) {
-        self.output.push(item.into_tuple());
-    }
 
     #[inline(always)]
-    fn consume_unchecked(&mut self, item: Node<K, V>) {
-        consume_unchecked(&mut self.output, item);
-    }
-
-    #[inline(always)]
-    fn consume_ptr(&mut self, src: *const Node<K, V>) {
-        consume_ptr(&mut self.output, src);
+    fn output(&mut self) -> &mut Vec<(K, V)> {
+        &mut self.output
     }
 }
 
 
 #[inline(always)]
-pub fn consume_unchecked<K: Ord, V>(output: &mut Vec<(K, V)>, item: Node<K, V>) {
+pub fn consume_unchecked<K: Ord, V>(output: &mut Vec<(K, V)>, item: KeyVal<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
@@ -174,14 +128,14 @@ pub fn consume_unchecked<K: Ord, V>(output: &mut Vec<(K, V)>, item: Node<K, V>) 
         let p = output.get_unchecked_mut(len);
 
         // TODO: optimizer fails here, might want to change to "let tuple: (K,V) = mem::transmute(item)" (but that is not guaranteed to work)
-        let Node{key, val} = item;
+        let KeyVal{key, val} = item;
         ptr::write(p, (key, val));
     }
 }
 
 
 #[inline(always)]
-pub fn consume_ptr<K: Ord, V>(output: &mut Vec<(K, V)>, src: *const Node<K, V>) {
+pub fn consume_ptr<K: Ord, V>(output: &mut Vec<(K, V)>, src: *const KeyVal<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
@@ -189,7 +143,7 @@ pub fn consume_ptr<K: Ord, V>(output: &mut Vec<(K, V)>, src: *const Node<K, V>) 
         let p = output.get_unchecked_mut(len);
 
         // TODO: optimizer fails here, might want to change to "let tuple: (K,V) = mem::transmute(item)" (but that is not guaranteed to work)
-        let Node{key, val} = ptr::read(src);
+        let KeyVal{key, val} = ptr::read(src);
         ptr::write(p, (key, val));
     }
 }

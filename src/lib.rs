@@ -23,12 +23,12 @@ pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, T
 mod test_plain {
     use base::{TreeBase, TreeWrapper, Node, lefti, righti};
     use base::validation::{check_bst, check_integrity};
-    use applied::plain_tree::PlainDeleteInternal;
+    use applied::plain_tree::{PlainDeleteInternal, PlNode};
     use external_api::{TeardownTreeSet, PlainTreeWrapperAccess};
     use std::cmp;
 
-    type Tree = TreeWrapper<usize, ()>;
-    type Nd = Node<usize, ()>;
+    type Nd = PlNode<usize, ()>;
+    type Tree = TreeWrapper<usize, (), Nd>;
 
 
     #[test]
@@ -304,11 +304,11 @@ mod test_interval {
 
     use base::{TreeWrapper, Node, TreeBase, parenti};
     use base::validation::{check_bst, check_integrity, gen_tree_keys};
-    use applied::interval::{Interval, AugValue, KeyInterval};
+    use applied::interval::{Interval, IvNode, KeyInterval};
     use applied::interval_tree::IntervalTreeInternal;
 
     type Iv = KeyInterval<usize>;
-    type IvTree = TreeWrapper<Iv, AugValue<Iv, ()>>;
+    type IvTree = TreeWrapper<Iv, (), IvNode<Iv, ()>>;
 
     quickcheck! {
         fn quickcheck_interval_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
@@ -341,17 +341,17 @@ mod test_interval {
     fn gen_tree(items: Vec<Iv>) -> IvTree {
         let items: Vec<Option<Iv>> = gen_tree_keys(items);
         let mut nodes = items.into_iter()
-            .map(|opt| opt.map(|k| Node::new(k.clone(), AugValue::new(*k.b(), ()))))
+            .map(|opt| opt.map(|k| IvNode::new(k.clone(), ())))
             .collect::<Vec<_>>();
         for i in (1..nodes.len()).rev() {
             let maxb = if let Some(ref node) = nodes[i] {
-                node.val.maxb as usize
+                node.maxb as usize
             } else {
                 continue
             };
 
             let parent = nodes[parenti(i)].as_mut().unwrap();
-            parent.val.maxb = cmp::max(&parent.val.maxb, &maxb).clone();
+            parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
         }
         IvTree::with_nodes(nodes)
     }

@@ -1,7 +1,8 @@
 use std::mem;
 
-use applied::interval::{Interval, AugValue};
-use base::TreeWrapper;
+use applied::interval::{Interval, IvNode};
+use applied::plain_tree::PlNode;
+use base::{TreeWrapper};
 
 pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
 pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
@@ -10,18 +11,18 @@ pub use base::TeardownTreeRefill;
 
 
 pub trait PlainTreeWrapperAccess<K: Ord, V> {
-    fn internal(&mut self) -> &mut TreeWrapper<K, V>;
+    fn internal(&mut self) -> &mut TreeWrapper<K, V, PlNode<K,V>>;
 }
 
 
 pub trait IntervalTreeWrapperAccess<Iv: Interval, V> {
-    fn internal(&mut self) -> &mut TreeWrapper<Iv, AugValue<Iv, V>>;
+    fn internal(&mut self) -> &mut TreeWrapper<Iv, V, IvNode<Iv, V>>;
 }
 
 
 mod plain {
     use base::{TreeWrapper, TreeBase, TeardownTreeRefill};
-    use applied::plain_tree::PlainDeleteInternal;
+    use applied::plain_tree::{PlainDeleteInternal, PlNode};
 
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
@@ -31,7 +32,7 @@ mod plain {
 
     #[derive(Clone)]
     pub struct TeardownTreeMap<K: Ord, V> {
-        internal: TreeWrapper<K, V>
+        internal: TreeWrapper<K, V, PlNode<K,V>>
     }
 
     impl<K: Ord, V> TeardownTreeMap<K, V> {
@@ -83,7 +84,7 @@ mod plain {
         }
     }
 
-    impl<K: Ord+Copy, V> TeardownTreeRefill<K> for TeardownTreeMap<K, V> {
+    impl<K: Ord+Copy, V> TeardownTreeRefill for TeardownTreeMap<K, V> {
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
         }
@@ -91,7 +92,7 @@ mod plain {
 
 
     impl<K: Ord, V> super::PlainTreeWrapperAccess<K, V> for TeardownTreeMap<K, V> {
-        fn internal(&mut self) -> &mut TreeWrapper<K, V> {
+        fn internal(&mut self) -> &mut TreeWrapper<K, V, PlNode<K,V>> {
             &mut self.internal
         }
     }
@@ -142,14 +143,14 @@ mod plain {
         pub fn clear(&mut self) { self.map.clear(); }
     }
 
-    impl<K: Ord+Copy> TeardownTreeRefill<K> for TeardownTreeSet<K> {
+    impl<K: Ord+Copy> TeardownTreeRefill for TeardownTreeSet<K> {
         fn refill(&mut self, master: &Self) {
             self.map.refill(&master.map)
         }
     }
 
     impl<K: Ord> super::PlainTreeWrapperAccess<K, ()> for TeardownTreeSet<K> {
-        fn internal(&mut self) -> &mut TreeWrapper<K, ()> {
+        fn internal(&mut self) -> &mut TreeWrapper<K, (), PlNode<K,()>> {
             self.map.internal()
         }
     }
@@ -162,12 +163,12 @@ mod interval {
 
     use base::{TreeWrapper, TreeBase, TeardownTreeRefill, parenti};
 
-    use applied::interval::{Interval, AugValue};
+    use applied::interval::{Interval, IvNode};
     use applied::interval_tree::IntervalTreeInternal;
 
     #[derive(Clone)]
     pub struct IntervalTeardownTreeMap<Iv: Interval, V> {
-        internal: TreeWrapper<Iv, AugValue<Iv, V>>
+        internal: TreeWrapper<Iv, V, IvNode<Iv, V>>
     }
 
     impl<Iv: Interval, V> IntervalTeardownTreeMap<Iv, V> {
@@ -179,13 +180,7 @@ mod interval {
         /// Creates a new `IntervalTeardownTree` with the given set of intervals.
         /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
-            let items = sorted.into_iter()
-                              .map(|(ivl, val)| {
-                                  let val = AugValue::new(ivl.b().clone(), val);
-                                  (ivl, val)
-                              })
-                              .collect();
-            let mut tree = IntervalTeardownTreeMap { internal: TreeWrapper::with_sorted(items) };
+            let mut tree = IntervalTeardownTreeMap { internal: TreeWrapper::with_sorted(sorted) };
             {
                 let internal = &mut tree.internal;
 
@@ -193,8 +188,8 @@ mod interval {
                 for i in (1..internal.size()).rev() {
                     let parent = internal.node_mut_unsafe(parenti(i));
                     let node = internal.node(i);
-                    if node.val.maxb > parent.val.maxb {
-                        parent.val.maxb = node.val.maxb.clone()
+                    if node.maxb > parent.maxb {
+                        parent.maxb = node.maxb.clone()
                     }
                 }
             }
@@ -228,12 +223,12 @@ mod interval {
 
 
     impl<Iv: Interval, V> super::IntervalTreeWrapperAccess<Iv, V> for IntervalTeardownTreeMap<Iv, V> {
-        fn internal(&mut self) -> &mut TreeWrapper<Iv, AugValue<Iv, V>> {
+        fn internal(&mut self) -> &mut TreeWrapper<Iv, V, IvNode<Iv, V>> {
             &mut self.internal
         }
     }
 
-    impl<Iv: Interval+Copy, V> TeardownTreeRefill<Iv> for IntervalTeardownTreeMap<Iv, V> {
+    impl<Iv: Interval+Copy, V> TeardownTreeRefill for IntervalTeardownTreeMap<Iv, V> {
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
         }
@@ -279,7 +274,7 @@ mod interval {
         pub fn clear(&mut self) { self.map.clear(); }
     }
 
-    impl<Iv: Interval+Copy> TeardownTreeRefill<Iv> for IntervalTeardownTreeSet<Iv> {
+    impl<Iv: Interval+Copy> TeardownTreeRefill for IntervalTeardownTreeSet<Iv> {
         fn refill(&mut self, master: &Self) {
             self.map.refill(&master.map)
         }

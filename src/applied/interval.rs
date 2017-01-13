@@ -1,4 +1,7 @@
 use std::cmp::Ordering;
+use std::ops::{Deref, DerefMut};
+
+use base::{Node, KeyVal};
 
 
 pub trait Interval: Sized+Ord {
@@ -38,24 +41,37 @@ impl<K: Ord+Clone> Interval for KeyInterval<K> {
     }
 }
 
+
 #[derive(Clone)]
-pub struct AugValue<Iv: Interval, V> {
-    pub maxb: Iv::K,
-    pub val: V
+pub struct IvNode<Iv: Interval, V> {
+    pub kv: KeyVal<Iv, V>,
+    pub maxb: Iv::K
 }
 
-impl<Iv: Interval, V> AugValue<Iv, V> {
-    #[inline] pub fn new(maxb: Iv::K, val: V) -> AugValue<Iv, V> {
-        AugValue { maxb: maxb, val: val }
+impl<Iv: Interval, V> Deref for IvNode<Iv, V> {
+    type Target = KeyVal<Iv, V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.kv
+    }
+}
+
+impl<Iv: Interval, V> DerefMut for IvNode<Iv, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.kv
+    }
+}
+
+
+impl<Iv: Interval, V> Node<Iv, V> for IvNode<Iv, V> {
+    fn new(key: Iv, val: V) -> Self {
+        let maxb = key.b().clone();
+        IvNode { kv: KeyVal::new(key, val), maxb:maxb }
     }
 
-    #[inline] pub fn maxb(&self) -> &Iv::K {
-        &self.maxb
+    fn into_kv(self) -> KeyVal<Iv, V> {
+        self.kv
     }
-
-//    #[inline] pub fn val(&self) -> &V {
-//        &self.val
-//    }
 }
 
 impl<K: Ord+Clone> PartialEq for KeyInterval<K> {

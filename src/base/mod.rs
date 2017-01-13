@@ -2,6 +2,7 @@ mod slot_stack;
 mod bulk_delete;
 mod unsafe_stack;
 mod base_repr;
+mod node;
 pub mod drivers;
 
 pub use self::slot_stack::*;
@@ -9,6 +10,7 @@ pub use self::bulk_delete::*;
 pub use self::unsafe_stack::*;
 pub use self::drivers::*;
 pub use self::base_repr::*;
+pub use self::node::*;
 
 use std::ptr;
 use std::mem;
@@ -16,14 +18,14 @@ use std::cmp::{Ordering};
 
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
-pub trait TeardownTreeRefill<K: Copy+Ord> {
+pub trait TeardownTreeRefill {
     fn refill(&mut self, master: &Self);
 }
 
 
 
-impl<K: Copy+Ord, V> TeardownTreeRefill<K> for TreeWrapper<K, V> {
-    fn refill(&mut self, master: &TreeWrapper<K, V>) {
+impl<K: Copy+Ord, V, N: Node<K, V>> TeardownTreeRefill for TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+    fn refill(&mut self, master: &TreeWrapper<K, V, N>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
         unsafe {
@@ -52,7 +54,7 @@ impl<K: Copy+Ord, V> TeardownTreeRefill<K> for TreeWrapper<K, V> {
 
 pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     #[inline(always)]
-    fn node_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut Node<K, V> {
+    fn node_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut Self::N {
         unsafe {
             mem::transmute(&mut self.node_mut(idx))
         }
@@ -66,7 +68,7 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    fn key_mut<'a>(&'a mut self, idx: usize) -> &'a mut K where V: 'a{
+    fn key_mut<'a>(&'a mut self, idx: usize) -> &'a mut K where V: 'a {
         &mut self.node_mut(idx).key
     }
 
@@ -138,22 +140,22 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    fn node(&self, idx: usize) -> &Node<K, V> {
+    fn node<'a>(&'a self, idx: usize) -> &'a Self::N where V: 'a, K: 'a {
         &self.data[idx]
     }
 
     #[inline(always)]
-    fn node_mut(&mut self, idx: usize) -> &mut Node<K, V> {
+    fn node_mut<'a>(&'a mut self, idx: usize) -> &'a mut Self::N where V: 'a, K: 'a {
         &mut self.data[idx]
     }
 
     #[inline(always)]
-    fn node_opt(&self, idx: usize) -> Option<&Node<K, V>> {
+    fn node_opt<'a>(&'a self, idx: usize) -> Option<&'a Self::N> where V: 'a, K: 'a {
         if self.is_nil(idx) { None } else { Some(self.node(idx)) }
     }
 
     #[inline(always)]
-    fn parent_opt(&self, idx: usize) -> Option<&Node<K, V>> {
+    fn parent_opt<'a>(&'a self, idx: usize) -> Option<&'a Self::N> where V: 'a, K: 'a {
         if idx == 0 {
             None
         } else {
@@ -162,7 +164,7 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    fn left_opt(&self, idx: usize) -> Option<&Node<K, V>> {
+    fn left_opt<'a>(&'a self, idx: usize) -> Option<&'a Self::N> where V: 'a, K: 'a {
         let lefti = lefti(idx);
         if self.is_nil(lefti) {
             None
@@ -172,7 +174,7 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    fn right_opt(&self, idx: usize) -> Option<&Node<K, V>> {
+    fn right_opt<'a>(&'a self, idx: usize) -> Option<&'a Self::N> where V: 'a, K: 'a {
         let righti = righti(idx);
         if self.is_nil(righti) {
             None
@@ -183,21 +185,21 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
 
 
     #[inline(always)]
-    fn parent(&self, idx: usize) -> &Node<K, V> {
+    fn parent<'a>(&'a self, idx: usize) -> &'a Self::N where V: 'a, K: 'a {
         let parenti = parenti(idx);
         debug_assert!(idx > 0 && !self.is_nil(idx));
         &self.data[parenti]
     }
 
     #[inline(always)]
-    fn left(&self, idx: usize) -> &Node<K, V> {
+    fn left<'a>(&'a self, idx: usize) -> &'a Self::N where V: 'a, K: 'a {
         let lefti = lefti(idx);
         debug_assert!(!self.is_nil(lefti));
         &self.data[lefti]
     }
 
     #[inline(always)]
-    fn right(&self, idx: usize) -> &Node<K, V> {
+    fn right<'a>(&'a self, idx: usize) -> &'a Self::N where V: 'a, K: 'a {
         let righti = righti(idx);
         debug_assert!(!self.is_nil(righti));
         &self.data[righti]
@@ -363,9 +365,9 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    fn take(&mut self, idx: usize) -> Node<K, V> {
+    fn take(&mut self, idx: usize) -> Self::N {
         debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
-        let p: *const Node<K, V> = unsafe {
+        let p: *const Self::N = unsafe {
             self.data.get_unchecked(idx)
         };
         self.mask[idx] = false;
@@ -374,14 +376,14 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 
     #[inline(always)]
-    unsafe fn move_to<S: Sink<K, V>>(&mut self, idx: usize, sink: &mut S) {
+    unsafe fn move_to(&mut self, idx: usize, output: &mut Vec<(K,V)>) {
         debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         *self.mask.get_unchecked_mut(idx) = false;
         self.size -= 1;
-        let p: *const Node<K, V> = self.data.get_unchecked(idx);
+        let p: *const Self::N = self.data.get_unchecked(idx);
 
         let item = ptr::read(&*p);
-        sink.consume_unchecked(item);
+        consume_unchecked(output, item.into_kv());
     }
 
     #[inline(always)]
@@ -390,22 +392,22 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
         *self.mask.get_unchecked_mut(src) = false;
         *self.mask.get_unchecked_mut(dst) = true;
         let pdata = self.data.as_mut_ptr();
-        let psrc: *mut Node<K, V> = pdata.offset(src as isize);
-        let pdst: *mut Node<K, V> = pdata.offset(dst as isize);
+        let psrc: *mut Self::N = pdata.offset(src as isize);
+        let pdst: *mut Self::N = pdata.offset(dst as isize);
         let x = ptr::read(psrc);
         ptr::write(pdst, x);
     }
 
     #[inline(always)]
-    fn place(&mut self, idx: usize, item: Node<K, V>) {
+    fn place(&mut self, idx: usize, node: Self::N) {
         if self.mask[idx] {
-            self.data[idx] = item;
+            self.data[idx] = node;
         } else {
             self.mask[idx] = true;
             self.size += 1;
             unsafe {
                 let p = self.data.get_unchecked_mut(idx);
-                ptr::write(p, item);
+                ptr::write(p, node);
             };
         }
     }
@@ -454,7 +456,7 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 }
 
-impl<K: Ord, V> TreeBase<K, V> for TreeWrapper<K, V> {}
+//impl<K: Ord, V, N: Node<K,V>> TreeBase<K, V> for TreeWrapper<K, V, N> {}
 
 
 #[inline(always)]
@@ -479,12 +481,14 @@ pub fn righti(idx: usize) -> usize {
 pub mod validation {
     use rand::{Rng, XorShiftRng, SeedableRng};
     use std::fmt::Debug;
-    use base::{lefti, righti, parenti, TreeWrapper, TreeBase};
+    use base::{lefti, righti, parenti, TreeWrapper, TreeBase, Node};
 
-    type Tree<K, V> = TreeWrapper<K, V>;
+    type Tree<K, V, N> = TreeWrapper<K, V, N>;
 
     /// Validates the BST property.
-    pub fn check_bst<'a, K: Ord+Debug, V, U: Ord+Debug>(tree: &'a Tree<K, V>, output: &Vec<U>, tree_orig: &Tree<K, V>, idx: usize) -> Option<(&'a K, &'a K)> {
+    pub fn check_bst<'a, K: Ord+Debug, V, N: Node<K, V>, U: Ord+Debug>(tree: &'a Tree<K, V, N>, output: &Vec<U>, tree_orig: &Tree<K, V, N>, idx: usize) -> Option<(&'a K, &'a K)>
+        where TreeWrapper<K,V,N>: TreeBase<K,V,N=N>
+    {
         if tree.size() == 0 || !tree.is_nil(idx) {
             return None;
         }
@@ -517,7 +521,9 @@ pub mod validation {
     }
 
     /// Checks that there are no dangling items (the parent of every item marked as present is also marked as present).
-    pub fn check_integrity<K: Ord+Debug, V>(tree: &Tree<K, V>, tree_orig: &Tree<K, V>) {
+    pub fn check_integrity<K: Ord+Debug, V, N: Node<K, V>>(tree: &Tree<K, V, N>, tree_orig: &Tree<K, V, N>)
+        where TreeWrapper<K,V,N>: TreeBase<K,V,N=N>
+    {
         let mut noccupied = 0;
 
         for i in 0..tree.data.len() {
