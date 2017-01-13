@@ -1,11 +1,11 @@
 use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut};
 
-use base::{Node, KeyVal};
+use base::{Node, Key, KeyVal};
 
 
-pub trait Interval: Sized+Ord {
-    type K: Ord+Clone;
+pub trait Interval: Sized+Key {
+    type K: Key;
 
     fn a(&self) -> &Self::K;
     fn b(&self) -> &Self::K;
@@ -17,19 +17,18 @@ pub trait Interval: Sized+Ord {
 }
 
 #[derive(Debug, Clone)]
-pub struct KeyInterval<K: Ord+Clone> {
+pub struct KeyInterval<K: Key> {
     a: K,
     b: K
 }
 
-impl<K: Ord+Clone> KeyInterval<K> {
+impl<K: Key> KeyInterval<K> {
     pub fn new(a: K, b: K) -> KeyInterval<K> {
         KeyInterval { a:a, b:b }
     }
 }
 
-
-impl<K: Ord+Clone> Interval for KeyInterval<K> {
+impl<K: Key> Interval for KeyInterval<K> {
     type K = K;
 
     fn a(&self) -> &Self::K {
@@ -63,7 +62,10 @@ impl<Iv: Interval, V> DerefMut for IvNode<Iv, V> {
 }
 
 
-impl<Iv: Interval, V> Node<Iv, V> for IvNode<Iv, V> {
+impl<Iv: Interval, V> Node for IvNode<Iv, V> {
+    type K = Iv;
+    type V = V;
+
     fn new(key: Iv, val: V) -> Self {
         let maxb = key.b().clone();
         IvNode { kv: KeyVal::new(key, val), maxb:maxb }
@@ -74,20 +76,20 @@ impl<Iv: Interval, V> Node<Iv, V> for IvNode<Iv, V> {
     }
 }
 
-impl<K: Ord+Clone> PartialEq for KeyInterval<K> {
+impl<K: Key> PartialEq for KeyInterval<K> {
     fn eq(&self, other: &Self) -> bool {
         self.a() == other.a() && self.b() == other.b()
     }
 }
-impl<K: Ord+Clone> Eq for KeyInterval<K> {}
+impl<K: Key> Eq for KeyInterval<K> {}
 
-impl<K: Ord+Clone> PartialOrd for KeyInterval<K> {
+impl<K: Key> PartialOrd for KeyInterval<K> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<K: Ord+Clone> Ord for KeyInterval<K> {
+impl<K: Key> Ord for KeyInterval<K> {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.a().cmp(other.a()) {
             Ordering::Less => Ordering::Less,

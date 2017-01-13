@@ -9,31 +9,28 @@ use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
 
 
+pub trait Key: Ord+Clone {}
 
-pub trait TreeReprAccess<K: Ord, V>: Deref<Target=TreeRepr<K, V, <Self as TreeReprAccess<K,V>>::N>> +
-                                     DerefMut
-{
-    type N: Node<K, V>;
-}
+impl<T: Ord+Clone> Key for T {}
+
+pub trait TreeReprAccess<N: Node>: Deref<Target=TreeRepr<N>> + DerefMut {}
 
 #[derive(Clone)]
-pub struct TreeRepr<K: Ord, V, N: Node<K, V>> {
+pub struct TreeRepr<N: Node> {
     pub data: Vec<N>,
     pub mask: Vec<bool>,
     pub size: usize,
 
     pub delete_range_cache: DeleteRangeCache,
-
-    _ph: PhantomData<(K, V)>
 }
 
 #[derive(Clone)]
-pub struct TreeWrapper<K: Ord, V, N: Node<K, V>> {
-    repr: TreeRepr<K, V, N>
+pub struct TreeWrapper<N: Node> {
+    repr: TreeRepr<N>
 }
 
-impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
-    pub fn new(mut items: Vec<(K, V)>) -> TreeWrapper<K, V, N> {
+impl<N: Node> TreeWrapper<N> {
+    pub fn new(mut items: Vec<(N::K, N::V)>) -> TreeWrapper<N> {
         items.sort_by(|a, b| a.0.cmp(&b.0));
         Self::with_sorted(items)
     }
@@ -41,7 +38,7 @@ impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
 
     /// Constructs a new TeardownTree<T>
     /// Note: the argument must be sorted!
-    pub fn with_sorted(mut sorted: Vec<(K, V)>) -> TreeWrapper<K, V, N> {
+    pub fn with_sorted(mut sorted: Vec<(N::K, N::V)>) -> TreeWrapper<N> {
         let size = sorted.len();
 
         let capacity = size;
@@ -53,7 +50,7 @@ impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
         let height = Self::build(&mut sorted, 0, &mut data);
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
-        TreeWrapper { repr: TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache, _ph: PhantomData }}
+        TreeWrapper { repr: TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache }}
     }
 
     pub fn calc_height(nodes: &Vec<Option<N>>, idx: usize) -> usize {
@@ -81,7 +78,7 @@ impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
     }
 
     /// Returns the height of the tree.
-    pub fn build(sorted: &mut [(K, V)], idx: usize, data: &mut [N]) -> usize {
+    pub fn build(sorted: &mut [(N::K, N::V)], idx: usize, data: &mut [N]) -> usize {
         match sorted.len() {
             0 => 0,
             n => {
@@ -103,7 +100,7 @@ impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
     }
 
     /// Constructs a new TeardownTree<T> based on raw nodes vec.
-    pub fn with_nodes(mut nodes: Vec<Option<N>>) -> TreeWrapper<K, V, N> {
+    pub fn with_nodes(mut nodes: Vec<Option<N>>) -> TreeWrapper<N> {
         let size = nodes.iter().filter(|x| x.is_some()).count();
         let height = Self::calc_height(&nodes, 0);
         let capacity = nodes.len();
@@ -123,7 +120,7 @@ impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
         }
 
         let cache = DeleteRangeCache::new(height);
-        TreeWrapper { repr: TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache, _ph: PhantomData } }
+        TreeWrapper { repr: TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache } }
     }
 
 //    fn into_node_vec(self) -> Vec<Option<Node<T>>> {
@@ -139,21 +136,21 @@ impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
 //    }
 }
 
-impl<K: Ord, V, N: Node<K, V>> Deref for TreeWrapper<K, V, N> {
-    type Target = TreeRepr<K, V, N>;
+impl<N: Node> Deref for TreeWrapper<N> {
+    type Target = TreeRepr<N>;
 
     fn deref(&self) -> &Self::Target {
         &self.repr
     }
 }
 
-impl<K: Ord, V, N: Node<K, V>> DerefMut for TreeWrapper<K, V, N> {
+impl<N: Node> DerefMut for TreeWrapper<N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
     }
 }
 
-impl<K: Ord, V, N: Node<K, V>> Drop for TreeWrapper<K, V, N> {
+impl<N: Node> Drop for TreeWrapper<N> {
     fn drop(&mut self) {
         self.drop_items();
         unsafe {
@@ -163,7 +160,7 @@ impl<K: Ord, V, N: Node<K, V>> Drop for TreeWrapper<K, V, N> {
 }
 
 
-impl<K: Ord+Debug, V, N: Node<K, V>> Debug for TreeWrapper<K, V, N> {
+impl<N: Node> Debug for TreeWrapper<N> where N::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         let mut nz: Vec<_> = self.mask.iter().enumerate()
             .rev()
@@ -187,7 +184,7 @@ impl<K: Ord+Debug, V, N: Node<K, V>> Debug for TreeWrapper<K, V, N> {
     }
 }
 
-impl<K: Ord+Debug, V, N: Node<K, V>> fmt::Display for TreeWrapper<K, V, N> {
+impl<N: Node> fmt::Display for TreeWrapper<N> where N::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         writeln!(fmt, "")?;
         let mut ancestors = vec![];
@@ -196,7 +193,7 @@ impl<K: Ord+Debug, V, N: Node<K, V>> fmt::Display for TreeWrapper<K, V, N> {
 }
 
 
-impl<K: Ord+Debug, V, N: Node<K, V>> TreeWrapper<K, V, N> {
+impl<N: Node> TreeWrapper<N> where N::K: Debug {
     fn fmt_branch(&self, fmt: &mut Formatter, ancestors: &Vec<bool>) -> fmt::Result {
         for (i, c) in ancestors.iter().enumerate() {
             if i == ancestors.len() - 1 {

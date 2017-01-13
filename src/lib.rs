@@ -28,7 +28,7 @@ mod test_plain {
     use std::cmp;
 
     type Nd = PlNode<usize, ()>;
-    type Tree = TreeWrapper<usize, (), Nd>;
+    type Tree = TreeWrapper<Nd>;
 
 
     #[test]
@@ -308,7 +308,7 @@ mod test_interval {
     use applied::interval_tree::IntervalTreeInternal;
 
     type Iv = KeyInterval<usize>;
-    type IvTree = TreeWrapper<Iv, (), IvNode<Iv, ()>>;
+    type IvTree = TreeWrapper<IvNode<Iv, ()>>;
 
     quickcheck! {
         fn quickcheck_interval_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {

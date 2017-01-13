@@ -1,8 +1,8 @@
 use std::ptr;
 use std::ops::Range;
-use base::{KeyVal};
+use base::{Key, KeyVal};
 
-pub trait TraversalDriver<K: Ord, V> {
+pub trait TraversalDriver<K: Key, V> {
     type Decision: TraversalDecision;
 
     #[inline(always)]
@@ -45,12 +45,12 @@ impl TraversalDecision for RangeDecision {
 
 
 
-pub struct RangeRefDriver<'a, K: Ord +'a, V: 'a> {
+pub struct RangeRefDriver<'a, K: Key +'a, V: 'a> {
     range: Range<&'a K>,
     output: &'a mut Vec<(K, V)>
 }
 
-impl<'a, K: Ord +'a, V> RangeRefDriver<'a, K, V> {
+impl<'a, K: Key +'a, V> RangeRefDriver<'a, K, V> {
     pub fn new(range: Range<&'a K>, output: &'a mut Vec<(K, V)>) -> RangeRefDriver<'a, K, V> {
         RangeRefDriver { range:range, output:output }
     }
@@ -64,7 +64,7 @@ impl<'a, K: Ord +'a, V> RangeRefDriver<'a, K, V> {
     }
 }
 
-impl<'a, K: Ord +'a, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, V> {
+impl<'a, K: Key +'a, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, V> {
     type Decision = RangeDecision;
 
     #[inline(always)]
@@ -82,12 +82,12 @@ impl<'a, K: Ord +'a, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, V> {
 }
 
 
-pub struct RangeDriver<'a, K: Ord +'a, V: 'a> {
+pub struct RangeDriver<'a, K: Key +'a, V: 'a> {
     range: Range<K>,
     output: &'a mut Vec<(K, V)>
 }
 
-impl<'a, K: Ord +'a, V> RangeDriver<'a, K, V> {
+impl<'a, K: Key +'a, V> RangeDriver<'a, K, V> {
     pub fn new(range: Range<K>, output: &'a mut Vec<(K, V)>) -> RangeDriver<K, V> {
         RangeDriver { range:range, output: output }
     }
@@ -101,7 +101,7 @@ impl<'a, K: Ord +'a, V> RangeDriver<'a, K, V> {
     }
 }
 
-impl<'a, K: Ord +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
+impl<'a, K: Key +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
     type Decision = RangeDecision;
 
     #[inline(always)]
@@ -120,7 +120,7 @@ impl<'a, K: Ord +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
 
 
 #[inline(always)]
-pub fn consume_unchecked<K: Ord, V>(output: &mut Vec<(K, V)>, item: KeyVal<K, V>) {
+pub fn consume_unchecked<K: Key, V>(output: &mut Vec<(K, V)>, item: KeyVal<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
@@ -135,7 +135,7 @@ pub fn consume_unchecked<K: Ord, V>(output: &mut Vec<(K, V)>, item: KeyVal<K, V>
 
 
 #[inline(always)]
-pub fn consume_ptr<K: Ord, V>(output: &mut Vec<(K, V)>, src: *const KeyVal<K, V>) {
+pub fn consume_ptr<K: Key, V>(output: &mut Vec<(K, V)>, src: *const KeyVal<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());

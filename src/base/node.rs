@@ -1,5 +1,7 @@
 use std::ops::{Deref, DerefMut};
 
+use base::Key;
+
 #[derive(Debug, Clone)]
 pub struct KeyVal<K, V> {
     pub key: K,
@@ -19,7 +21,13 @@ impl<K, V> Into<(K,V)> for KeyVal<K, V> {
 }
 
 
-pub trait Node<K, V>: Deref<Target=KeyVal<K,V>> + DerefMut<Target=KeyVal<K,V>> { //+ Into<KeyVal<K, V>> {
-    fn new(key: K, val: V) -> Self;
-    fn into_kv(self) -> KeyVal<K,V>;
+pub trait Node: Deref<Target=KeyVal<<Self as Node>::K,
+                                    <Self as Node>::V>> +
+                DerefMut
+{
+    type K: Key;
+    type V;
+
+    fn new(key: Self::K, val: Self::V) -> Self;
+    fn into_kv(self) -> KeyVal<Self::K, Self::V>;
 }

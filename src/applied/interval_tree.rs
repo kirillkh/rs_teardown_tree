@@ -4,7 +4,7 @@ use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
 use std::marker::PhantomData;
 
-type IvTree<Iv, V> = TreeWrapper<Iv, V, IvNode<Iv, V>>;
+type IvTree<Iv, V> = TreeWrapper<IvNode<Iv, V>>;
 
 pub trait IntervalTreeInternal<Iv: Interval, V> {
     #[inline] fn delete(&mut self, search: &Iv) -> Option<V>;
@@ -34,7 +34,7 @@ impl<Iv: Interval, V> IntervalTreeInternal<Iv, V> for IvTree<Iv, V> {
 }
 
 
-trait IntervalDelete<Iv: Interval, V>: TreeBase<Iv, V, N=IvNode<Iv, V>> {
+trait IntervalDelete<Iv: Interval, V>: TreeBase<IvNode<Iv, V>> {
     #[inline]
     fn update_maxb(&mut self, idx: usize) {
         let node = self.node_mut_unsafe(idx);
@@ -191,7 +191,7 @@ trait IntervalDelete<Iv: Interval, V>: TreeBase<Iv, V, N=IvNode<Iv, V>> {
 }
 
 
-trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<Iv, V, UpdateMax<Iv, V, Self>> + IntervalDelete<Iv, V> {
+trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>, UpdateMax<IvNode<Iv, V>, Self>> + IntervalDelete<Iv, V> {
     fn delete_intersecting_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
         let node = self.node_unsafe(idx);
         let k: &Iv = &node.key;
@@ -286,12 +286,12 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<Iv, V, UpdateMax<Iv
 }
 
 
-struct UpdateMax<Iv: Interval, V, Tree: TreeBase<Iv, V>> {
-    _ph: PhantomData<(Iv, V, Tree)>
+struct UpdateMax<N: Node, Tree: TreeBase<N>> {
+    _ph: PhantomData<(N, Tree)>
 }
 
-impl<Iv: Interval, V, Tree> ItemVisitor<Iv, V> for UpdateMax<Iv, V, Tree>
-                               where Tree: BulkDeleteCommon<Iv, V, UpdateMax<Iv, V, Tree>, N=IvNode<Iv, V>> {
+impl<Iv: Interval, V, Tree> ItemVisitor<IvNode<Iv, V>> for UpdateMax<IvNode<Iv, V>, Tree>
+                               where Tree: BulkDeleteCommon<IvNode<Iv, V>, UpdateMax<IvNode<Iv, V>, Tree>> {
     type Tree = Tree;
 
     #[inline]
@@ -319,8 +319,7 @@ impl<Iv: Interval, V, Tree> ItemVisitor<Iv, V> for UpdateMax<Iv, V, Tree>
 }
 
 
-impl<Iv: Interval, V> BulkDeleteCommon<Iv, V,
-                                    UpdateMax<Iv, V, IvTree<Iv, V>>> for IvTree<Iv, V> {
+impl<Iv: Interval, V> BulkDeleteCommon<IvNode<Iv, V>, UpdateMax<IvNode<Iv, V>, IvTree<Iv, V>>> for IvTree<Iv, V> {
 //    type Update = UpdateMax;
 }
 
