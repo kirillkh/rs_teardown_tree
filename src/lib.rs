@@ -15,7 +15,7 @@ mod external_api;
 
 mod rust_bench;
 
-pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
+pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
 
 
 

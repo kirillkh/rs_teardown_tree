@@ -1,11 +1,12 @@
 use std::mem;
 
-use applied::interval::{Interval, IvNode};
+use applied::interval::{IvNode};
 use applied::plain_tree::PlNode;
 use base::{Key, TreeWrapper};
 
 pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
 pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
+pub use applied::interval::{Interval, KeyInterval};
 pub use base::TeardownTreeRefill;
 
 
@@ -21,7 +22,7 @@ pub trait IntervalTreeWrapperAccess<Iv: Interval, V> {
 
 
 mod plain {
-    use base::{Key, TreeWrapper, TreeBase, TeardownTreeRefill};
+    use base::{TreeWrapper, TreeBase, TeardownTreeRefill};
     use applied::plain_tree::{PlainDeleteInternal, PlNode};
 
     use std::fmt;
@@ -31,11 +32,11 @@ mod plain {
 
 
     #[derive(Clone)]
-    pub struct TeardownTreeMap<K: Key, V> {
+    pub struct TeardownTreeMap<K: Ord+Clone, V> {
         internal: TreeWrapper<PlNode<K,V>>
     }
 
-    impl<K: Key, V> TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone, V> TeardownTreeMap<K, V> {
         pub fn new(mut items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             items.sort_by(|a, b| a.0.cmp(&b.0));
             Self::with_sorted(items)
@@ -72,26 +73,26 @@ mod plain {
         pub fn clear(&mut self) { self.internal.clear(); }
     }
 
-    impl<K: Key + Debug, V> Debug for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone+Debug, V> Debug for TeardownTreeMap<K, V> {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Debug::fmt(&self.internal, fmt)
         }
     }
 
-    impl<K: Key + Debug, V> Display for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone+Debug, V> Display for TeardownTreeMap<K, V> {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Display::fmt(&self.internal, fmt)
         }
     }
 
-    impl<K: Key+Copy, V> TeardownTreeRefill for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone+Copy, V> TeardownTreeRefill for TeardownTreeMap<K, V> {
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
         }
     }
 
 
-    impl<K: Key, V> super::PlainTreeWrapperAccess<K, V> for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone, V> super::PlainTreeWrapperAccess<K, V> for TeardownTreeMap<K, V> {
         fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,V>> {
             &mut self.internal
         }
@@ -99,11 +100,11 @@ mod plain {
 
 
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeSet<T: Key> {
+    pub struct TeardownTreeSet<T: Ord+Clone> {
         map: TeardownTreeMap<T, ()>
     }
 
-    impl<T: Key> TeardownTreeSet<T> {
+    impl<T: Ord+Clone> TeardownTreeSet<T> {
         pub fn new(items: Vec<T>) -> TeardownTreeSet<T> {
             let map_items = super::conv_to_tuple_vec(items);
             TeardownTreeSet { map: TeardownTreeMap::new(map_items) }
@@ -143,13 +144,13 @@ mod plain {
         pub fn clear(&mut self) { self.map.clear(); }
     }
 
-    impl<K: Key+Copy> TeardownTreeRefill for TeardownTreeSet<K> {
+    impl<K: Ord+Clone+Copy> TeardownTreeRefill for TeardownTreeSet<K> {
         fn refill(&mut self, master: &Self) {
             self.map.refill(&master.map)
         }
     }
 
-    impl<K: Key> super::PlainTreeWrapperAccess<K, ()> for TeardownTreeSet<K> {
+    impl<K: Ord+Clone> super::PlainTreeWrapperAccess<K, ()> for TeardownTreeSet<K> {
         fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,()>> {
             self.map.internal()
         }
