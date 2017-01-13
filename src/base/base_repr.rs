@@ -10,8 +10,9 @@ use std::marker::PhantomData;
 
 
 
-pub trait TreeReprAccess<K: Ord, V>:    Deref<Target=TreeRepr<K, V, <Self as TreeReprAccess<K,V>>::N>> +
-                                     DerefMut<Target=TreeRepr<K, V, <Self as TreeReprAccess<K,V>>::N>> {
+pub trait TreeReprAccess<K: Ord, V>: Deref<Target=TreeRepr<K, V, <Self as TreeReprAccess<K,V>>::N>> +
+                                     DerefMut
+{
     type N: Node<K, V>;
 }
 
