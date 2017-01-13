@@ -24,7 +24,7 @@ pub trait TeardownTreeRefill {
 
 
 
-impl<K: Copy+Ord, V, N: Node<K, V>> TeardownTreeRefill for TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Copy+Ord, V, N: Node<K, V>> TeardownTreeRefill for TreeWrapper<K, V, N> {
     fn refill(&mut self, master: &TreeWrapper<K, V, N>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
@@ -456,7 +456,12 @@ pub trait TreeBase<K: Ord, V>: TreeReprAccess<K, V> {
     }
 }
 
-//impl<K: Ord, V, N: Node<K,V>> TreeBase<K, V> for TreeWrapper<K, V, N> {}
+
+impl<K: Ord, V, N: Node<K,V>> TreeReprAccess<K, V> for TreeWrapper<K, V, N> {
+    type N = N;
+}
+
+impl<K: Ord, V, N: Node<K,V>> TreeBase<K, V> for TreeWrapper<K, V, N> {}
 
 
 #[inline(always)]
@@ -486,9 +491,7 @@ pub mod validation {
     type Tree<K, V, N> = TreeWrapper<K, V, N>;
 
     /// Validates the BST property.
-    pub fn check_bst<'a, K: Ord+Debug, V, N: Node<K, V>, U: Ord+Debug>(tree: &'a Tree<K, V, N>, output: &Vec<U>, tree_orig: &Tree<K, V, N>, idx: usize) -> Option<(&'a K, &'a K)>
-        where TreeWrapper<K,V,N>: TreeBase<K,V,N=N>
-    {
+    pub fn check_bst<'a, K: Ord+Debug, V, N: Node<K, V>, U: Ord+Debug>(tree: &'a Tree<K, V, N>, output: &Vec<U>, tree_orig: &Tree<K, V, N>, idx: usize) -> Option<(&'a K, &'a K)> {
         if tree.size() == 0 || !tree.is_nil(idx) {
             return None;
         }
@@ -521,9 +524,7 @@ pub mod validation {
     }
 
     /// Checks that there are no dangling items (the parent of every item marked as present is also marked as present).
-    pub fn check_integrity<K: Ord+Debug, V, N: Node<K, V>>(tree: &Tree<K, V, N>, tree_orig: &Tree<K, V, N>)
-        where TreeWrapper<K,V,N>: TreeBase<K,V,N=N>
-    {
+    pub fn check_integrity<K: Ord+Debug, V, N: Node<K, V>>(tree: &Tree<K, V, N>, tree_orig: &Tree<K, V, N>) {
         let mut noccupied = 0;
 
         for i in 0..tree.data.len() {

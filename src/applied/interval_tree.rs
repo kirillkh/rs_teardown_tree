@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeReprAccess, TreeWrapper, TreeBase, Node, KeyVal, BulkDeleteCommon, ItemVisitor, lefti, righti, parenti};
+use base::{TreeWrapper, TreeBase, Node, KeyVal, BulkDeleteCommon, ItemVisitor, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
 use std::marker::PhantomData;
@@ -318,12 +318,6 @@ impl<Iv: Interval, V, Tree> ItemVisitor<Iv, V> for UpdateMax<Iv, V, Tree>
     }
 }
 
-
-impl<Iv: Interval, V> TreeReprAccess<Iv, V> for TreeWrapper<Iv, V, IvNode<Iv, V>> {
-    type N = IvNode<Iv, V>;
-}
-
-impl<Iv: Interval, V> TreeBase<Iv, V> for TreeWrapper<Iv, V, IvNode<Iv, V>> {}
 
 impl<Iv: Interval, V> BulkDeleteCommon<Iv, V,
                                     UpdateMax<Iv, V, IvTree<Iv, V>>> for IvTree<Iv, V> {

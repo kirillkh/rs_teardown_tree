@@ -1,4 +1,4 @@
-use base::{TreeReprAccess, Node, TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
+use base::{Node, TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::marker::PhantomData;
 use std::ops::Range;
@@ -309,12 +309,6 @@ impl<Tree: BulkDeleteCommon<K, V, NoUpdate<Tree>>, K: Ord, V> ItemVisitor<K, V> 
     }
 }
 
-
-impl<K: Ord, V> TreeReprAccess<K, V> for TreeWrapper<K, V, PlNode<K, V>> {
-    type N = PlNode<K, V>;
-}
-
-impl<K: Ord, V> TreeBase<K, V> for TreeWrapper<K, V, PlNode<K, V>> {}
 
 impl<K: Ord, V> BulkDeleteCommon<K, V, NoUpdate<TreeWrapper<K, V, PlNode<K,V>>>> for TreeWrapper<K, V, PlNode<K,V>> {
 //    type Update = NoUpdate;

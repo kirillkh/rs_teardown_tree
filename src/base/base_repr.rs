@@ -27,11 +27,11 @@ pub struct TreeRepr<K: Ord, V, N: Node<K, V>> {
 }
 
 #[derive(Clone)]
-pub struct TreeWrapper<K: Ord, V, N: Node<K, V>> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+pub struct TreeWrapper<K: Ord, V, N: Node<K, V>> {
     repr: TreeRepr<K, V, N>
 }
 
-impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> {
     pub fn new(mut items: Vec<(K, V)>) -> TreeWrapper<K, V, N> {
         items.sort_by(|a, b| a.0.cmp(&b.0));
         Self::with_sorted(items)
@@ -138,7 +138,7 @@ impl<K: Ord, V, N: Node<K, V>> TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: 
 //    }
 }
 
-impl<K: Ord, V, N: Node<K, V>> Deref for TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Ord, V, N: Node<K, V>> Deref for TreeWrapper<K, V, N> {
     type Target = TreeRepr<K, V, N>;
 
     fn deref(&self) -> &Self::Target {
@@ -146,13 +146,13 @@ impl<K: Ord, V, N: Node<K, V>> Deref for TreeWrapper<K, V, N> where TreeWrapper<
     }
 }
 
-impl<K: Ord, V, N: Node<K, V>> DerefMut for TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Ord, V, N: Node<K, V>> DerefMut for TreeWrapper<K, V, N> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
     }
 }
 
-impl<K: Ord, V, N: Node<K, V>> Drop for TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Ord, V, N: Node<K, V>> Drop for TreeWrapper<K, V, N> {
     fn drop(&mut self) {
         self.drop_items();
         unsafe {
@@ -162,7 +162,7 @@ impl<K: Ord, V, N: Node<K, V>> Drop for TreeWrapper<K, V, N> where TreeWrapper<K
 }
 
 
-impl<K: Ord+Debug, V, N: Node<K, V>> Debug for TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Ord+Debug, V, N: Node<K, V>> Debug for TreeWrapper<K, V, N> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         let mut nz: Vec<_> = self.mask.iter().enumerate()
             .rev()
@@ -186,7 +186,7 @@ impl<K: Ord+Debug, V, N: Node<K, V>> Debug for TreeWrapper<K, V, N> where TreeWr
     }
 }
 
-impl<K: Ord+Debug, V, N: Node<K, V>> fmt::Display for TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Ord+Debug, V, N: Node<K, V>> fmt::Display for TreeWrapper<K, V, N> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         writeln!(fmt, "")?;
         let mut ancestors = vec![];
@@ -195,7 +195,7 @@ impl<K: Ord+Debug, V, N: Node<K, V>> fmt::Display for TreeWrapper<K, V, N> where
 }
 
 
-impl<K: Ord+Debug, V, N: Node<K, V>> TreeWrapper<K, V, N> where TreeWrapper<K, V, N>: TreeBase<K, V, N=N> {
+impl<K: Ord+Debug, V, N: Node<K, V>> TreeWrapper<K, V, N> {
     fn fmt_branch(&self, fmt: &mut Formatter, ancestors: &Vec<bool>) -> fmt::Result {
         for (i, c) in ancestors.iter().enumerate() {
             if i == ancestors.len() - 1 {
