@@ -233,6 +233,8 @@ pub trait TreeBase<N: Node>: TreeReprAccess<N> {
         } else if idx & 2 == 0 {
             idx >> 1
         } else {
+            // optimizaion: the two lines below could be the sole body of this function; the 2 branches
+            // above are special cases
             let shift = (idx + 1).trailing_zeros();
             idx >> shift
         }
@@ -252,6 +254,8 @@ pub trait TreeBase<N: Node>: TreeReprAccess<N> {
         } else if idx & 2 == 1 {
             idx >> 1
         } else {
+            // optimizaion: the two lines below could be the sole body of this function; the 2 branches
+            // above are special cases
             let shift = idx.trailing_zeros();
             idx >> shift
         }
