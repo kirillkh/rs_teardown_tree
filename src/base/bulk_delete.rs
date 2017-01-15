@@ -1,5 +1,4 @@
-use base::{TreeBase, Node, lefti, righti};
-use base::Sink;
+use base::{Node, TreeBase, lefti, righti};
 use base::SlotStack;
 use std::mem;
 
@@ -27,8 +26,8 @@ impl DeleteRangeCache {
 
 
 
-pub trait ItemVisitor<T: Ord>: Sized {
-    type Tree: BulkDeleteCommon<T, Self>;
+pub trait ItemVisitor<N: Node>: Sized {
+    type Tree: BulkDeleteCommon<N, Self>;
 
     #[inline]
     fn visit<F>(arg: &mut Self::Tree, idx: usize, f: F)
@@ -38,13 +37,13 @@ pub trait ItemVisitor<T: Ord>: Sized {
 
 
 //==== generic methods =============================================================================
-pub trait BulkDeleteCommon<T: Ord, Visitor: ItemVisitor<T, Tree=Self>>: TreeBase<T>+Sized  {
+pub trait BulkDeleteCommon<N: Node, Visitor: ItemVisitor<N, Tree=Self>>: TreeBase<N>+Sized  {
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline]
-    fn consume_subtree<S: Sink<T>>(&mut self, root: usize, sink: &mut S) {
-        self.traverse_inorder(root, sink, |this, sink, idx| {
+    fn consume_subtree(&mut self, root: usize, output: &mut Vec<(N::K, N::V)>) {
+        self.traverse_inorder(root, output, |this, output, idx| {
             unsafe {
-                this.move_to(idx, sink);
+                this.move_to(idx, output);
             }
             false
         });
@@ -193,7 +192,7 @@ pub trait BulkDeleteCommon<T: Ord, Visitor: ItemVisitor<T, Tree=Self>>: TreeBase
     }
 
     #[inline(always)]
-    fn node_unsafe<'b>(&self, idx: usize) -> &'b Node<T> {
+    fn node_unsafe<'b>(&self, idx: usize) -> &'b N {
         unsafe {
             mem::transmute(self.node(idx))
         }

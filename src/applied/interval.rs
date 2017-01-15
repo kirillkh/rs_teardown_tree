@@ -1,9 +1,11 @@
 use std::cmp::Ordering;
-use std::fmt::{Formatter, Debug};
+use std::ops::{Deref, DerefMut, Range};
 use std::fmt;
 
+use base::{Node, KeyVal};
 
-pub trait Interval: Sized+Ord {
+
+pub trait Interval: Sized+Ord+Clone {
     type K: Ord+Clone;
 
     fn a(&self) -> &Self::K;
@@ -13,9 +15,13 @@ pub trait Interval: Sized+Ord {
         self.a() < other.b() && other.a() < self.b()
             || self.a() == other.a() // interpret empty intervals as points
     }
+
+    fn to_range(&self) -> Range<Self::K> {
+        self.a().clone() .. self.b().clone()
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct KeyInterval<K: Ord+Clone> {
     a: K,
     b: K
@@ -25,8 +31,11 @@ impl<K: Ord+Clone> KeyInterval<K> {
     pub fn new(a: K, b: K) -> KeyInterval<K> {
         KeyInterval { a:a, b:b }
     }
-}
 
+    pub fn from_range(r: &Range<K>) -> KeyInterval<K> {
+        Self::new(r.start.clone(), r.end.clone())
+    }
+}
 
 impl<K: Ord+Clone> Interval for KeyInterval<K> {
     type K = K;
@@ -40,27 +49,39 @@ impl<K: Ord+Clone> Interval for KeyInterval<K> {
     }
 }
 
+
 #[derive(Clone)]
-pub struct IntervalNode<Iv: Interval> {
-    pub ivl: Iv,
+pub struct IvNode<Iv: Interval, V> {
+    pub kv: KeyVal<Iv, V>,
     pub maxb: Iv::K
 }
 
-impl<Iv: Interval> IntervalNode<Iv> {
-    #[inline] pub fn new(ivl: Iv) -> IntervalNode<Iv> {
-        IntervalNode { maxb: ivl.b().clone(), ivl: ivl }
+impl<Iv: Interval, V> Deref for IvNode<Iv, V> {
+    type Target = KeyVal<Iv, V>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.kv
+    }
+}
+
+impl<Iv: Interval, V> DerefMut for IvNode<Iv, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.kv
+    }
+}
+
+
+impl<Iv: Interval, V> Node for IvNode<Iv, V> {
+    type K = Iv;
+    type V = V;
+
+    fn new(key: Iv, val: V) -> Self {
+        let maxb = key.b().clone();
+        IvNode { kv: KeyVal::new(key, val), maxb:maxb }
     }
 
-    #[inline] pub fn a(&self) -> &Iv::K {
-        self.ivl.a()
-    }
-
-    #[inline] pub fn b(&self) -> &Iv::K {
-        self.ivl.b()
-    }
-
-    #[inline] pub fn max(&self) -> &Iv::K {
-        &self.maxb
+    fn into_kv(self) -> KeyVal<Iv, V> {
+        self.kv
     }
 }
 
@@ -88,34 +109,8 @@ impl<K: Ord+Clone> Ord for KeyInterval<K> {
 }
 
 
-
-impl<Iv: Interval> PartialEq for IntervalNode<Iv> {
-    fn eq(&self, other: &Self) -> bool {
-        self.a() == other.a() && self.b() == other.b()
-    }
-}
-impl<Iv: Interval> Eq for IntervalNode<Iv> {}
-
-impl<Iv: Interval> PartialOrd for IntervalNode<Iv> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<Iv: Interval> Ord for IntervalNode<Iv> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.a().cmp(other.a()) {
-            Ordering::Less => Ordering::Less,
-            Ordering::Greater => Ordering::Greater,
-            Ordering::Equal => self.b().cmp(other.b())
-        }
-    }
-}
-
-impl<Iv: Interval+Debug> Debug for IntervalNode<Iv> where Iv::K: Debug {
-    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        try!(write!(fmt, "("));
-        try!(self.ivl.fmt(fmt));
-        write!(fmt, ", maxb={:?})", self.maxb)
+impl<K: Ord+Clone+fmt::Debug, Iv: Interval<K=K>, V> fmt::Debug for IvNode<Iv, V> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "({:?}..{:?}, m={:?})", self.key.a(), self.key.b(), &self.maxb)
     }
 }
