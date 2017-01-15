@@ -3,6 +3,7 @@ mod bulk_delete;
 mod unsafe_stack;
 mod base_repr;
 mod node;
+pub mod util;
 pub mod drivers;
 
 pub use self::slot_stack::*;
@@ -56,7 +57,7 @@ pub trait TreeBase<N: Node>: TreeReprAccess<N> {
     #[inline(always)]
     fn node_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut N {
         unsafe {
-            mem::transmute(&mut self.node_mut(idx))
+            mem::transmute(self.node_mut(idx))
         }
     }
 
@@ -484,9 +485,9 @@ pub fn righti(idx: usize) -> usize {
 
 
 
-#[cfg(test)]
+//#[cfg(test)]
 pub mod validation {
-    use rand::{Rng, XorShiftRng, SeedableRng};
+    use rand::{Rng, XorShiftRng};
     use std::fmt::Debug;
     use base::{Key, TreeWrapper, TreeBase, Node, lefti, righti, parenti};
 
@@ -494,12 +495,8 @@ pub mod validation {
 
     /// Validates the BST property.
     pub fn check_bst<'a, N: Node, U: Ord+Debug>(tree: &'a Tree<N>, output: &Vec<U>, tree_orig: &Tree<N>, idx: usize) -> Option<(&'a N::K, &'a N::K)>
-        where N::K: Debug
+        where N: Debug, N::K: Debug
     {
-        if tree.size() == 0 || !tree.is_nil(idx) {
-            return None;
-        }
-
         let node = tree.node_opt(idx);
         if node.is_none() {
             return None;
@@ -510,14 +507,14 @@ pub mod validation {
 
             let min =
                 if let Some((lmin, lmax)) = left {
-                    debug_assert!(lmax < key, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    debug_assert!(lmax <= key, "lmax={:?}, key={:?}, tree_orig: {:?}, tree: {:?}, output: {:?}", lmax, key, tree_orig, tree, output);
                     lmin
                 } else {
                     key
                 };
             let max =
                 if let Some((rmin, rmax)) = right {
-                    debug_assert!(key < rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    debug_assert!(key <= rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
                     rmax
                 } else {
                     key
@@ -528,12 +525,12 @@ pub mod validation {
     }
 
     /// Checks that there are no dangling items (the parent of every item marked as present is also marked as present).
-    pub fn check_integrity<N: Node>(tree: &Tree<N>, tree_orig: &Tree<N>) where N::K: Debug {
+    pub fn check_integrity<N: Node>(tree: &Tree<N>, tree_orig: &Tree<N>) where N: Debug {
         let mut noccupied = 0;
 
         for i in 0..tree.data.len() {
             if tree.mask[i] {
-                debug_assert!(i == 0 || tree.mask[parenti(i)], "tree_orig: {:?}, {}, tree: {:?}", tree_orig, tree_orig, tree);
+                debug_assert!(i == 0 || tree.mask[parenti(i)], "i={}, tree_orig: {:?}, {}, tree: {:?}, {}", i, tree_orig, tree_orig, tree, tree);
                 noccupied += 1;
             }
         }
@@ -542,10 +539,9 @@ pub mod validation {
     }
 
 
-    pub fn gen_tree_keys<T: Key>(items: Vec<T>) -> Vec<Option<T>> {
+    pub fn gen_tree_keys<T: Key>(items: Vec<T>, rng: &mut XorShiftRng) -> Vec<Option<T>> {
         let mut shaped = vec![None; 1 << 18];
-        let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
-        gen_subtree_keys(&items, 0, &mut shaped, &mut rng);
+        gen_subtree_keys(&items, 0, &mut shaped, rng);
 
         let mut items = shaped.into_iter()
             .rev()

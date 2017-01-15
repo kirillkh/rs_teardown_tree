@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Range};
+use std::fmt;
 
 use base::{Node, KeyVal};
 
@@ -14,9 +15,13 @@ pub trait Interval: Sized+Ord+Clone {
         self.a() < other.b() && other.a() < self.b()
             || self.a() == other.a() // interpret empty intervals as points
     }
+
+    fn to_range(&self) -> Range<Self::K> {
+        self.a().clone() .. self.b().clone()
+    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct KeyInterval<K: Ord+Clone> {
     a: K,
     b: K
@@ -25,6 +30,10 @@ pub struct KeyInterval<K: Ord+Clone> {
 impl<K: Ord+Clone> KeyInterval<K> {
     pub fn new(a: K, b: K) -> KeyInterval<K> {
         KeyInterval { a:a, b:b }
+    }
+
+    pub fn from_range(r: &Range<K>) -> KeyInterval<K> {
+        Self::new(r.start.clone(), r.end.clone())
     }
 }
 
@@ -96,5 +105,12 @@ impl<K: Ord+Clone> Ord for KeyInterval<K> {
             Ordering::Greater => Ordering::Greater,
             Ordering::Equal => self.b().cmp(other.b())
         }
+    }
+}
+
+
+impl<K: Ord+Clone+fmt::Debug, Iv: Interval<K=K>, V> fmt::Debug for IvNode<Iv, V> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "({:?}..{:?}, m={:?})", self.key.a(), self.key.b(), &self.maxb)
     }
 }

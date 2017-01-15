@@ -3,6 +3,7 @@ use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::marker::PhantomData;
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
+use std::fmt;
 
 #[derive(Clone)]
 pub struct PlNode<K: Key, V> {
@@ -24,7 +25,6 @@ impl<K: Key, V> DerefMut for PlNode<K, V> {
     }
 }
 
-
 impl<K: Key, V> Node for PlNode<K, V> {
     type K = K;
     type V = V;
@@ -38,6 +38,11 @@ impl<K: Key, V> Node for PlNode<K, V> {
     }
 }
 
+impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(&self.kv.key, fmt)
+    }
+}
 
 
 

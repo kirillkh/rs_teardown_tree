@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeWrapper, TreeBase, Node, KeyVal, BulkDeleteCommon, ItemVisitor, lefti, righti, parenti};
+use base::{TreeWrapper, TreeBase, Node, KeyVal, BulkDeleteCommon, ItemVisitor, SlotStack, Slot, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
 use std::marker::PhantomData;
@@ -192,11 +192,12 @@ trait IntervalDelete<Iv: Interval, V>: TreeBase<IvNode<Iv, V>> {
 
 
 trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>, UpdateMax<IvNode<Iv, V>, Self>> + IntervalDelete<Iv, V> {
+    #[inline(never)]
     fn delete_intersecting_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
         let node = self.node_unsafe(idx);
         let k: &Iv = &node.key;
 
-        if &node.maxb <= search.a() && k.a() != search.a() {
+        if &node.maxb < search.a() {
             // whole subtree outside the range
             if self.slots_min().has_open() {
                 self.fill_slots_min(idx);
@@ -263,18 +264,45 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>, Upda
             }
 
             // fill the remaining open slots_max from the left subtree
-            if removed && self.slots_max().has_open() {
+            if removed {
                 self.descend_fill_max_left(idx, true);
             }
         }
     }
 
 
+    // Assumes that the returned vec will never be realloc'd!
+    #[inline(always)]
+    fn pin_stack(stack: &mut SlotStack) -> SlotStack {
+        let nslots = stack.nslots;
+        let slots = {
+            let ptr = stack.slot_at(nslots) as *mut Slot;
+            SlotStack {
+                nslots: 0,
+                nfilled: 0,
+                slots: ptr,
+                capacity: stack.capacity - nslots
+            }
+        };
+
+        slots
+    }
+
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
     fn descend_delete_intersecting_ivl_left(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
-        self.descend_left(idx, with_slot,
-                          |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, output))
+        // this slots_max business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
+        let slots_max_left = Self::pin_stack(self.slots_max());
+        let slots_max_orig = mem::replace(self.slots_max(), slots_max_left);
+
+        let result = self.descend_left(idx, with_slot,
+                          |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, output));
+
+        debug_assert!(self.slots_max().is_empty());
+        let slots_max_left = mem::replace(self.slots_max(), slots_max_orig);
+        mem::forget(slots_max_left);
+
+        result
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
@@ -305,13 +333,14 @@ impl<Iv: Interval, V, Tree> ItemVisitor<IvNode<Iv, V>> for UpdateMax<IvNode<Iv, 
 
         let node = &mut tree.node_mut_unsafe(idx);
         match (tree.has_left(idx), tree.has_right(idx)) {
-            (false, false) => {},
+            (false, false) =>
+                node.maxb = node.key.b().clone(),
             (false, true) =>
-                node.maxb = cmp::max(&node.maxb, &tree.node(righti(idx)).maxb).clone(),
+                node.maxb = cmp::max(node.key.b(), &tree.node(righti(idx)).maxb).clone(),
             (true, false) =>
-                node.maxb = cmp::max(&node.maxb, &tree.node(lefti(idx)).maxb).clone(),
+                node.maxb = cmp::max(node.key.b(), &tree.node(lefti(idx)).maxb).clone(),
             (true, true) =>
-                node.maxb = cmp::max(&node.maxb,
+                node.maxb = cmp::max(node.key.b(),
                                      cmp::max(&tree.node(lefti(idx)).maxb, &tree.node(righti(idx)).maxb))
                                     .clone(),
         }

@@ -13,11 +13,19 @@ pub use base::TeardownTreeRefill;
 
 pub trait PlainTreeWrapperAccess<K: Key, V> {
     fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,V>>;
+
+    fn into_internal(self) -> TreeWrapper<PlNode<K, V>>;
+
+    fn from_internal(wrapper: TreeWrapper<PlNode<K, V>>) -> Self;
 }
 
 
 pub trait IntervalTreeWrapperAccess<Iv: Interval, V> {
     fn internal(&mut self) -> &mut TreeWrapper<IvNode<Iv, V>>;
+
+    fn into_internal(self) -> TreeWrapper<IvNode<Iv, V>>;
+
+    fn from_internal(wrapper: TreeWrapper<IvNode<Iv, V>>) -> Self;
 }
 
 
@@ -96,6 +104,14 @@ mod plain {
         fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,V>> {
             &mut self.internal
         }
+
+        fn into_internal(self) -> TreeWrapper<PlNode<K, V>> {
+            self.internal
+        }
+
+        fn from_internal(wrapper: TreeWrapper<PlNode<K, V>>) -> Self {
+            TeardownTreeMap { internal: wrapper }
+        }
     }
 
 
@@ -152,7 +168,21 @@ mod plain {
 
     impl<K: Ord+Clone> super::PlainTreeWrapperAccess<K, ()> for TeardownTreeSet<K> {
         fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,()>> {
-            self.map.internal()
+            &mut self.map.internal
+        }
+
+        fn into_internal(self) -> TreeWrapper<PlNode<K, ()>> {
+            self.map.internal
+        }
+
+        fn from_internal(wrapper: TreeWrapper<PlNode<K, ()>>) -> Self {
+            TeardownTreeSet { map: TeardownTreeMap { internal: wrapper } }
+        }
+    }
+
+    impl<T: Ord+Clone+Debug> Display for TeardownTreeSet<T> {
+        fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+            Display::fmt(&self.map, fmt)
         }
     }
 }
@@ -161,6 +191,8 @@ mod plain {
 
 mod interval {
     use std::mem;
+    use std::fmt;
+    use std::fmt::{Debug, Display, Formatter};
 
     use base::{TreeWrapper, TreeBase, TeardownTreeRefill, parenti};
 
@@ -189,6 +221,7 @@ mod interval {
                 for i in (1..internal.size()).rev() {
                     let parent = internal.node_mut_unsafe(parenti(i));
                     let node = internal.node(i);
+
                     if node.maxb > parent.maxb {
                         parent.maxb = node.maxb.clone()
                     }
@@ -227,6 +260,14 @@ mod interval {
         fn internal(&mut self) -> &mut TreeWrapper<IvNode<Iv, V>> {
             &mut self.internal
         }
+
+        fn into_internal(self) -> TreeWrapper<IvNode<Iv, V>> {
+            self.internal
+        }
+
+        fn from_internal(wrapper: TreeWrapper<IvNode<Iv, V>>) -> Self {
+            IntervalTeardownTreeMap { internal: wrapper }
+        }
     }
 
     impl<Iv: Interval+Copy, V> TeardownTreeRefill for IntervalTeardownTreeMap<Iv, V> {
@@ -236,7 +277,7 @@ mod interval {
     }
 
 
-
+    #[derive(Clone)]
     pub struct IntervalTeardownTreeSet<Iv: Interval> {
         map: IntervalTeardownTreeMap<Iv, ()>
     }
@@ -275,9 +316,48 @@ mod interval {
         pub fn clear(&mut self) { self.map.clear(); }
     }
 
+    impl<Iv: Interval> super::IntervalTreeWrapperAccess<Iv, ()> for IntervalTeardownTreeSet<Iv> {
+        fn internal(&mut self) -> &mut TreeWrapper<IvNode<Iv, ()>> {
+            &mut self.map.internal
+        }
+
+        fn into_internal(self) -> TreeWrapper<IvNode<Iv, ()>> {
+            self.map.internal
+        }
+
+        fn from_internal(wrapper: TreeWrapper<IvNode<Iv, ()>>) -> Self {
+            IntervalTeardownTreeSet { map: IntervalTeardownTreeMap { internal: wrapper } }
+        }
+    }
+
     impl<Iv: Interval+Copy> TeardownTreeRefill for IntervalTeardownTreeSet<Iv> {
         fn refill(&mut self, master: &Self) {
             self.map.refill(&master.map)
+        }
+    }
+
+
+    impl<Iv: Interval+Debug, V> Debug for IntervalTeardownTreeMap<Iv, V> where Iv::K: Debug {
+        fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+            Debug::fmt(&self.internal, fmt)
+        }
+    }
+
+    impl<Iv: Interval, V> Display for IntervalTeardownTreeMap<Iv, V> where Iv::K: Debug {
+        fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+            Display::fmt(&self.internal, fmt)
+        }
+    }
+
+    impl<Iv: Interval+Debug> Debug for IntervalTeardownTreeSet<Iv> where Iv::K: Debug {
+        fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+            Debug::fmt(&self.map, fmt)
+        }
+    }
+
+    impl<Iv: Interval> Display for IntervalTeardownTreeSet<Iv> where Iv::K: Debug {
+        fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+            Display::fmt(&self.map, fmt)
         }
     }
 }

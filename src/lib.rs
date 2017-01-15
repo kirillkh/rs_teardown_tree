@@ -16,6 +16,7 @@ mod external_api;
 mod rust_bench;
 
 pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
+pub use self::base::util;
 
 
 
@@ -300,23 +301,28 @@ mod test_plain {
 #[cfg(test)]
 mod test_interval {
     use std::ops::Range;
+    use rand::{XorShiftRng, SeedableRng};
     use std::cmp;
 
-    use base::{TreeWrapper, Node, TreeBase, parenti};
+    use base::{TreeWrapper, Node, TreeBase, parenti, lefti, righti};
     use base::validation::{check_bst, check_integrity, gen_tree_keys};
+    use base::util::make_teardown_seq;
     use applied::interval::{Interval, IvNode, KeyInterval};
-    use applied::interval_tree::IntervalTreeInternal;
+    use external_api::{IntervalTeardownTreeSet, IntervalTreeWrapperAccess};
 
     type Iv = KeyInterval<usize>;
     type IvTree = TreeWrapper<IvNode<Iv, ()>>;
 
+
+    //---- quickcheck ------------------------------------------------------------------------------
     quickcheck! {
         fn quickcheck_interval_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
-            test_interval_tree(xs, rm)
+            let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
+            test_random_shape(xs, rm, &mut rng)
         }
     }
 
-    fn test_interval_tree(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
+    fn test_random_shape(xs: Vec<Range<usize>>, rm: Range<usize>, rng: &mut XorShiftRng) -> bool {
         let mut intervals = xs.into_iter()
             .map(|r| if r.start<=r.end {
                 Iv::new(r.start, r.end)
@@ -327,19 +333,41 @@ mod test_interval {
             .collect::<Vec<_>>();
         intervals.sort();
 
-        let tree = gen_tree(intervals);
+        let tree = gen_tree(intervals, rng);
 
         let rm = if rm.start <= rm.end {
             Iv::new(rm.start, rm.end)
         } else {
             Iv::new(rm.end, rm.start)
         };
-        check_tree(tree, rm)
+        let mut output = Vec::with_capacity(tree.size());
+        check_tree(&mut IntervalTeardownTreeSet::from_internal(tree), rm, &mut output);
+        true
+    }
+
+    fn test_shape(xs: Vec<Range<usize>>, rm: Range<usize>) {
+        let nodes = xs.into_iter()
+            .map(|r| if r.start<=r.end {
+                    Some(IvNode::new(Iv::new(r.start, r.end), ()))
+                } else {
+                    None
+                }
+            )
+            .collect::<Vec<_>>();
+
+        let mut internal = IvTree::with_nodes(nodes);
+        if internal.size() > 0 {
+            init_maxb(&mut internal, 0);
+        }
+
+        let mut tree = IntervalTeardownTreeSet::from_internal(internal);
+        let mut output = Vec::with_capacity(tree.size());
+        check_tree(&mut tree, KeyInterval::from_range(&rm), &mut output);
     }
 
 
-    fn gen_tree(items: Vec<Iv>) -> IvTree {
-        let items: Vec<Option<Iv>> = gen_tree_keys(items);
+    fn gen_tree(items: Vec<Iv>, rng: &mut XorShiftRng) -> IvTree {
+        let items: Vec<Option<Iv>> = gen_tree_keys(items, rng);
         let mut nodes = items.into_iter()
             .map(|opt| opt.map(|k| IvNode::new(k.clone(), ())))
             .collect::<Vec<_>>();
@@ -356,21 +384,27 @@ mod test_interval {
         IvTree::with_nodes(nodes)
     }
 
-    fn check_tree(mut tree: IvTree, rm: Iv) -> bool {
-        let orig = tree.clone();
-        let mut output = Vec::with_capacity(tree.size());
-        tree.delete_intersecting(&rm, &mut output);
+    fn check_tree(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: Iv, output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>> {
+        let mut tree = orig.clone();
+        tree.delete_intersecting(&rm, output);
 
-        check_bst(&tree, &output, &orig, 0);
-        check_integrity(&tree, &orig);
+        {
+            let (tree, orig): (&mut IvTree, &mut IvTree) = (tree.internal(), orig.internal());
+            check_bst(&tree, &output, &orig, 0);
+            check_integrity(&tree, &orig);
+            check_output_intersects(&rm, &output);
+            check_tree_doesnt_intersect(&rm, tree);
 
-        let output = super::conv_from_tuple_vec(&mut output);
-        check_output_intersects(&rm, &output);
-        check_tree_doesnt_intersect(&rm, &mut tree);
-        check_output_sorted(&output);
+            assert!(output.len() + tree.size() == orig.size());
 
-        assert!(output.len() + tree.size() == orig.size());
-        true
+            if tree.size() > 0 {
+                check_maxb(orig, tree, 0);
+            }
+
+            check_output_sorted(&output, orig, &rm);
+        }
+
+        tree
     }
 
     fn check_output_intersects(search: &Iv, output: &Vec<Iv>) {
@@ -381,32 +415,100 @@ mod test_interval {
 
     fn check_tree_doesnt_intersect(search: &Iv, tree: &mut IvTree) {
         tree.traverse_inorder(0, &mut (), |this: &mut IvTree, _, idx| {
-            assert!(!this.key(idx).intersects(&search));
+            assert!(!this.key(idx).intersects(search), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
             false
         });
     }
 
-    fn check_output_sorted(output: &Vec<Iv>) {
+    fn check_output_sorted(output: &Vec<Iv>, orig: &mut IvTree, rm: &Iv) {
         for i in 1..output.len() {
-            assert!(output[i-1] <= output[i]);
+            assert!(output[i-1] <= output[i], "output={:?}, rm={:?}, orig={:?}, {}", output, rm, orig, orig);
         }
+    }
+
+    fn init_maxb(tree: &mut IvTree, idx: usize) -> usize {
+        assert!(!tree.is_nil(idx));
+
+        let mut maxb = *tree.node(idx).key.b();
+        if tree.has_left(idx) {
+            maxb = cmp::max(maxb, init_maxb(tree, lefti(idx)));
+        }
+        if tree.has_right(idx) {
+            maxb = cmp::max(maxb, init_maxb(tree, righti(idx)));
+        }
+
+        tree.node_mut(idx).maxb = maxb;
+        maxb
+    }
+
+    fn check_maxb(orig: &IvTree, tree: &IvTree, idx: usize) -> usize {
+        assert!(!tree.is_nil(idx));
+
+        let mut expected_maxb = *tree.node(idx).key.b();
+        if tree.has_left(idx) {
+            expected_maxb = cmp::max(expected_maxb, check_maxb(orig, tree, lefti(idx)));
+        }
+        if tree.has_right(idx) {
+            expected_maxb = cmp::max(expected_maxb, check_maxb(orig, tree, righti(idx)));
+        }
+
+        assert!(expected_maxb==tree.node(idx).maxb, "expected maxb={}, actual maxb={}, idx={}, tree={:?}, orig={:?}, {}", expected_maxb, tree.node(idx).maxb, idx, tree, orig, orig);
+        expected_maxb
     }
 
 
     #[test]
-    fn prebuilt() {
-        test_interval_tree(vec![0..0], 0..0);
-        test_interval_tree(vec![0..0, 0..0, 0..1], 0..1);
+    fn prebuilt_random_shape() {
+        let rng = &mut XorShiftRng::from_seed([3, 1, 4, 15]);
 
-        test_interval_tree(vec![1..1, 0..0, 0..0, 0..0], 0..1);
-        test_interval_tree(vec![0..0, 1..1, 0..0, 0..0], 0..1);
-        test_interval_tree(vec![0..0, 0..0, 1..1, 0..0], 0..1);
-        test_interval_tree(vec![0..0, 0..0, 0..0, 1..1], 0..1);
-        test_interval_tree(vec![1..1, 1..1, 1..1, 1..1], 0..1);
+        full_teardown_n(5, 2);
 
-        test_interval_tree(vec![0..2, 1..2, 1..1, 1..2], 1..2);
-        test_interval_tree(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2);
-        test_interval_tree(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2);
+        test_shape(vec![1..1, 0..2], 0..0);
+
+        test_random_shape(vec![0..0], 0..0, rng);
+        test_random_shape(vec![0..2, 1..1], 0..0, rng);
+        test_random_shape(vec![0..0, 0..0, 0..1], 0..1, rng);
+        test_random_shape(vec![0..0, 1..1, 2..2], 0..1, rng);
+
+        test_random_shape(vec![1..1, 0..0, 0..0, 0..0], 0..1, rng);
+        test_random_shape(vec![0..0, 1..1, 0..0, 0..0], 0..1, rng);
+        test_random_shape(vec![0..0, 0..0, 1..1, 0..0], 0..1, rng);
+        test_random_shape(vec![0..0, 0..0, 0..0, 1..1], 0..1, rng);
+        test_random_shape(vec![1..1, 1..1, 1..1, 1..1], 0..1, rng);
+
+        test_random_shape(vec![0..2, 1..2, 1..1, 1..2], 1..2, rng);
+        test_random_shape(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2, rng);
+        test_random_shape(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2, rng);
+    }
+
+
+
+    //---- non-quickcheck --------------------------------------------------------------------------
+    fn full_teardown_n(n: usize, rm_items: usize) {
+        let mut rng = XorShiftRng::from_seed([1, 2, 3, 4]);
+        let elems: Vec<_> = (0..n).map(|x| (KeyInterval::new(x,x))).collect();
+        let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
+
+        let mut orig = IntervalTeardownTreeSet::new(elems);
+        let mut output = Vec::with_capacity(orig.size());
+
+        for range in ranges.into_iter() {
+            output.truncate(0);
+            let rm = KeyInterval::from_range(&range);
+            orig = check_tree(&mut orig, rm, &mut output);
+        }
+        assert!(orig.size() == 0);
+    }
+
+
+    #[test]
+    fn test_full_teardown() {
+        full_teardown_n(259, 3);
+        full_teardown_n(1598, 21);
+        full_teardown_n(65918, 7347);
+        full_teardown_n(88165, 9664);
+        full_teardown_n(196561, 81669);
+        full_teardown_n(756198, 247787);
     }
 }
 

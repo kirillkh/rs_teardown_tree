@@ -159,31 +159,31 @@ impl<N: Node> Drop for TreeWrapper<N> {
 }
 
 
-impl<N: Node> Debug for TreeWrapper<N> where N::K: Debug {
+impl<N: Node> Debug for TreeWrapper<N> where N: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         let mut nz: Vec<_> = self.mask.iter().enumerate()
             .rev()
             .skip_while(|&(_, flag)| !flag)
             .map(|(i, &flag)| match (self.node(i), flag) {
                 (_, false) => String::from("0"),
-                (ref node, true) => format!("{:?}", node.key)
+                (ref node, true) => format!("{:?}", node)
             })
             .collect();
         nz.reverse();
 
         let _ = write!(fmt, "[size={}: ", self.size);
         let mut sep = "";
-        for ref key in nz.iter() {
+        for ref node in nz.iter() {
             let _ = write!(fmt, "{}", sep);
             sep = ", ";
-            let _ = write!(fmt, "{}", key);
+            let _ = write!(fmt, "{}", node);
         }
         let _ = write!(fmt, "]");
         Ok(())
     }
 }
 
-impl<N: Node> fmt::Display for TreeWrapper<N> where N::K: Debug {
+impl<N: Node> fmt::Display for TreeWrapper<N> where N: fmt::Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         writeln!(fmt, "")?;
         let mut ancestors = vec![];
@@ -192,7 +192,7 @@ impl<N: Node> fmt::Display for TreeWrapper<N> where N::K: Debug {
 }
 
 
-impl<N: Node> TreeWrapper<N> where N::K: Debug {
+impl<N: Node> TreeWrapper<N> where N: fmt::Debug {
     fn fmt_branch(&self, fmt: &mut Formatter, ancestors: &Vec<bool>) -> fmt::Result {
         for (i, c) in ancestors.iter().enumerate() {
             if i == ancestors.len() - 1 {
@@ -214,7 +214,7 @@ impl<N: Node> TreeWrapper<N> where N::K: Debug {
         self.fmt_branch(fmt, ancestors)?;
 
         if !self.is_nil(idx) {
-            writeln!(fmt, "{:?}", self.key(idx))?;
+            writeln!(fmt, "{:?}", self.node(idx))?;
 
             if idx%2 == 0 && !ancestors.is_empty() {
                 *ancestors.last_mut().unwrap() = false;
