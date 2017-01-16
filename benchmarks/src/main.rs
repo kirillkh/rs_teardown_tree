@@ -27,7 +27,7 @@ fn nanos(d: Duration) -> u64 {
 
 fn main() {
 //    set_affinity();
-    bench_refill_teardown_cycle::<TreeBulk>(1000000, 1000, 6000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 1000,   4000);
     return;
 
     bench_refill_teardown_cycle::<TreeBulk>(100, 100,    4500000);
