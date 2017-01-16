@@ -39,6 +39,20 @@ fn main() {
     bench_refill_teardown_cycle::<TreeBulk>(10000000, 1000,  50);
 
 
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(100, 100,    4500000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 100,    350000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 100,    35000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 100,    2200);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 100,    200);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 100,    16);
+
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 1000,  350000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 1000,  40000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 1000,  4000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 1000,  350);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 1000,  25);
+
+
     bench_refill_teardown_cycle::<TreapMaster>(100, 100, 300000);
     bench_refill_teardown_cycle::<TreapMaster>(1000, 100, 25000);
     bench_refill_teardown_cycle::<TreapMaster>(10000, 100, 4000);
@@ -80,7 +94,6 @@ fn main() {
     bench_refill_teardown_cycle::<SplayMaster>(1000000, 1000, 40);
     bench_refill_teardown_cycle::<SplayMaster>(10000000, 1000, 4);
 
-
     bench_refill_teardown_cycle::<TeardownTreeSingle>(100, 100, 2000000);
     bench_refill_teardown_cycle::<TeardownTreeSingle>(1000, 100,  60000);
     bench_refill_teardown_cycle::<TeardownTreeSingle>(10000, 100,  6000);
@@ -94,19 +107,6 @@ fn main() {
     bench_refill_teardown_cycle::<TeardownTreeSingle>(1000000, 1000,  60);
     bench_refill_teardown_cycle::<TeardownTreeSingle>(10000000, 1000,  6);
 
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(100, 100,   4500000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 100,   350000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 100,   25000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 100,    450);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 100,    10);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 100,    3);
-
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 1000,  500000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 1000,  45000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 1000,  2000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 1000,   60);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 1000,   3);
-
 
 
     bench_refill::<TreeBulk>(100, 40000000);
@@ -115,6 +115,14 @@ fn main() {
     bench_refill::<TreeBulk>(100000, 40000);
     bench_refill::<TreeBulk>(1000000, 1200);
     bench_refill::<TreeBulk>(10000000, 110);
+
+
+    bench_refill::<IntervalTreeBulk>(100, 40000000);
+    bench_refill::<IntervalTreeBulk>(1000, 6000000);
+    bench_refill::<IntervalTreeBulk>(10000, 500000);
+    bench_refill::<IntervalTreeBulk>(100000, 40000);
+    bench_refill::<IntervalTreeBulk>(1000000, 1200);
+    bench_refill::<IntervalTreeBulk>(10000000, 110);
 
 
     bench_refill::<TreapMaster>(100, 260000);
@@ -139,13 +147,6 @@ fn main() {
     bench_refill::<SplayMaster>(100000, 220);
     bench_refill::<SplayMaster>(1000000, 25);
     bench_refill::<SplayMaster>(10000000, 3);
-
-    bench_refill::<IntervalTreeBulk>(100, 40000000);
-    bench_refill::<IntervalTreeBulk>(1000, 6000000);
-    bench_refill::<IntervalTreeBulk>(10000, 500000);
-    bench_refill::<IntervalTreeBulk>(100000, 40000);
-    bench_refill::<IntervalTreeBulk>(1000000, 1200);
-    bench_refill::<IntervalTreeBulk>(10000000, 110);
 
 
     imptree_single_elem_range_n(100, 100,    200000);
@@ -337,8 +338,9 @@ mod bench_delete_range {
 
     pub trait TeardownTreeCopy: Display+Debug {
         type Master: TeardownTreeMaster;
+        type T: Debug;
 
-        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>);
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>);
         fn rfill(&mut self, master: &Self::Master);
         fn sz(&self) -> usize;
         fn clear(&mut self);
@@ -375,6 +377,7 @@ mod bench_delete_range {
 
     impl TeardownTreeCopy for TeardownTreeBulk {
         type Master = TeardownTreeBulk;
+        type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
             self.0.delete_range(range, output);
@@ -430,6 +433,7 @@ mod bench_delete_range {
 
     impl TeardownTreeCopy for TeardownTreeSingle {
         type Master = TeardownTreeSingle;
+        type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
             for i in range {
@@ -500,6 +504,7 @@ mod bench_delete_range {
 
     impl TeardownTreeCopy for BTreeSetCopy {
         type Master = BTreeSetMaster;
+        type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
             for i in range {
@@ -568,6 +573,7 @@ mod bench_delete_range {
 
     impl TeardownTreeCopy for TreapCopy {
         type Master = TreapMaster;
+        type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
             self.0.remove_range(range, output);
@@ -638,6 +644,7 @@ mod bench_delete_range {
 
     impl TeardownTreeCopy for SplayCopy {
         type Master = SplayMaster;
+        type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
             self.0.remove_range(&range.start .. &range.end, output);
@@ -675,7 +682,7 @@ mod bench_delete_range {
     }
 
 
-    use teardown_tree::{IntervalTeardownTreeSet, Interval, KeyInterval};
+    use teardown_tree::{IntervalTeardownTreeSet, KeyInterval};
 
     /// for benchmarking IntervalTeardownTree delete_range()
     #[derive(Clone, Debug)]
@@ -708,14 +715,10 @@ mod bench_delete_range {
 
     impl TeardownTreeCopy for IntervalTreeBulk {
         type Master = IntervalTreeBulk;
+        type T = KeyInterval<usize>;
 
-        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
-            let mut out = Vec::with_capacity(output.capacity());
-            self.0.delete_intersecting(&KeyInterval::new(range.start, range.end), &mut out);
-
-            for iv in out.into_iter() {
-                output.push(*iv.a())
-            }
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
+            self.0.delete_intersecting(&KeyInterval::new(range.start, range.end), output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {
