@@ -490,7 +490,7 @@ pub fn righti(idx: usize) -> usize {
 
 
 
-//#[cfg(test)]
+#[cfg(test)]
 pub mod validation {
     use rand::{Rng, XorShiftRng};
     use std::fmt::Debug;

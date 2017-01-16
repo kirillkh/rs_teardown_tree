@@ -191,7 +191,7 @@ trait IntervalDelete<Iv: Interval, V>: TreeBase<IvNode<Iv, V>> {
 }
 
 
-trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>, UpdateMax<IvNode<Iv, V>, Self>> + IntervalDelete<Iv, V> {
+trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + IntervalDelete<Iv, V> {
     #[inline(never)]
     fn delete_intersecting_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
         let node = self.node_unsafe(idx);
@@ -314,13 +314,10 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>, Upda
 }
 
 
-struct UpdateMax<N: Node, Tree: TreeBase<N>> {
-    _ph: PhantomData<(N, Tree)>
-}
+pub struct UpdateMax;
 
-impl<Iv: Interval, V, Tree> ItemVisitor<IvNode<Iv, V>> for UpdateMax<IvNode<Iv, V>, Tree>
-                               where Tree: BulkDeleteCommon<IvNode<Iv, V>, UpdateMax<IvNode<Iv, V>, Tree>> {
-    type Tree = Tree;
+impl<Iv: Interval, V> ItemVisitor<IvNode<Iv, V>> for UpdateMax {
+    type Tree = IvTree<Iv, V>;
 
     #[inline]
     fn visit<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
@@ -348,8 +345,8 @@ impl<Iv: Interval, V, Tree> ItemVisitor<IvNode<Iv, V>> for UpdateMax<IvNode<Iv, 
 }
 
 
-impl<Iv: Interval, V> BulkDeleteCommon<IvNode<Iv, V>, UpdateMax<IvNode<Iv, V>, IvTree<Iv, V>>> for IvTree<Iv, V> {
-//    type Update = UpdateMax;
+impl<Iv: Interval, V> BulkDeleteCommon<IvNode<Iv, V>> for IvTree<Iv, V> {
+    type Visitor = UpdateMax;
 }
 
 

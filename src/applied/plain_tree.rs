@@ -1,9 +1,11 @@
 use base::{Key, Node, TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
-use std::marker::PhantomData;
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
 use std::fmt;
+
+type Tree<K, V> = TreeWrapper<PlNode<K,V>>;
+
 
 #[derive(Clone)]
 pub struct PlNode<K: Key, V> {
@@ -138,7 +140,7 @@ trait PlainDelete<K: Key, V>: TreeBase<PlNode<K,V>> {
 }
 
 
-trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>, NoUpdate<Self>> {
+trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>> {
     /// Delete based on driver decisions.
     /// The items are returned in order.
     #[inline]
@@ -303,12 +305,10 @@ trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>, NoUpdate<Self>
 }
 
 
-struct NoUpdate<Tree> {
-    _ph: PhantomData<Tree>
-}
+pub struct NoUpdate;
 
-impl<K: Key, V, Tree: BulkDeleteCommon<PlNode<K, V>, NoUpdate<Tree>>> ItemVisitor<PlNode<K, V>> for NoUpdate<Tree> {
-    type Tree = Tree;
+impl<K: Key, V> ItemVisitor<PlNode<K, V>> for NoUpdate {
+    type Tree = Tree<K,V>;
 
     #[inline]
     fn visit<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
@@ -317,9 +317,9 @@ impl<K: Key, V, Tree: BulkDeleteCommon<PlNode<K, V>, NoUpdate<Tree>>> ItemVisito
     }
 }
 
-impl<K: Key, V> BulkDeleteCommon<PlNode<K, V>, NoUpdate<TreeWrapper<PlNode<K,V>>>> for TreeWrapper<PlNode<K,V>> {
-//    type Update = NoUpdate;
+impl<K: Key, V> BulkDeleteCommon<PlNode<K, V>> for Tree<K,V> {
+    type Visitor = NoUpdate;
 }
 
-impl<K: Key, V> PlainDelete<K, V> for TreeWrapper<PlNode<K,V>> {}
-impl<K: Key, V> PlainDeleteRange<K, V> for TreeWrapper<PlNode<K,V>> {}
+impl<K: Key, V> PlainDelete<K, V> for Tree<K,V> {}
+impl<K: Key, V> PlainDeleteRange<K, V> for Tree<K,V> {}

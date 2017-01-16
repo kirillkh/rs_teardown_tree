@@ -26,7 +26,7 @@ impl DeleteRangeCache {
 
 
 pub trait ItemVisitor<N: Node>: Sized {
-    type Tree: BulkDeleteCommon<N, Self>;
+    type Tree: BulkDeleteCommon<N, Visitor=Self>;
 
     #[inline]
     fn visit<F>(arg: &mut Self::Tree, idx: usize, f: F)
@@ -36,7 +36,9 @@ pub trait ItemVisitor<N: Node>: Sized {
 
 
 //==== generic methods =============================================================================
-pub trait BulkDeleteCommon<N: Node, Visitor: ItemVisitor<N, Tree=Self>>: TreeBase<N>+Sized  {
+pub trait BulkDeleteCommon<N: Node>: TreeBase<N>+Sized  {
+    type Visitor: ItemVisitor<N, Tree=Self>;
+
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline]
     fn consume_subtree(&mut self, root: usize, output: &mut Vec<(N::K, N::V)>) {
@@ -127,12 +129,12 @@ pub trait BulkDeleteCommon<N: Node, Visitor: ItemVisitor<N, Tree=Self>>: TreeBas
         if with_slot {
             self.slots_max().push(idx);
 
-            Visitor::visit(self, child_idx, f);
+            Self::Visitor::visit(self, child_idx, f);
 
             self.slots_max().pop();
             self.is_nil(idx)
         } else {
-            Visitor::visit(self, child_idx, f);
+            Self::Visitor::visit(self, child_idx, f);
             false
         }
     }
@@ -150,12 +152,12 @@ pub trait BulkDeleteCommon<N: Node, Visitor: ItemVisitor<N, Tree=Self>>: TreeBas
         if with_slot {
             self.slots_min().push(idx);
 
-            Visitor::visit(self, child_idx, f);
+            Self::Visitor::visit(self, child_idx, f);
 
             self.slots_min().pop();
             self.is_nil(idx)
         } else {
-            Visitor::visit(self, child_idx, f);
+            Self::Visitor::visit(self, child_idx, f);
             false
         }
     }
