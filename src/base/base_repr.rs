@@ -149,6 +149,8 @@ impl<N: Node> DerefMut for TreeWrapper<N> {
     }
 }
 
+impl<N: Node> TreeReprAccess<N> for TreeWrapper<N> {}
+
 impl<N: Node> Drop for TreeWrapper<N> {
     fn drop(&mut self) {
         self.drop_items();

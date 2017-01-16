@@ -1,6 +1,5 @@
 use base::{Node, TreeBase, lefti, righti};
 use base::SlotStack;
-use std::mem;
 
 
 pub struct DeleteRangeCache {
@@ -189,13 +188,6 @@ pub trait BulkDeleteCommon<N: Node, Visitor: ItemVisitor<N, Tree=Self>>: TreeBas
         self.descend_right(idx, with_slot, |this: &mut Self, child_idx| {
             this.fill_slots_max(child_idx);
         })
-    }
-
-    #[inline(always)]
-    fn node_unsafe<'b>(&self, idx: usize) -> &'b N {
-        unsafe {
-            mem::transmute(self.node(idx))
-        }
     }
 }
 

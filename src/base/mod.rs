@@ -62,6 +62,13 @@ pub trait TreeBase<N: Node>: TreeReprAccess<N> {
     }
 
     #[inline(always)]
+    fn node_unsafe<'b>(&self, idx: usize) -> &'b N {
+        unsafe {
+            mem::transmute(self.node(idx))
+        }
+    }
+
+    #[inline(always)]
     fn key_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut N::K {
         unsafe {
             mem::transmute(&mut self.node_mut(idx).key)
@@ -461,8 +468,6 @@ pub trait TreeBase<N: Node>: TreeReprAccess<N> {
     }
 }
 
-
-impl<N: Node> TreeReprAccess<N> for TreeWrapper<N> {}
 
 impl<N: Node> TreeBase<N> for TreeWrapper<N> {}
 
