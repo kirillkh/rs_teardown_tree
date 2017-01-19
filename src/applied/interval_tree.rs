@@ -1,14 +1,16 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeWrapper, TreeBase, Node, KeyVal, BulkDeleteCommon, ItemVisitor, SlotStack, Slot, lefti, righti, parenti};
+use base::{TreeWrapper, TreeBase, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, NoopFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
-use std::marker::PhantomData;
 
 type IvTree<Iv, V> = TreeWrapper<IvNode<Iv, V>>;
 
+/// Entry points.
 pub trait IntervalTreeInternal<Iv: Interval, V> {
     #[inline] fn delete(&mut self, search: &Iv) -> Option<V>;
     #[inline] fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>);
+    #[inline] fn filter_intersecting<F>(&mut self, search: &Iv, filter: &F, output: &mut Vec<(Iv, V)>)
+                    where F: ItemFilter<Iv>;
 }
 
 
@@ -26,8 +28,21 @@ impl<Iv: Interval, V> IntervalTreeInternal<Iv, V> for IvTree<Iv, V> {
     #[inline]
     fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
         if self.size() != 0 {
+            output.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
                 this.delete_intersecting_ivl_rec(search, 0, false, output)
+            )
+        }
+    }
+
+    #[inline]
+    fn filter_intersecting<F>(&mut self, search: &Iv, filter: &F, output: &mut Vec<(Iv, V)>)
+        where F: ItemFilter<Iv>
+    {
+        if self.size() != 0 {
+            output.reserve(self.size());
+            UpdateMax::visit(self, 0, move |this, _|
+                this.filter_intersecting_ivl_rec(search, 0, false, &NoopFilter, output)
             )
         }
     }
@@ -231,7 +246,7 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + In
             let mut removed = consumed.is_some();
             if removed {
                 if min_included {
-                    self.consume_subtree(lefti(idx), output)
+                    self.consume_subtree_unfiltered(lefti(idx), output)
                 } else {
                     removed = self.descend_delete_intersecting_ivl_left(search, idx, true, false, output);
                 }
@@ -250,7 +265,7 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + In
             if right_min_included {
                 let right_max_included = &node.maxb < search.b();
                 if right_max_included {
-                    self.consume_subtree(righti(idx), output);
+                    self.consume_subtree_unfiltered(righti(idx), output);
                 } else {
                     removed = self.descend_delete_intersecting_ivl_right(search, idx, removed, true, output);
                 }
@@ -270,39 +285,12 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + In
         }
     }
 
-
-    // Assumes that the returned vec will never be realloc'd!
-    #[inline(always)]
-    fn pin_stack(stack: &mut SlotStack) -> SlotStack {
-        let nslots = stack.nslots;
-        let slots = {
-            let ptr = stack.slot_at(nslots) as *mut Slot;
-            SlotStack {
-                nslots: 0,
-                nfilled: 0,
-                slots: ptr,
-                capacity: stack.capacity - nslots
-            }
-        };
-
-        slots
-    }
-
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
     fn descend_delete_intersecting_ivl_left(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
-        // this slots_max business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
-        let slots_max_left = Self::pin_stack(self.slots_max());
-        let slots_max_orig = mem::replace(self.slots_max(), slots_max_left);
-
-        let result = self.descend_left(idx, with_slot,
-                          |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, output));
-
-        debug_assert!(self.slots_max().is_empty());
-        let slots_max_left = mem::replace(self.slots_max(), slots_max_orig);
-        mem::forget(slots_max_left);
-
-        result
+        // this pinning business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
+        self.descend_left_fresh_slots(idx, with_slot,
+                                   |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, output))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
@@ -312,6 +300,109 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + In
                            |this: &mut Self, child_idx| this.delete_intersecting_ivl_rec(search, child_idx, min_included, output))
     }
 }
+
+trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + IntervalDelete<Iv, V> {
+    #[inline(never)]
+    fn filter_intersecting_ivl_rec<F>(&mut self, search: &Iv, idx: usize, min_included: bool, filter: &F, output: &mut Vec<(Iv, V)>)
+        where F: ItemFilter<Iv>
+    {
+        let node = self.node_unsafe(idx);
+        let k: &Iv = &node.key;
+
+        if &node.maxb < search.a() {
+            // whole subtree outside the range
+            if self.slots_min().has_open() {
+                self.fill_slots_min(idx);
+            }
+            if self.slots_max().has_open() && !self.is_nil(idx) {
+                self.fill_slots_max(idx);
+            }
+        } else if search.b() <= k.a() && k.a() != search.a() {
+            // root and right are outside the range
+            self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, filter, output);
+
+            let removed = if self.slots_min().has_open() {
+                self.fill_slot_min(idx);
+
+                self.descend_fill_min_right(idx, true)
+            } else {
+                false
+            };
+
+            if self.slots_max().has_open() {
+                self.descend_fill_max_left(idx, removed);
+            }
+        } else {
+            // consume root if necessary
+            let consumed = if search.intersects(k) && filter.accept(&self.node(idx).key)
+                { Some(self.take(idx)) }
+            else
+                { None };
+
+            // left subtree
+            let mut removed = consumed.is_some();
+            if removed {
+                if min_included {
+                    self.consume_subtree_filtered(lefti(idx), filter, output)
+                } else {
+                    removed = self.descend_filter_intersecting_ivl_left(search, idx, true, false, filter, output);
+                }
+
+                consume_unchecked(output, consumed.unwrap().into_kv());
+            } else {
+                removed = self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, filter, output);
+                if !removed && self.slots_min().has_open() {
+                    removed = true;
+                    self.fill_slot_min(idx);
+                }
+            }
+
+            // right subtree
+            let right_min_included = min_included || search.a() <= k.a();
+            if right_min_included {
+                let right_max_included = &node.maxb < search.b();
+                if right_max_included {
+                    self.consume_subtree_filtered(righti(idx), filter, output);
+                } else {
+                    removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, true, filter, output);
+                }
+            } else {
+                removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, false, filter, output);
+            }
+
+            if !removed && self.slots_max().has_open() {
+                removed = true;
+                self.fill_slot_max(idx);
+            }
+
+            // fill the remaining open slots_max from the left subtree
+            if removed {
+                self.descend_fill_max_left(idx, true);
+            }
+        }
+    }
+
+    /// Returns true if the item is removed after recursive call, false otherwise.
+    #[inline(always)]
+    fn descend_filter_intersecting_ivl_left<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &F, output: &mut Vec<(Iv, V)>) -> bool
+        where F: ItemFilter<Iv>
+    {
+        // this pinning business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
+        self.descend_left_fresh_slots(idx, with_slot,
+                                   |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, filter, output))
+    }
+
+    /// Returns true if the item is removed after recursive call, false otherwise.
+    #[inline(always)]
+    fn descend_filter_intersecting_ivl_right<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &F, output: &mut Vec<(Iv, V)>) -> bool
+        where F: ItemFilter<Iv>
+    {
+        self.descend_right(idx, with_slot,
+                           |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, filter, output))
+    }
+}
+
+
 
 
 pub struct UpdateMax;
@@ -351,4 +442,5 @@ impl<Iv: Interval, V> BulkDeleteCommon<IvNode<Iv, V>> for IvTree<Iv, V> {
 
 
 impl<Iv: Interval, V> IntervalDelete<Iv, V> for IvTree<Iv, V> {}
+impl<Iv: Interval, V> IntervalFilterRange<Iv, V> for IvTree<Iv, V> {}
 impl<Iv: Interval, V> IntervalDeleteRange<Iv, V> for IvTree<Iv, V> {}

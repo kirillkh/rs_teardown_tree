@@ -47,7 +47,7 @@ impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
 }
 
 
-
+/// Entry points.
 pub trait PlainDeleteInternal<K: Key, V> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline] fn delete(&mut self, search: &K) -> Option<V>;
@@ -73,18 +73,14 @@ impl<K: Key, V> PlainDeleteInternal<K, V> for TreeWrapper<PlNode<K,V>> {
     /// Vec. The items are returned in order.
     #[inline]
     fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>) {
-        debug_assert!(output.is_empty());
-        output.truncate(0);
-
+        output.reserve(self.size());
         self.delete_with_driver(&mut RangeDriver::new(range, output))
     }
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
     #[inline]
     fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
-        debug_assert!(output.is_empty());
-        output.truncate(0);
-
+        output.reserve(self.size());
         self.delete_with_driver(&mut RangeRefDriver::new(range, output))
     }
 }
@@ -182,7 +178,7 @@ trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>> {
         if decision.right() {
             // the root and the whole left subtree are inside the range
             let item = self.take(idx);
-            self.consume_subtree(lefti(idx), drv.output());
+            self.consume_subtree_unfiltered(lefti(idx), drv.output());
             consume_unchecked(drv.output(), item.into_kv());
             self.descend_delete_min_right(drv, idx, true);
         } else {
@@ -209,7 +205,7 @@ trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>> {
             let item = self.take(idx);
             self.descend_delete_max_left(drv, idx, true);
             consume_unchecked(drv.output(), item.into_kv());
-            self.consume_subtree(righti(idx), drv.output());
+            self.consume_subtree_unfiltered(righti(idx), drv.output());
         } else {
             // the root and the left subtree are outside the range
             self.descend_delete_max_right(drv, idx, false);

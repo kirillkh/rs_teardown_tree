@@ -16,6 +16,7 @@ mod external_api;
 mod rust_bench;
 
 pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
+pub use self::base::{ItemFilter, NoopFilter};
 pub use self::base::util;
 
 
@@ -461,8 +462,6 @@ mod test_interval {
     fn prebuilt_random_shape() {
         let rng = &mut XorShiftRng::from_seed([3, 1, 4, 15]);
 
-        full_teardown_n(5, 2);
-
         test_shape(vec![1..1, 0..2], 0..0);
 
         test_random_shape(vec![0..0], 0..0, rng);
@@ -503,6 +502,8 @@ mod test_interval {
 
     #[test]
     fn test_full_teardown() {
+        full_teardown_n(5, 2);
+        full_teardown_n(10, 3);
         full_teardown_n(259, 3);
         full_teardown_n(1598, 21);
         full_teardown_n(65918, 7347);

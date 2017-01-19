@@ -394,8 +394,8 @@ pub trait TreeBase<N: Node>: TreeReprAccess<N> {
         self.size -= 1;
         let p: *const N = self.data.get_unchecked(idx);
 
-        let item = ptr::read(&*p);
-        consume_unchecked(output, item.into_kv());
+        let node = ptr::read(&*p);
+        consume_unchecked(output, node.into_kv());
     }
 
     #[inline(always)]
@@ -487,6 +487,25 @@ pub fn righti(idx: usize) -> usize {
     (idx<<1) + 2
 }
 
+
+
+
+pub trait ItemFilter<K: Key> {
+    #[inline(always)] fn accept(&self, key: &K) -> bool;
+    #[inline(always)] fn is_noop() -> bool;
+}
+
+pub struct NoopFilter;
+
+impl<K: Key> ItemFilter<K> for NoopFilter {
+    #[inline(always)] fn accept(&self, key: &K) -> bool {
+        true
+    }
+
+    #[inline(always)] fn is_noop() -> bool {
+        true
+    }
+}
 
 
 
