@@ -491,14 +491,14 @@ pub fn righti(idx: usize) -> usize {
 
 
 pub trait ItemFilter<K: Key> {
-    #[inline(always)] fn accept(&self, key: &K) -> bool;
+    #[inline(always)] fn accept(&mut self, key: &K) -> bool;
     #[inline(always)] fn is_noop() -> bool;
 }
 
 pub struct NoopFilter;
 
 impl<K: Key> ItemFilter<K> for NoopFilter {
-    #[inline(always)] fn accept(&self, key: &K) -> bool {
+    #[inline(always)] fn accept(&mut self, key: &K) -> bool {
         true
     }
 

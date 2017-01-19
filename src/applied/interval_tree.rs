@@ -42,7 +42,7 @@ impl<Iv: Interval, V> IntervalTreeInternal<Iv, V> for IvTree<Iv, V> {
         if self.size() != 0 {
             output.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
-                this.filter_intersecting_ivl_rec(search, 0, false, &NoopFilter, output)
+                this.filter_intersecting_ivl_rec(search, 0, false, &mut NoopFilter, output)
             )
         }
     }
@@ -303,7 +303,7 @@ trait IntervalDeleteRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + In
 
 trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + IntervalDelete<Iv, V> {
     #[inline(never)]
-    fn filter_intersecting_ivl_rec<F>(&mut self, search: &Iv, idx: usize, min_included: bool, filter: &F, output: &mut Vec<(Iv, V)>)
+    fn filter_intersecting_ivl_rec<F>(&mut self, search: &Iv, idx: usize, min_included: bool, filter: &mut F, output: &mut Vec<(Iv, V)>)
         where F: ItemFilter<Iv>
     {
         let node = self.node_unsafe(idx);
@@ -384,7 +384,7 @@ trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + In
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_intersecting_ivl_left<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &F, output: &mut Vec<(Iv, V)>) -> bool
+    fn descend_filter_intersecting_ivl_left<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &mut F, output: &mut Vec<(Iv, V)>) -> bool
         where F: ItemFilter<Iv>
     {
         // this pinning business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
@@ -394,7 +394,7 @@ trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> + In
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_intersecting_ivl_right<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &F, output: &mut Vec<(Iv, V)>) -> bool
+    fn descend_filter_intersecting_ivl_right<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &mut F, output: &mut Vec<(Iv, V)>) -> bool
         where F: ItemFilter<Iv>
     {
         self.descend_right(idx, with_slot,

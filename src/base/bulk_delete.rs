@@ -61,7 +61,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeBase<N>+Sized  {
     }
 
     #[inline(never)]
-    fn consume_subtree_filtered<F>(&mut self, idx: usize, filter: &F, output: &mut Vec<(N::K, N::V)>)
+    fn consume_subtree_filtered<F>(&mut self, idx: usize, filter: &mut F, output: &mut Vec<(N::K, N::V)>)
         where F: ItemFilter<N::K>
     {
         if self.is_nil(idx) {
