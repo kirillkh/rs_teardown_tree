@@ -1,5 +1,5 @@
 use base::{Node, TreeBase, lefti, righti};
-use base::{SlotStack, Slot, Key, ItemFilter};
+use base::{SlotStack, ItemFilter};
 use base::drivers::consume_unchecked;
 
 

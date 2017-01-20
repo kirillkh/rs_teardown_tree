@@ -1,10 +1,14 @@
-use base::{Key, Node, TreeWrapper, TreeBase, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
+use base::{Key, Node, TreeRepr, TreeReprAccess, TreeWrapper, TreeBase, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
 use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
 
-type Tree<K, V> = TreeWrapper<PlNode<K,V>>;
+#[derive(Clone)]
+pub struct PlTree<K: Key, V> {
+    pub wrapper: TreeWrapper<PlNode<K, V>>
+}
 
 
 #[derive(Clone)]
@@ -47,23 +51,25 @@ impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
 }
 
 
-/// Entry points.
-pub trait PlainDeleteInternal<K: Key, V> {
-    /// Deletes the item with the given key from the tree and returns it (or None).
-    #[inline] fn delete(&mut self, search: &K) -> Option<V>;
+impl<K: Key, V> PlTree<K, V> {
+    /// Constructs a new PlTree
+    pub fn new(items: Vec<(K, V)>) -> PlTree<K, V> {
+        PlTree { wrapper: TreeWrapper::new(items) }
+    }
 
-    /// Deletes all items inside the half-open `range` from the tree and stores them in the output
-    /// Vec. The items are returned in order.
-    #[inline] fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>);
+    /// Constructs a new PlTree
+    /// Note: the argument must be sorted!
+    pub fn with_sorted(sorted: Vec<(K, V)>) -> PlTree<K, V> {
+        PlTree { wrapper: TreeWrapper::with_sorted(sorted) }
+    }
 
-    /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
-    #[inline] fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>);
-}
+    pub fn with_nodes(nodes: Vec<Option<PlNode<K, V>>>) -> PlTree<K, V> {
+        PlTree { wrapper: TreeWrapper::with_nodes(nodes) }
+    }
 
-impl<K: Key, V> PlainDeleteInternal<K, V> for TreeWrapper<PlNode<K,V>> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
-    fn delete(&mut self, search: &K) -> Option<V> {
+    pub fn delete(&mut self, search: &K) -> Option<V> {
         self.index_of(search).map(|idx| {
             self.delete_idx(idx)
         })
@@ -72,14 +78,14 @@ impl<K: Key, V> PlainDeleteInternal<K, V> for TreeWrapper<PlNode<K,V>> {
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output
     /// Vec. The items are returned in order.
     #[inline]
-    fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>) {
+    pub fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>) {
         output.reserve(self.size());
         self.delete_with_driver(&mut RangeDriver::new(range, output))
     }
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
     #[inline]
-    fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
+    pub fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
         output.reserve(self.size());
         self.delete_with_driver(&mut RangeRefDriver::new(range, output))
     }
@@ -304,7 +310,7 @@ trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>> {
 pub struct NoUpdate;
 
 impl<K: Key, V> ItemVisitor<PlNode<K, V>> for NoUpdate {
-    type Tree = Tree<K,V>;
+    type Tree = PlTree<K,V>;
 
     #[inline]
     fn visit<F>(tree: &mut Self::Tree, idx: usize, mut f: F)
@@ -313,9 +319,49 @@ impl<K: Key, V> ItemVisitor<PlNode<K, V>> for NoUpdate {
     }
 }
 
-impl<K: Key, V> BulkDeleteCommon<PlNode<K, V>> for Tree<K,V> {
+
+
+impl<K: Key, V> Deref for PlTree<K, V> {
+    type Target = TreeRepr<PlNode<K, V>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.wrapper
+    }
+}
+
+impl<K: Key, V> DerefMut for PlTree<K, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.wrapper
+    }
+}
+
+impl<K: Key, V> TreeReprAccess<PlNode<K, V>> for PlTree<K, V> {}
+
+impl<K: Key, V> TreeBase<PlNode<K, V>> for PlTree<K, V> {}
+
+
+
+impl<K: Key, V> BulkDeleteCommon<PlNode<K, V>> for PlTree<K,V> {
     type Visitor = NoUpdate;
 }
 
-impl<K: Key, V> PlainDelete<K, V> for Tree<K,V> {}
-impl<K: Key, V> PlainDeleteRange<K, V> for Tree<K,V> {}
+impl<K: Key, V> PlainDelete<K, V> for PlTree<K,V> {}
+impl<K: Key, V> PlainDeleteRange<K, V> for PlTree<K,V> {}
+
+impl<K: Key, V> TeardownTreeRefill for PlTree<K, V> {
+    fn refill(&mut self, master: &PlTree<K, V>) {
+        self.wrapper.refill(&master.wrapper);
+    }
+}
+
+impl<K: Key+Clone+Debug, V> Debug for PlTree<K, V> {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        Debug::fmt(&self.wrapper, fmt)
+    }
+}
+
+impl<K: Key+Clone+Debug, V> Display for PlTree<K, V> {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        Display::fmt(&self.wrapper, fmt)
+    }
+}

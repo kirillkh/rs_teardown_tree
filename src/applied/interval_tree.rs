@@ -1,23 +1,35 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeWrapper, TreeBase, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, NoopFilter, lefti, righti, parenti};
+use base::{TreeRepr, TreeReprAccess, TreeWrapper, TreeBase, TeardownTreeRefill, Key, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
+use std::ops::{Deref, DerefMut};
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
 
-type IvTree<Iv, V> = TreeWrapper<IvNode<Iv, V>>;
-
-/// Entry points.
-pub trait IntervalTreeInternal<Iv: Interval, V> {
-    #[inline] fn delete(&mut self, search: &Iv) -> Option<V>;
-    #[inline] fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>);
-    #[inline] fn filter_intersecting<F>(&mut self, search: &Iv, filter: &F, output: &mut Vec<(Iv, V)>)
-                    where F: ItemFilter<Iv>;
+#[derive(Clone)]
+pub struct IvTree<Iv: Interval, V> {
+    pub wrapper: TreeWrapper<IvNode<Iv, V>>,
 }
 
+impl<Iv: Interval, V> IvTree<Iv, V> {
+    /// Constructs a new IvTree
+    pub fn new(items: Vec<(Iv, V)>) -> IvTree<Iv, V> {
+        IvTree { wrapper: TreeWrapper::new(items) }
+    }
 
-impl<Iv: Interval, V> IntervalTreeInternal<Iv, V> for IvTree<Iv, V> {
+    /// Constructs a new IvTree
+    /// Note: the argument must be sorted!
+    pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IvTree<Iv, V> {
+        IvTree { wrapper: TreeWrapper::with_sorted(sorted) }
+    }
+
+    pub fn with_nodes(nodes: Vec<Option<IvNode<Iv, V>>>) -> IvTree<Iv, V> {
+        IvTree { wrapper: TreeWrapper::with_nodes(nodes) }
+    }
+
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
-    fn delete(&mut self, search: &Iv) -> Option<V> {
+    pub fn delete(&mut self, search: &Iv) -> Option<V> {
         self.index_of(search).map(|idx| {
             let kv = self.delete_idx(idx);
             self.update_ancestors_after_delete(idx, &kv.key.b());
@@ -26,7 +38,7 @@ impl<Iv: Interval, V> IntervalTreeInternal<Iv, V> for IvTree<Iv, V> {
     }
 
     #[inline]
-    fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
+    pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
         if self.size() != 0 {
             output.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
@@ -36,13 +48,13 @@ impl<Iv: Interval, V> IntervalTreeInternal<Iv, V> for IvTree<Iv, V> {
     }
 
     #[inline]
-    fn filter_intersecting<F>(&mut self, search: &Iv, filter: &F, output: &mut Vec<(Iv, V)>)
+    pub fn filter_intersecting<F>(&mut self, search: &Iv, filter: &mut F, output: &mut Vec<(Iv, V)>)
         where F: ItemFilter<Iv>
     {
         if self.size() != 0 {
             output.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
-                this.filter_intersecting_ivl_rec(search, 0, false, &mut NoopFilter, output)
+                this.filter_intersecting_ivl_rec(search, 0, false, filter, output)
             )
         }
     }
@@ -436,6 +448,25 @@ impl<Iv: Interval, V> ItemVisitor<IvNode<Iv, V>> for UpdateMax {
 }
 
 
+impl<Iv: Interval, V> Deref for IvTree<Iv, V> {
+    type Target = TreeRepr<IvNode<Iv, V>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.wrapper
+    }
+}
+
+impl<Iv: Interval, V> DerefMut for IvTree<Iv, V> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.wrapper
+    }
+}
+
+impl<Iv: Interval, V> TreeReprAccess<IvNode<Iv, V>> for IvTree<Iv, V> {}
+
+impl<Iv: Interval, V> TreeBase<IvNode<Iv, V>> for IvTree<Iv, V> {}
+
+
 impl<Iv: Interval, V> BulkDeleteCommon<IvNode<Iv, V>> for IvTree<Iv, V> {
     type Visitor = UpdateMax;
 }
@@ -444,3 +475,22 @@ impl<Iv: Interval, V> BulkDeleteCommon<IvNode<Iv, V>> for IvTree<Iv, V> {
 impl<Iv: Interval, V> IntervalDelete<Iv, V> for IvTree<Iv, V> {}
 impl<Iv: Interval, V> IntervalFilterRange<Iv, V> for IvTree<Iv, V> {}
 impl<Iv: Interval, V> IntervalDeleteRange<Iv, V> for IvTree<Iv, V> {}
+
+impl<Iv: Interval, V> TeardownTreeRefill for IvTree<Iv, V> {
+    fn refill(&mut self, master: &IvTree<Iv, V>) {
+        self.wrapper.refill(&master.wrapper);
+    }
+}
+
+
+impl<Iv: Interval, V> Debug for IvTree<Iv, V> where Iv::K: Debug {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        Debug::fmt(&self.wrapper, fmt)
+    }
+}
+
+impl<Iv: Interval, V> Display for IvTree<Iv, V> where Iv::K: Debug {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        Display::fmt(&self.wrapper, fmt)
+    }
+}

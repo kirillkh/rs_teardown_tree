@@ -23,14 +23,14 @@ pub use self::base::util;
 
 #[cfg(test)]
 mod test_plain {
-    use base::{TreeBase, TreeWrapper, Node, lefti, righti};
+    use base::{TreeBase, Node, lefti, righti};
     use base::validation::{check_bst, check_integrity};
-    use applied::plain_tree::{PlainDeleteInternal, PlNode};
-    use external_api::{TeardownTreeSet, PlainTreeWrapperAccess};
+    use applied::plain_tree::{PlTree, PlNode};
+    use external_api::{TeardownTreeSet, TreeWrapperAccess};
     use std::cmp;
 
     type Nd = PlNode<usize, ()>;
-    type Tree = TreeWrapper<Nd>;
+    type Tree = PlTree<usize, ()>;
 
 
     #[test]
@@ -260,8 +260,8 @@ mod test_plain {
         assert_eq!(output, &expected_range.collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
 
-        check_bst(&tree_mod, &output, tree_orig, 0);
-        check_integrity(&tree_mod, &tree_orig);
+        check_bst(&tree_mod.wrapper, &output, &tree_orig.wrapper, 0);
+        check_integrity(&tree_mod.wrapper, &tree_orig.wrapper);
     }
 
 
@@ -288,8 +288,8 @@ mod test_plain {
         let mut output = Vec::with_capacity(tree.size());
         tree.delete_range(rm.start .. rm.end, &mut output);
 
-        check_bst(&tree, &output, &orig, 0);
-        check_integrity(&tree, &orig);
+        check_bst(&tree.wrapper, &output, &orig.wrapper, 0);
+        check_integrity(&tree.wrapper, &orig.wrapper);
 
         true
     }
@@ -305,14 +305,15 @@ mod test_interval {
     use rand::{XorShiftRng, SeedableRng};
     use std::cmp;
 
-    use base::{TreeWrapper, Node, TreeBase, parenti, lefti, righti};
+    use base::{Node, TreeBase, parenti, lefti, righti};
     use base::validation::{check_bst, check_integrity, gen_tree_keys};
     use base::util::make_teardown_seq;
     use applied::interval::{Interval, IvNode, KeyInterval};
-    use external_api::{IntervalTeardownTreeSet, IntervalTreeWrapperAccess};
+    use applied::interval_tree::{IvTree};
+    use external_api::{IntervalTeardownTreeSet, TreeWrapperAccess};
 
     type Iv = KeyInterval<usize>;
-    type IvTree = TreeWrapper<IvNode<Iv, ()>>;
+    type Tree = IvTree<Iv, ()>;
 
 
     //---- quickcheck ------------------------------------------------------------------------------
@@ -356,7 +357,7 @@ mod test_interval {
             )
             .collect::<Vec<_>>();
 
-        let mut internal = IvTree::with_nodes(nodes);
+        let mut internal = Tree::with_nodes(nodes);
         if internal.size() > 0 {
             init_maxb(&mut internal, 0);
         }
@@ -367,7 +368,7 @@ mod test_interval {
     }
 
 
-    fn gen_tree(items: Vec<Iv>, rng: &mut XorShiftRng) -> IvTree {
+    fn gen_tree(items: Vec<Iv>, rng: &mut XorShiftRng) -> Tree {
         let items: Vec<Option<Iv>> = gen_tree_keys(items, rng);
         let mut nodes = items.into_iter()
             .map(|opt| opt.map(|k| IvNode::new(k.clone(), ())))
@@ -382,7 +383,7 @@ mod test_interval {
             let parent = nodes[parenti(i)].as_mut().unwrap();
             parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
         }
-        IvTree::with_nodes(nodes)
+        Tree::with_nodes(nodes)
     }
 
     fn check_tree(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: Iv, output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>> {
@@ -390,9 +391,9 @@ mod test_interval {
         tree.delete_intersecting(&rm, output);
 
         {
-            let (tree, orig): (&mut IvTree, &mut IvTree) = (tree.internal(), orig.internal());
-            check_bst(&tree, &output, &orig, 0);
-            check_integrity(&tree, &orig);
+            let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
+            check_bst(&tree.wrapper, &output, &orig.wrapper, 0);
+            check_integrity(&tree.wrapper, &orig.wrapper);
             check_output_intersects(&rm, &output);
             check_tree_doesnt_intersect(&rm, tree);
 
@@ -414,20 +415,20 @@ mod test_interval {
         }
     }
 
-    fn check_tree_doesnt_intersect(search: &Iv, tree: &mut IvTree) {
-        tree.traverse_inorder(0, &mut (), |this: &mut IvTree, _, idx| {
+    fn check_tree_doesnt_intersect(search: &Iv, tree: &mut Tree) {
+        tree.traverse_inorder(0, &mut (), |this: &mut Tree, _, idx| {
             assert!(!this.key(idx).intersects(search), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
             false
         });
     }
 
-    fn check_output_sorted(output: &Vec<Iv>, orig: &mut IvTree, rm: &Iv) {
+    fn check_output_sorted(output: &Vec<Iv>, orig: &mut Tree, rm: &Iv) {
         for i in 1..output.len() {
             assert!(output[i-1] <= output[i], "output={:?}, rm={:?}, orig={:?}, {}", output, rm, orig, orig);
         }
     }
 
-    fn init_maxb(tree: &mut IvTree, idx: usize) -> usize {
+    fn init_maxb(tree: &mut Tree, idx: usize) -> usize {
         assert!(!tree.is_nil(idx));
 
         let mut maxb = *tree.node(idx).key.b();
@@ -442,7 +443,7 @@ mod test_interval {
         maxb
     }
 
-    fn check_maxb(orig: &IvTree, tree: &IvTree, idx: usize) -> usize {
+    fn check_maxb(orig: &Tree, tree: &Tree, idx: usize) -> usize {
         assert!(!tree.is_nil(idx));
 
         let mut expected_maxb = *tree.node(idx).key.b();

@@ -785,7 +785,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.filter_intersecting(&KeyInterval::new(range.start, range.end), &NoopFilter, output);
+            self.0.filter_intersecting(&KeyInterval::new(range.start, range.end), &mut NoopFilter, output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {

@@ -1,37 +1,25 @@
 use std::mem;
 
-use applied::interval::{IvNode};
-use applied::plain_tree::PlNode;
-use base::{Key, TreeWrapper};
+pub use applied::interval::{Interval, KeyInterval};
 
 pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
 pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
-pub use applied::interval::{Interval, KeyInterval};
 pub use base::TeardownTreeRefill;
 
 
+pub trait TreeWrapperAccess {
+    type Wrapper;
 
-pub trait PlainTreeWrapperAccess<K: Key, V> {
-    fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,V>>;
-
-    fn into_internal(self) -> TreeWrapper<PlNode<K, V>>;
-
-    fn from_internal(wrapper: TreeWrapper<PlNode<K, V>>) -> Self;
+    fn internal(&mut self) -> &mut Self::Wrapper;
+    fn into_internal(self) -> Self::Wrapper;
+    fn from_internal(wrapper: Self::Wrapper) -> Self;
 }
 
-
-pub trait IntervalTreeWrapperAccess<Iv: Interval, V> {
-    fn internal(&mut self) -> &mut TreeWrapper<IvNode<Iv, V>>;
-
-    fn into_internal(self) -> TreeWrapper<IvNode<Iv, V>>;
-
-    fn from_internal(wrapper: TreeWrapper<IvNode<Iv, V>>) -> Self;
-}
 
 
 mod plain {
-    use base::{TreeWrapper, TreeBase, TeardownTreeRefill};
-    use applied::plain_tree::{PlainDeleteInternal, PlNode};
+    use base::{TreeWrapper, TreeBase, TeardownTreeRefill, Key};
+    use applied::plain_tree::{PlTree};
 
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
@@ -41,7 +29,7 @@ mod plain {
 
     #[derive(Clone)]
     pub struct TeardownTreeMap<K: Ord+Clone, V> {
-        internal: TreeWrapper<PlNode<K,V>>
+        internal: PlTree<K,V>
     }
 
     impl<K: Ord+Clone, V> TeardownTreeMap<K, V> {
@@ -53,7 +41,7 @@ mod plain {
         /// Creates a new TeardownTree with the given set of items.
         /// **Note**: the items are assumed to be sorted!
         pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
-            TeardownTreeMap { internal: TreeWrapper::with_sorted(sorted) }
+            TeardownTreeMap { internal: PlTree { wrapper: TreeWrapper::with_sorted(sorted) } }
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -100,16 +88,18 @@ mod plain {
     }
 
 
-    impl<K: Ord+Clone, V> super::PlainTreeWrapperAccess<K, V> for TeardownTreeMap<K, V> {
-        fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,V>> {
+    impl<K: Key, V> super::TreeWrapperAccess for TeardownTreeMap<K, V> {
+        type Wrapper = PlTree<K,V>;
+
+        fn internal(&mut self) -> &mut PlTree<K,V> {
             &mut self.internal
         }
 
-        fn into_internal(self) -> TreeWrapper<PlNode<K, V>> {
+        fn into_internal(self) -> PlTree<K, V> {
             self.internal
         }
 
-        fn from_internal(wrapper: TreeWrapper<PlNode<K, V>>) -> Self {
+        fn from_internal(wrapper: PlTree<K, V>) -> Self {
             TeardownTreeMap { internal: wrapper }
         }
     }
@@ -166,16 +156,18 @@ mod plain {
         }
     }
 
-    impl<K: Ord+Clone> super::PlainTreeWrapperAccess<K, ()> for TeardownTreeSet<K> {
-        fn internal(&mut self) -> &mut TreeWrapper<PlNode<K,()>> {
+    impl<K: Key> super::TreeWrapperAccess for TeardownTreeSet<K> {
+        type Wrapper = PlTree<K, ()>;
+
+        fn internal(&mut self) -> &mut PlTree<K,()> {
             &mut self.map.internal
         }
 
-        fn into_internal(self) -> TreeWrapper<PlNode<K, ()>> {
+        fn into_internal(self) -> PlTree<K, ()> {
             self.map.internal
         }
 
-        fn from_internal(wrapper: TreeWrapper<PlNode<K, ()>>) -> Self {
+        fn from_internal(wrapper: PlTree<K, ()>) -> Self {
             TeardownTreeSet { map: TeardownTreeMap { internal: wrapper } }
         }
     }
@@ -196,12 +188,12 @@ mod interval {
 
     use base::{TreeWrapper, TreeBase, TeardownTreeRefill, ItemFilter, parenti};
 
-    use applied::interval::{Interval, IvNode};
-    use applied::interval_tree::IntervalTreeInternal;
+    use applied::interval::{Interval};
+    use applied::interval_tree::{IvTree};
 
     #[derive(Clone)]
     pub struct IntervalTeardownTreeMap<Iv: Interval, V> {
-        internal: TreeWrapper<IvNode<Iv, V>>
+        internal: IvTree<Iv, V>
     }
 
     impl<Iv: Interval, V> IntervalTeardownTreeMap<Iv, V> {
@@ -213,7 +205,7 @@ mod interval {
         /// Creates a new `IntervalTeardownTree` with the given set of intervals.
         /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
-            let mut tree = IntervalTeardownTreeMap { internal: TreeWrapper::with_sorted(sorted) };
+            let mut tree = IntervalTeardownTreeMap { internal: IvTree { wrapper: TreeWrapper::with_sorted(sorted) } };
             {
                 let internal = &mut tree.internal;
 
@@ -246,7 +238,7 @@ mod interval {
 
         /// Deletes all intervals intersecting with the `search` interval that match the filter from
         /// the tree and stores the associated items in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: &F, output: &mut Vec<Iv>)
+        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: &mut F, output: &mut Vec<Iv>)
             where F: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };
@@ -265,16 +257,18 @@ mod interval {
     }
 
 
-    impl<Iv: Interval, V> super::IntervalTreeWrapperAccess<Iv, V> for IntervalTeardownTreeMap<Iv, V> {
-        fn internal(&mut self) -> &mut TreeWrapper<IvNode<Iv, V>> {
+    impl<Iv: Interval, V> super::TreeWrapperAccess for IntervalTeardownTreeMap<Iv, V> {
+        type Wrapper = IvTree<Iv,V>;
+
+        fn internal(&mut self) -> &mut IvTree<Iv, V> {
             &mut self.internal
         }
 
-        fn into_internal(self) -> TreeWrapper<IvNode<Iv, V>> {
+        fn into_internal(self) -> IvTree<Iv, V> {
             self.internal
         }
 
-        fn from_internal(wrapper: TreeWrapper<IvNode<Iv, V>>) -> Self {
+        fn from_internal(wrapper: IvTree<Iv, V>) -> Self {
             IntervalTeardownTreeMap { internal: wrapper }
         }
     }
@@ -318,7 +312,7 @@ mod interval {
 
         /// Deletes all intervals intersecting with the `search` interval that match the filter from
         /// the tree and stores them in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: &F, output: &mut Vec<Iv>)
+        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: &mut F, output: &mut Vec<Iv>)
             where F: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };
@@ -335,16 +329,18 @@ mod interval {
         pub fn clear(&mut self) { self.map.clear(); }
     }
 
-    impl<Iv: Interval> super::IntervalTreeWrapperAccess<Iv, ()> for IntervalTeardownTreeSet<Iv> {
-        fn internal(&mut self) -> &mut TreeWrapper<IvNode<Iv, ()>> {
+    impl<Iv: Interval> super::TreeWrapperAccess for IntervalTeardownTreeSet<Iv> {
+        type Wrapper = IvTree<Iv, ()>;
+
+        fn internal(&mut self) -> &mut IvTree<Iv, ()> {
             &mut self.map.internal
         }
 
-        fn into_internal(self) -> TreeWrapper<IvNode<Iv, ()>> {
+        fn into_internal(self) -> IvTree<Iv, ()> {
             self.map.internal
         }
 
-        fn from_internal(wrapper: TreeWrapper<IvNode<Iv, ()>>) -> Self {
+        fn from_internal(wrapper: IvTree<Iv, ()>) -> Self {
             IntervalTeardownTreeSet { map: IntervalTeardownTreeMap { internal: wrapper } }
         }
     }
