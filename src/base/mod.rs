@@ -469,7 +469,7 @@ pub trait TreeBase<N: Node>: TreeReprAccess<N> {
 }
 
 
-impl<N: Node> TreeBase<N> for TreeWrapper<N> {}
+impl<N: Node, T> TreeBase<N> for T where T: TreeReprAccess<N> {}
 
 
 #[inline(always)]

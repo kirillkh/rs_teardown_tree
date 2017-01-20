@@ -13,6 +13,7 @@ pub trait Key: Ord+Clone {}
 impl<T: Ord+Clone> Key for T {}
 
 pub trait TreeReprAccess<N: Node>: Deref<Target=TreeRepr<N>> + DerefMut {}
+impl<N: Node, T> TreeReprAccess<N> for T where T: Deref<Target=TreeRepr<N>> + DerefMut {}
 
 #[derive(Clone)]
 pub struct TreeRepr<N: Node> {
@@ -148,8 +149,6 @@ impl<N: Node> DerefMut for TreeWrapper<N> {
         &mut self.repr
     }
 }
-
-impl<N: Node> TreeReprAccess<N> for TreeWrapper<N> {}
 
 impl<N: Node> Drop for TreeWrapper<N> {
     fn drop(&mut self) {

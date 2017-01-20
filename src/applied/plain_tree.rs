@@ -1,4 +1,4 @@
-use base::{Key, Node, TreeRepr, TreeReprAccess, TreeWrapper, TreeBase, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
+use base::{Key, Node, TreeRepr, TreeWrapper, TreeBase, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
 use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
@@ -334,11 +334,6 @@ impl<K: Key, V> DerefMut for PlTree<K, V> {
         &mut self.wrapper
     }
 }
-
-impl<K: Key, V> TreeReprAccess<PlNode<K, V>> for PlTree<K, V> {}
-
-impl<K: Key, V> TreeBase<PlNode<K, V>> for PlTree<K, V> {}
-
 
 
 impl<K: Key, V> BulkDeleteCommon<PlNode<K, V>> for PlTree<K,V> {

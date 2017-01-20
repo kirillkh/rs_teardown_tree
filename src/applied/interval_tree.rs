@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, TreeReprAccess, TreeWrapper, TreeBase, TeardownTreeRefill, Key, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
+use base::{TreeRepr, TreeWrapper, TreeBase, TeardownTreeRefill, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
 use std::ops::{Deref, DerefMut};
@@ -461,10 +461,6 @@ impl<Iv: Interval, V> DerefMut for IvTree<Iv, V> {
         &mut self.wrapper
     }
 }
-
-impl<Iv: Interval, V> TreeReprAccess<IvNode<Iv, V>> for IvTree<Iv, V> {}
-
-impl<Iv: Interval, V> TreeBase<IvNode<Iv, V>> for IvTree<Iv, V> {}
 
 
 impl<Iv: Interval, V> BulkDeleteCommon<IvNode<Iv, V>> for IvTree<Iv, V> {
