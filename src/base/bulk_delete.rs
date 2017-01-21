@@ -39,16 +39,16 @@ pub trait BulkDeleteCommon<N: Node>: TreeBase<N>+Sized  {
     type Visitor: ItemVisitor<N, Tree=Self>;
 
     //---- consume_subtree_* ---------------------------------------------------------------
-//    #[inline]
-//    fn consume_subtree<F>(&mut self, idx: usize, filter: &F, output: &mut Vec<(N::K, N::V)>)
-//        where F: ItemFilter<N::K>
-//    {
-//        if F::is_noop() {
-//            self.consume_subtree_unfiltered(idx, output);
-//        } else {
-//            self.consume_subtree_filtered(idx, filter, output);
-//        }
-//    }
+    #[inline]
+    fn consume_subtree<F>(&mut self, idx: usize, filter: &mut F, output: &mut Vec<(N::K, N::V)>)
+        where F: ItemFilter<N::K>
+    {
+        if F::is_noop() {
+            self.consume_subtree_unfiltered(idx, output);
+        } else {
+            self.consume_subtree_filtered(idx, filter, output);
+        }
+    }
 
     #[inline]
     fn consume_subtree_unfiltered(&mut self, root: usize, output: &mut Vec<(N::K, N::V)>) {

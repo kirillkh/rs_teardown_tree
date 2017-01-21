@@ -81,14 +81,14 @@ mod plain {
         }
     }
 
-    impl<K: Ord+Clone+Copy, V> TeardownTreeRefill for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone+Copy, V: Copy> TeardownTreeRefill for TeardownTreeMap<K, V> {
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
         }
     }
 
 
-    impl<K: Key, V> super::TreeWrapperAccess for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone, V> super::TreeWrapperAccess for TeardownTreeMap<K, V> {
         type Wrapper = PlTree<K,V>;
 
         fn internal(&mut self) -> &mut PlTree<K,V> {
@@ -186,7 +186,7 @@ mod interval {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
-    use base::{TreeWrapper, TreeBase, TeardownTreeRefill, ItemFilter, parenti};
+    use base::{TreeBase, TeardownTreeRefill, ItemFilter, parenti};
 
     use applied::interval::{Interval};
     use applied::interval_tree::{IvTree};
@@ -205,7 +205,7 @@ mod interval {
         /// Creates a new `IntervalTeardownTree` with the given set of intervals.
         /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
-            let mut tree = IntervalTeardownTreeMap { internal: IvTree { wrapper: TreeWrapper::with_sorted(sorted) } };
+            let mut tree = IntervalTeardownTreeMap { internal: IvTree::with_sorted(sorted) };
             {
                 let internal = &mut tree.internal;
 
@@ -238,7 +238,7 @@ mod interval {
 
         /// Deletes all intervals intersecting with the `search` interval that match the filter from
         /// the tree and stores the associated items in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: &mut F, output: &mut Vec<Iv>)
+        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: F, output: &mut Vec<Iv>)
             where F: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };
@@ -273,7 +273,7 @@ mod interval {
         }
     }
 
-    impl<Iv: Interval+Copy, V> TeardownTreeRefill for IntervalTeardownTreeMap<Iv, V> {
+    impl<Iv: Interval+Copy, V: Copy> TeardownTreeRefill for IntervalTeardownTreeMap<Iv, V> {
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
         }
@@ -312,7 +312,7 @@ mod interval {
 
         /// Deletes all intervals intersecting with the `search` interval that match the filter from
         /// the tree and stores them in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: &mut F, output: &mut Vec<Iv>)
+        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: F, output: &mut Vec<Iv>)
             where F: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };

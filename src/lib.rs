@@ -392,8 +392,8 @@ mod test_interval {
 
         {
             let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
-            check_bst(&tree.wrapper, &output, &orig.wrapper, 0);
-            check_integrity(&tree.wrapper, &orig.wrapper);
+            check_bst(tree.wrapper(), &output, orig.wrapper(), 0);
+            check_integrity(tree.wrapper(), orig.wrapper());
             check_output_intersects(&rm, &output);
             check_tree_doesnt_intersect(&rm, tree);
 

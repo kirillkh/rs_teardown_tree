@@ -343,7 +343,7 @@ impl<K: Key, V> BulkDeleteCommon<PlNode<K, V>> for PlTree<K,V> {
 impl<K: Key, V> PlainDelete<K, V> for PlTree<K,V> {}
 impl<K: Key, V> PlainDeleteRange<K, V> for PlTree<K,V> {}
 
-impl<K: Key, V> TeardownTreeRefill for PlTree<K, V> {
+impl<K: Key, V> TeardownTreeRefill for PlTree<K, V> where K: Copy, V: Copy {
     fn refill(&mut self, master: &PlTree<K, V>) {
         self.wrapper.refill(&master.wrapper);
     }

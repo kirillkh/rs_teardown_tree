@@ -25,8 +25,8 @@ pub trait TeardownTreeRefill {
 
 
 
-impl<N: Node> TeardownTreeRefill for TreeWrapper<N> {
-    fn refill(&mut self, master: &TreeWrapper<N>) {
+impl<N: Node> TeardownTreeRefill for TreeRepr<N> where N::K: Copy, N::V: Copy {
+    fn refill(&mut self, master: &TreeRepr<N>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
         unsafe {

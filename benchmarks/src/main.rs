@@ -25,6 +25,34 @@ fn nanos(d: Duration) -> u64 {
 
 fn main() {
 //    set_affinity();
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(100, 100,    4500000);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000, 100,    350000);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000, 100,    35000);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(100000, 100,    2200);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000000, 100,    200);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000000, 100,    16);
+
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000, 1000,  350000);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000, 1000,  40000);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(100000, 1000,  4000);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000000, 1000,  350);
+    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000000, 1000,  25);
+
+
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(100, 100,    4500000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 100,    350000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 100,    35000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 100,    2200);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 100,    200);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 100,    16);
+
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 1000,  350000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 1000,  40000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 1000,  4000);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 1000,  350);
+    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 1000,  25);
+
+
     bench_refill_teardown_cycle::<TreeBulk>(100, 100,    4500000);
     bench_refill_teardown_cycle::<TreeBulk>(1000, 100,    700000);
     bench_refill_teardown_cycle::<TreeBulk>(10000, 100,    70000);
@@ -51,20 +79,6 @@ fn main() {
     bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 1000,  4000);
     bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 1000,  350);
     bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 1000,  25);
-
-
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(100, 100,    4500000);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000, 100,    350000);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000, 100,    35000);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(100000, 100,    2200);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000000, 100,    200);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000000, 100,    16);
-
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000, 1000,  350000);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000, 1000,  40000);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(100000, 1000,  4000);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(1000000, 1000,  350);
-    bench_refill_teardown_cycle::<FilteredIntervalTreeBulk>(10000000, 1000,  25);
 
 
     bench_refill_teardown_cycle::<TreapMaster>(100, 100, 300000);
@@ -785,7 +799,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.filter_intersecting(&KeyInterval::new(range.start, range.end), &mut NoopFilter, output);
+            self.0.filter_intersecting(&KeyInterval::new(range.start, range.end), NoopFilter, output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {

@@ -159,7 +159,6 @@ impl<N: Node> Drop for TreeWrapper<N> {
     }
 }
 
-
 impl<N: Node> Debug for TreeWrapper<N> where N: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         let mut nz: Vec<_> = self.mask.iter().enumerate()
