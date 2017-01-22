@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, TreeWrapper, TreeBase, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
+use base::{TreeRepr, Traverse, TreeBase, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
 use std::ops::{Deref, DerefMut};
@@ -9,23 +9,23 @@ use std::marker::PhantomData;
 
 #[derive(Clone)]
 pub struct IvTree<Iv: Interval, V> {
-    pub wrapper: Option<TreeWrapper<IvNode<Iv, V>>>,
+    pub repr: Option<TreeRepr<IvNode<Iv, V>>>,
 }
 
 impl<Iv: Interval, V> IvTree<Iv, V> {
     /// Constructs a new IvTree
     pub fn new(items: Vec<(Iv, V)>) -> IvTree<Iv, V> {
-        IvTree { wrapper: Some(TreeWrapper::new(items)) }
+        IvTree { repr: Some(TreeRepr::new(items)) }
     }
 
     /// Constructs a new IvTree
     /// Note: the argument must be sorted!
     pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IvTree<Iv, V> {
-        IvTree { wrapper: Some(TreeWrapper::with_sorted(sorted)) }
+        IvTree { repr: Some(TreeRepr::with_sorted(sorted)) }
     }
 
     pub fn with_nodes(nodes: Vec<Option<IvNode<Iv, V>>>) -> IvTree<Iv, V> {
-        IvTree { wrapper: Some(TreeWrapper::with_nodes(nodes)) }
+        IvTree { repr: Some(TreeRepr::with_nodes(nodes)) }
     }
 
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -43,27 +43,19 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     pub fn filter_intersecting<Flt>(&mut self, search: &Iv, filter: Flt, output: &mut Vec<(Iv, V)>)
         where Flt: ItemFilter<Iv>
     {
-        self.work(filter, |tree: &mut IvWorker<Iv,V,Flt>| tree.filter_intersecting(search, output))
+        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_intersecting(search, output))
     }
 
-
-    pub fn wrapper(&self) -> &TreeWrapper<IvNode<Iv, V>> {
-        self.wrapper.as_ref().unwrap()
-    }
-
-    pub fn wrapper_mut(&mut self) -> &mut TreeWrapper<IvNode<Iv, V>> {
-        self.wrapper.as_mut().unwrap()
-    }
 
     fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<Iv>,
                                                                     F: FnMut(&mut IvWorker<Iv,V,Flt>) -> R
     {
-        let wrapper = self.wrapper.take().unwrap();
+        let repr = self.repr.take().unwrap();
 
-        let mut filter_tree = IvWorker::new(wrapper, filter);
+        let mut filter_tree = IvWorker::new(repr, filter);
         let result = f(&mut filter_tree);
 
-        self.wrapper = Some(filter_tree.wrapper);
+        self.repr = Some(filter_tree.repr);
         result
     }
 }
@@ -332,40 +324,40 @@ impl<Iv: Interval, V> Deref for IvTree<Iv, V> {
     type Target = TreeRepr<IvNode<Iv, V>>;
 
     fn deref(&self) -> &Self::Target {
-        self.wrapper()
+        self.repr.as_ref().unwrap()
     }
 }
 
 impl<Iv: Interval, V> DerefMut for IvTree<Iv, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.wrapper_mut()
+        self.repr.as_mut().unwrap()
     }
 }
 
 
 impl<Iv: Interval, V> Debug for IvTree<Iv, V> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Debug::fmt(self.wrapper(), fmt)
+        Debug::fmt(self.repr(), fmt)
     }
 }
 
 impl<Iv: Interval, V> Display for IvTree<Iv, V> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Display::fmt(self.wrapper(), fmt)
+        Display::fmt(self.repr(), fmt)
     }
 }
 
 
 
 pub struct IvWorker<Iv: Interval, V, Flt> where Flt: ItemFilter<Iv> {
-    wrapper: TreeWrapper<IvNode<Iv, V>>,
+    repr: TreeRepr<IvNode<Iv, V>>,
     filter: Flt
 }
 
 impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     /// Constructs a new FilterTree
-    pub fn new(wrapper: TreeWrapper<IvNode<Iv, V>>, filter: Flt) -> Self {
-        IvWorker { wrapper:wrapper, filter:filter }
+    pub fn new(repr: TreeRepr<IvNode<Iv, V>>, filter: Flt) -> Self {
+        IvWorker { repr:repr, filter:filter }
     }
 
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -429,7 +421,6 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             let mut removed = consumed.is_some();
             if removed {
                 if min_included {
-//                    self.consume_subtree(lefti(idx), &mut self.filter, output)
                     // TODO
                     let f: &mut Flt = unsafe { mem::transmute(&mut self.filter)};
                     self.consume_subtree(lefti(idx), f, output)
@@ -451,7 +442,6 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             if right_min_included {
                 let right_max_included = &node.maxb < search.b();
                 if right_max_included {
-//                    self.consume_subtree(righti(idx), &mut self.filter, output);
                     // TODO
                     let f: &mut Flt = unsafe { mem::transmute(&mut self.filter)};
                     self.consume_subtree(righti(idx), f, output);
@@ -496,16 +486,25 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Deref for IvWorker<Iv, V, Flt> {
     type Target = TreeRepr<IvNode<Iv, V>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.wrapper
+        &self.repr
     }
 }
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> DerefMut for IvWorker<Iv, V, Flt> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.wrapper
+        &mut self.repr
     }
 }
 
+impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Traverse<IvNode<Iv, V>> for IvWorker<Iv, V, Flt> {
+    #[inline(always)] fn repr(&self) -> &TreeRepr<IvNode<Iv, V>> {
+        self.deref()
+    }
+
+    #[inline(always)] fn repr_mut(&mut self) -> &mut TreeRepr<IvNode<Iv, V>> {
+        self.deref_mut()
+    }
+}
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> BulkDeleteCommon<IvNode<Iv, V>> for IvWorker<Iv, V, Flt> {
     type Visitor = UpdateMax<Iv, Flt>;
@@ -517,7 +516,7 @@ impl<Iv: Interval, V, F: ItemFilter<Iv>> IntervalFilterRange<Iv, V> for IvWorker
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> TeardownTreeRefill for IvWorker<Iv, V, Flt> where Iv: Copy, V: Copy {
     fn refill(&mut self, master: &IvWorker<Iv, V, Flt>) {
-        self.wrapper.refill(&master.wrapper);
+        self.repr.refill(&master.repr);
     }
 }
 

@@ -4,10 +4,10 @@ mod benches {
 
     use self::test::Bencher;
 
-    use base::{TreeWrapper, TreeBase, TeardownTreeRefill};
+    use base::{TreeRepr, TreeBase, TeardownTreeRefill};
     use applied::plain_tree::PlainDeleteInternal;
 
-    type Tree = TreeWrapper<usize>;
+    type Tree = TreeRepr<usize>;
 
     #[bench]
     fn bench_delete_range_00100(bencher: &mut Bencher) {

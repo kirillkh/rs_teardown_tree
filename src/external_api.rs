@@ -18,7 +18,7 @@ pub trait TreeWrapperAccess {
 
 
 mod plain {
-    use base::{TreeWrapper, TreeBase, TeardownTreeRefill, Key};
+    use base::{TreeRepr, TeardownTreeRefill, Key};
     use applied::plain_tree::{PlTree};
 
     use std::fmt;
@@ -41,7 +41,7 @@ mod plain {
         /// Creates a new TeardownTree with the given set of items.
         /// **Note**: the items are assumed to be sorted!
         pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
-            TeardownTreeMap { internal: PlTree { wrapper: TreeWrapper::with_sorted(sorted) } }
+            TeardownTreeMap { internal: PlTree { repr: TreeRepr::with_sorted(sorted) } }
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -186,7 +186,7 @@ mod interval {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
-    use base::{TreeBase, TeardownTreeRefill, ItemFilter, parenti};
+    use base::{TeardownTreeRefill, ItemFilter, parenti};
 
     use applied::interval::{Interval};
     use applied::interval_tree::{IvTree};
@@ -238,8 +238,8 @@ mod interval {
 
         /// Deletes all intervals intersecting with the `search` interval that match the filter from
         /// the tree and stores the associated items in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: F, output: &mut Vec<Iv>)
-            where F: ItemFilter<Iv>
+        pub fn filter_intersecting<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
+            where Flt: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };
             self.internal.filter_intersecting(search, f, map_output)
@@ -312,8 +312,8 @@ mod interval {
 
         /// Deletes all intervals intersecting with the `search` interval that match the filter from
         /// the tree and stores them in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<F>(&mut self, search: &Iv, f: F, output: &mut Vec<Iv>)
-            where F: ItemFilter<Iv>
+        pub fn filter_intersecting<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
+            where Flt: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };
             self.map.filter_intersecting(search, f, map_output)

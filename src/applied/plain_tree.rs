@@ -1,5 +1,5 @@
-use base::{Key, Node, TreeRepr, TreeWrapper, TreeBase, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
-use base::{TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
+use base::{Key, Node, TreeRepr, TreeBase, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
+use base::{Traverse, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
 use std::fmt;
@@ -7,7 +7,7 @@ use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Clone)]
 pub struct PlTree<K: Key, V> {
-    pub wrapper: TreeWrapper<PlNode<K, V>>
+    pub repr: TreeRepr<PlNode<K, V>>
 }
 
 
@@ -54,17 +54,17 @@ impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
 impl<K: Key, V> PlTree<K, V> {
     /// Constructs a new PlTree
     pub fn new(items: Vec<(K, V)>) -> PlTree<K, V> {
-        PlTree { wrapper: TreeWrapper::new(items) }
+        PlTree { repr: TreeRepr::new(items) }
     }
 
     /// Constructs a new PlTree
     /// Note: the argument must be sorted!
     pub fn with_sorted(sorted: Vec<(K, V)>) -> PlTree<K, V> {
-        PlTree { wrapper: TreeWrapper::with_sorted(sorted) }
+        PlTree { repr: TreeRepr::with_sorted(sorted) }
     }
 
     pub fn with_nodes(nodes: Vec<Option<PlNode<K, V>>>) -> PlTree<K, V> {
-        PlTree { wrapper: TreeWrapper::with_nodes(nodes) }
+        PlTree { repr: TreeRepr::with_nodes(nodes) }
     }
 
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -325,13 +325,24 @@ impl<K: Key, V> Deref for PlTree<K, V> {
     type Target = TreeRepr<PlNode<K, V>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.wrapper
+        &self.repr
     }
 }
 
 impl<K: Key, V> DerefMut for PlTree<K, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.wrapper
+        &mut self.repr
+    }
+}
+
+
+impl<K: Key, V> Traverse<PlNode<K, V>> for PlTree<K, V> {
+    #[inline(always)] fn repr(&self) -> &TreeRepr<PlNode<K, V>> {
+        self.deref()
+    }
+
+    #[inline(always)] fn repr_mut(&mut self) -> &mut TreeRepr<PlNode<K, V>> {
+        self.deref_mut()
     }
 }
 
@@ -344,19 +355,19 @@ impl<K: Key, V> PlainDelete<K, V> for PlTree<K,V> {}
 impl<K: Key, V> PlainDeleteRange<K, V> for PlTree<K,V> {}
 
 impl<K: Key, V> TeardownTreeRefill for PlTree<K, V> where K: Copy, V: Copy {
-    fn refill(&mut self, master: &PlTree<K, V>) {
-        self.wrapper.refill(&master.wrapper);
+    #[inline] fn refill(&mut self, master: &PlTree<K, V>) {
+        self.repr.refill(&master.repr);
     }
 }
 
 impl<K: Key+Clone+Debug, V> Debug for PlTree<K, V> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Debug::fmt(&self.wrapper, fmt)
+        Debug::fmt(&self.repr, fmt)
     }
 }
 
 impl<K: Key+Clone+Debug, V> Display for PlTree<K, V> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Display::fmt(&self.wrapper, fmt)
+        Display::fmt(&self.repr, fmt)
     }
 }

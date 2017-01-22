@@ -16,14 +16,14 @@ mod external_api;
 mod rust_bench;
 
 pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
-pub use self::base::{ItemFilter, NoopFilter};
+pub use self::base::{Traverse, ItemFilter, NoopFilter};
 pub use self::base::util;
 
 
 
 #[cfg(test)]
 mod test_plain {
-    use base::{TreeBase, Node, lefti, righti};
+    use base::{Node, lefti, righti};
     use base::validation::{check_bst, check_integrity};
     use applied::plain_tree::{PlTree, PlNode};
     use external_api::{TeardownTreeSet, TreeWrapperAccess};
@@ -260,8 +260,8 @@ mod test_plain {
         assert_eq!(output, &expected_range.collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
 
-        check_bst(&tree_mod.wrapper, &output, &tree_orig.wrapper, 0);
-        check_integrity(&tree_mod.wrapper, &tree_orig.wrapper);
+        check_bst(&tree_mod.repr, &output, &tree_orig.repr, 0);
+        check_integrity(&tree_mod.repr, &tree_orig.repr);
     }
 
 
@@ -288,8 +288,8 @@ mod test_plain {
         let mut output = Vec::with_capacity(tree.size());
         tree.delete_range(rm.start .. rm.end, &mut output);
 
-        check_bst(&tree.wrapper, &output, &orig.wrapper, 0);
-        check_integrity(&tree.wrapper, &orig.wrapper);
+        check_bst(&tree.repr, &output, &orig.repr, 0);
+        check_integrity(&tree.repr, &orig.repr);
 
         true
     }
@@ -305,7 +305,7 @@ mod test_interval {
     use rand::{XorShiftRng, SeedableRng};
     use std::cmp;
 
-    use base::{Node, TreeBase, parenti, lefti, righti};
+    use base::{Traverse, Node, parenti, lefti, righti};
     use base::validation::{check_bst, check_integrity, gen_tree_keys};
     use base::util::make_teardown_seq;
     use applied::interval::{Interval, IvNode, KeyInterval};
@@ -392,8 +392,8 @@ mod test_interval {
 
         {
             let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
-            check_bst(tree.wrapper(), &output, orig.wrapper(), 0);
-            check_integrity(tree.wrapper(), orig.wrapper());
+            check_bst(tree.repr(), &output, orig.repr(), 0);
+            check_integrity(tree.repr(), orig.repr());
             check_output_intersects(&rm, &output);
             check_tree_doesnt_intersect(&rm, tree);
 
@@ -416,7 +416,7 @@ mod test_interval {
     }
 
     fn check_tree_doesnt_intersect(search: &Iv, tree: &mut Tree) {
-        tree.traverse_inorder(0, &mut (), |this: &mut Tree, _, idx| {
+        tree.traverse_inorder(0, &mut (), |this, _, idx| {
             assert!(!this.key(idx).intersects(search), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
             false
         });
