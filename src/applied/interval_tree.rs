@@ -1,15 +1,14 @@
 use applied::interval::{Interval, IvNode};
 use base::{TreeRepr, TreeWorker, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
-use std::{mem, cmp};
 use std::ops::{Deref, DerefMut};
-use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::cell::UnsafeCell;
+use std::{cmp, fmt, ptr, mem};
 
-#[derive(Clone)]
 pub struct IvTree<Iv: Interval, V> {
-    pub repr: Option<TreeRepr<IvNode<Iv, V>>>,
+    pub repr: UnsafeCell<TreeRepr<IvNode<Iv, V>>>,
 }
 
 impl<Iv: Interval, V> IvTree<Iv, V> {
@@ -19,7 +18,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     }
 
     pub fn with_repr(repr: TreeRepr<IvNode<Iv, V>>) -> IvTree<Iv, V> {
-        IvTree { repr: Some(repr) }
+        IvTree { repr: UnsafeCell::new(repr) }
     }
 
     /// Constructs a new IvTree
@@ -55,13 +54,29 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<Iv>,
                                                                     F: FnMut(&mut IvWorker<Iv,V,Flt>) -> R
     {
-        let repr = self.repr.take().unwrap();
+        let repr: TreeRepr<IvNode<Iv, V>> = unsafe {
+            ptr::read(self.repr.get())
+        };
 
         let mut worker = IvWorker::new(repr, filter);
         let result = f(&mut worker);
 
-        self.repr = Some(worker.tworker.repr);
+        unsafe {
+            let x = mem::replace(&mut *self.repr.get(), worker.tworker.repr);
+            mem::forget(x);
+        }
+
         result
+
+    }
+
+
+    fn repr(&self) -> &TreeRepr<IvNode<Iv, V>> {
+        unsafe { &*self.repr.get() }
+    }
+
+    fn repr_mut(&mut self) -> &mut TreeRepr<IvNode<Iv, V>> {
+        unsafe { &mut *self.repr.get() }
     }
 }
 
@@ -70,13 +85,13 @@ impl<Iv: Interval, V> Deref for IvTree<Iv, V> {
     type Target = TreeRepr<IvNode<Iv, V>>;
 
     fn deref(&self) -> &Self::Target {
-        self.repr.as_ref().unwrap()
+        self.repr()
     }
 }
 
 impl<Iv: Interval, V> DerefMut for IvTree<Iv, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.repr.as_mut().unwrap()
+        self.repr_mut()
     }
 }
 
@@ -90,6 +105,12 @@ impl<Iv: Interval, V> Debug for IvTree<Iv, V> where Iv::K: Debug {
 impl<Iv: Interval, V> Display for IvTree<Iv, V> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         Display::fmt(self.deref(), fmt)
+    }
+}
+
+impl<Iv: Interval, V: Clone> Clone for IvTree<Iv, V> {
+    fn clone(&self) -> Self {
+        IvTree { repr: UnsafeCell::new(self.repr().clone()) }
     }
 }
 

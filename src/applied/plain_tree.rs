@@ -2,14 +2,13 @@ use base::{Key, Node, TreeRepr, TreeWorker, TreeDerefMut, Traverse, TeardownTree
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
-use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
+use std::cell::UnsafeCell;
+use std::{fmt, ptr, mem};
 
-#[derive(Clone)]
 pub struct PlTree<K: Key, V> {
-    pub repr: Option<TreeRepr<PlNode<K, V>>>,
-    pub filter: NoopFilter
+    pub repr: UnsafeCell<TreeRepr<PlNode<K, V>>>,
 }
 
 #[derive(Clone)]
@@ -59,7 +58,7 @@ impl<K: Key, V> PlTree<K, V> {
     }
 
     pub fn with_repr(repr: TreeRepr<PlNode<K, V>>) -> PlTree<K, V> {
-        PlTree { repr: Some(repr), filter:NoopFilter }
+        PlTree { repr: UnsafeCell::new(repr) }
     }
 
     /// Constructs a new PlTree
@@ -104,13 +103,28 @@ impl<K: Key, V> PlTree<K, V> {
     fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<K>,
                                                                     F: FnMut(&mut PlWorker<K,V,Flt>) -> R
     {
-        let repr = self.repr.take().unwrap();
+        let repr: TreeRepr<PlNode<K, V>> = unsafe {
+            ptr::read(self.repr.get())
+        };
 
         let mut worker = PlWorker::new(repr, filter);
         let result = f(&mut worker);
 
-        self.repr = Some(worker.tworker.repr);
+        unsafe {
+            let x = mem::replace(&mut *self.repr.get(), worker.tworker.repr);
+            mem::forget(x);
+        }
+
         result
+    }
+
+
+    fn repr(&self) -> &TreeRepr<PlNode<K, V>> {
+        unsafe { &*self.repr.get() }
+    }
+
+    fn repr_mut(&mut self) -> &mut TreeRepr<PlNode<K, V>> {
+        unsafe { &mut *self.repr.get() }
     }
 }
 
@@ -125,6 +139,12 @@ impl<K: Key+Clone+Debug, V> Debug for PlTree<K, V> {
 impl<K: Key+Clone+Debug, V> Display for PlTree<K, V> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         Display::fmt(self.deref(), fmt)
+    }
+}
+
+impl<K: Key, V: Clone> Clone for PlTree<K, V> {
+    fn clone(&self) -> Self {
+        PlTree { repr: UnsafeCell::new(self.repr().clone()) }
     }
 }
 
@@ -150,13 +170,13 @@ impl<K: Key, V> Deref for PlTree<K, V> {
     type Target = TreeRepr<PlNode<K, V>>;
 
     fn deref(&self) -> &Self::Target {
-        self.repr.as_ref().unwrap()
+        self.repr()
     }
 }
 
 impl<K: Key, V> DerefMut for PlTree<K, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.repr.as_mut().unwrap()
+        self.repr_mut()
     }
 }
 
