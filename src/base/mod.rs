@@ -14,7 +14,6 @@ pub use self::base_repr::*;
 pub use self::node::*;
 
 use std::ptr;
-use std::cmp::{Ordering};
 
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
@@ -52,49 +51,6 @@ impl<N: Node> TeardownTreeRefill for TreeRepr<N> where N::K: Copy, N::V: Copy {
 //}
 
 
-pub trait TreeBase<N: Node>: TreeReprAccess<N>+Traverse<N> {
-    /// Finds the item with the given key and returns it (or None).
-    fn lookup<'a>(&'a self, search: &'a N::K) -> Option<&'a N::V> where N: 'a {
-        self.index_of(search).map(|idx| self.val(idx))
-    }
-
-    fn index_of(&self, search: &N::K) -> Option<usize> {
-        if self.data.is_empty() {
-            return None;
-        }
-
-        let mut idx = 0;
-        let mut key =
-            if self.mask[idx] {
-                self.key(idx)
-            } else {
-                return None;
-            };
-
-        loop {
-            let ordering = search.cmp(&key);
-
-            idx = match ordering {
-                Ordering::Equal   => return Some(idx),
-                Ordering::Less    => lefti(idx),
-                Ordering::Greater => righti(idx),
-            };
-
-            if idx >= self.data.len() {
-                return None;
-            }
-
-            if self.mask[idx] {
-                key = self.key(idx);
-            } else {
-                return None;
-            }
-        }
-    }
-}
-
-impl<N: Node, T> TreeBase<N> for T where T: TreeReprAccess<N>+Traverse<N> {}
-
 
 #[inline(always)]
 pub fn parenti(idx: usize) -> usize {
@@ -119,6 +75,7 @@ pub trait ItemFilter<K: Key> {
     #[inline(always)] fn is_noop() -> bool;
 }
 
+#[derive(Clone)]
 pub struct NoopFilter;
 
 impl<K: Key> ItemFilter<K> for NoopFilter {

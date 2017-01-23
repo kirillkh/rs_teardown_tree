@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, Traverse, TreeBase, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
+use base::{TreeRepr, TreeWorker, TreeDerefMut, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::{mem, cmp};
 use std::ops::{Deref, DerefMut};
@@ -55,13 +55,13 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         let mut filter_tree = IvWorker::new(repr, filter);
         let result = f(&mut filter_tree);
 
-        self.repr = Some(filter_tree.repr);
+        self.repr = Some(filter_tree.worker.repr);
         result
     }
 }
 
 
-trait IntervalDelete<Iv: Interval, V>: TreeBase<IvNode<Iv, V>> {
+trait IntervalDelete<Iv: Interval, V>: TreeDerefMut<IvNode<Iv, V>> {
     #[inline]
     fn update_maxb(&mut self, idx: usize) {
         let node = self.node_mut_unsafe(idx);
@@ -218,11 +218,11 @@ trait IntervalDelete<Iv: Interval, V>: TreeBase<IvNode<Iv, V>> {
 }
 
 
-trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> {
+trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>>
+    where Self::Filter: ItemFilter<Iv> // TODO why do we need this line?
+{
     #[inline(never)]
-    fn filter_intersecting_ivl_rec<F>(&mut self, search: &Iv, idx: usize, min_included: bool, filter: &mut F, output: &mut Vec<(Iv, V)>)
-        where F: ItemFilter<Iv>
-    {
+    fn filter_intersecting_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
         let node = self.node_unsafe(idx);
         let k: &Iv = &node.key;
 
@@ -236,7 +236,7 @@ trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> {
             }
         } else if search.b() <= k.a() && k.a() != search.a() {
             // root and right are outside the range
-            self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, filter, output);
+            self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, output);
 
             let removed = if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
@@ -251,7 +251,7 @@ trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> {
             }
         } else {
             // consume root if necessary
-            let consumed = if search.intersects(k) && filter.accept(&self.node(idx).key)
+            let consumed = if search.intersects(k) && self.filter_mut().accept(k)
                 { Some(self.take(idx)) }
             else
                 { None };
@@ -260,14 +260,14 @@ trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> {
             let mut removed = consumed.is_some();
             if removed {
                 if min_included {
-                    self.consume_subtree(lefti(idx), filter, output)
+                    self.consume_subtree(lefti(idx), output)
                 } else {
-                    removed = self.descend_filter_intersecting_ivl_left(search, idx, true, false, filter, output);
+                    removed = self.descend_filter_intersecting_ivl_left(search, idx, true, false, output);
                 }
 
                 consume_unchecked(output, consumed.unwrap().into_kv());
             } else {
-                removed = self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, filter, output);
+                removed = self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, output);
                 if !removed && self.slots_min().has_open() {
                     removed = true;
                     self.fill_slot_min(idx);
@@ -279,12 +279,12 @@ trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> {
             if right_min_included {
                 let right_max_included = &node.maxb < search.b();
                 if right_max_included {
-                    self.consume_subtree(righti(idx), filter, output);
+                    self.consume_subtree(righti(idx), output);
                 } else {
-                    removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, true, filter, output);
+                    removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, true, output);
                 }
             } else {
-                removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, false, filter, output);
+                removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, false, output);
             }
 
             if !removed && self.slots_max().has_open() {
@@ -301,21 +301,17 @@ trait IntervalFilterRange<Iv: Interval, V>: BulkDeleteCommon<IvNode<Iv, V>> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_intersecting_ivl_left<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &mut F, output: &mut Vec<(Iv, V)>) -> bool
-        where F: ItemFilter<Iv>
-    {
+    fn descend_filter_intersecting_ivl_left(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
         // this pinning business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
         self.descend_left_fresh_slots(idx, with_slot,
-                                   |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, filter, output))
+                                   |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, output))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_intersecting_ivl_right<F>(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, filter: &mut F, output: &mut Vec<(Iv, V)>) -> bool
-        where F: ItemFilter<Iv>
-    {
+    fn descend_filter_intersecting_ivl_right(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
         self.descend_right(idx, with_slot,
-                           |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, filter, output))
+                           |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, output))
     }
 }
 
@@ -337,27 +333,26 @@ impl<Iv: Interval, V> DerefMut for IvTree<Iv, V> {
 
 impl<Iv: Interval, V> Debug for IvTree<Iv, V> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Debug::fmt(self.repr(), fmt)
+        Debug::fmt(self.deref(), fmt)
     }
 }
 
 impl<Iv: Interval, V> Display for IvTree<Iv, V> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Display::fmt(self.repr(), fmt)
+        Display::fmt(self.deref(), fmt)
     }
 }
 
 
 
 pub struct IvWorker<Iv: Interval, V, Flt> where Flt: ItemFilter<Iv> {
-    repr: TreeRepr<IvNode<Iv, V>>,
-    filter: Flt
+    worker: TreeWorker<IvNode<Iv, V>, Flt>
 }
 
 impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     /// Constructs a new FilterTree
     pub fn new(repr: TreeRepr<IvNode<Iv, V>>, filter: Flt) -> Self {
-        IvWorker { repr:repr, filter:filter }
+        IvWorker { worker: TreeWorker { repr:repr, filter:filter } }
     }
 
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -412,7 +407,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
         } else {
             // consume root if necessary
             let key = &self.node_unsafe(idx).key;
-            let consumed = if search.intersects(k) && self.filter.accept(key)
+            let consumed = if search.intersects(k) && self.filter_mut().accept(key)
                 { Some(self.take(idx)) }
             else
                 { None };
@@ -421,9 +416,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             let mut removed = consumed.is_some();
             if removed {
                 if min_included {
-                    // TODO
-                    let f: &mut Flt = unsafe { mem::transmute(&mut self.filter)};
-                    self.consume_subtree(lefti(idx), f, output)
+                    self.consume_subtree(lefti(idx), output)
                 } else {
                     removed = self.descend_filter_intersecting_ivl_left(search, idx, true, false, output);
                 }
@@ -442,9 +435,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             if right_min_included {
                 let right_max_included = &node.maxb < search.b();
                 if right_max_included {
-                    // TODO
-                    let f: &mut Flt = unsafe { mem::transmute(&mut self.filter)};
-                    self.consume_subtree(righti(idx), f, output);
+                    self.consume_subtree(righti(idx), output);
                 } else {
                     removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, true, output);
                 }
@@ -486,28 +477,23 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Deref for IvWorker<Iv, V, Flt> {
     type Target = TreeRepr<IvNode<Iv, V>>;
 
     fn deref(&self) -> &Self::Target {
-        &self.repr
+        self.worker.deref()
     }
 }
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> DerefMut for IvWorker<Iv, V, Flt> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.repr
-    }
-}
-
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Traverse<IvNode<Iv, V>> for IvWorker<Iv, V, Flt> {
-    #[inline(always)] fn repr(&self) -> &TreeRepr<IvNode<Iv, V>> {
-        self.deref()
-    }
-
-    #[inline(always)] fn repr_mut(&mut self) -> &mut TreeRepr<IvNode<Iv, V>> {
-        self.deref_mut()
+        self.worker.deref_mut()
     }
 }
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> BulkDeleteCommon<IvNode<Iv, V>> for IvWorker<Iv, V, Flt> {
     type Visitor = UpdateMax<Iv, Flt>;
+    type Filter = Flt;
+
+    fn filter_mut(&mut self) -> &mut Self::Filter {
+        &mut self.worker.filter
+    }
 }
 
 
@@ -516,7 +502,7 @@ impl<Iv: Interval, V, F: ItemFilter<Iv>> IntervalFilterRange<Iv, V> for IvWorker
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> TeardownTreeRefill for IvWorker<Iv, V, Flt> where Iv: Copy, V: Copy {
     fn refill(&mut self, master: &IvWorker<Iv, V, Flt>) {
-        self.repr.refill(&master.repr);
+        self.worker.repr.refill(&master.worker.repr);
     }
 }
 

@@ -1,5 +1,5 @@
-use base::{Key, Node, TreeRepr, TreeBase, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
-use base::{Traverse, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver};
+use base::{Key, Node, TreeRepr, TreeDerefMut, Traverse, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
+use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
 use std::fmt;
@@ -7,9 +7,9 @@ use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Clone)]
 pub struct PlTree<K: Key, V> {
-    pub repr: TreeRepr<PlNode<K, V>>
+    pub repr: TreeRepr<PlNode<K, V>>,
+    pub filter: NoopFilter
 }
-
 
 #[derive(Clone)]
 pub struct PlNode<K: Key, V> {
@@ -54,17 +54,21 @@ impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
 impl<K: Key, V> PlTree<K, V> {
     /// Constructs a new PlTree
     pub fn new(items: Vec<(K, V)>) -> PlTree<K, V> {
-        PlTree { repr: TreeRepr::new(items) }
+        PlTree::with_repr(TreeRepr::new(items))
+    }
+
+    pub fn with_repr(repr: TreeRepr<PlNode<K, V>>) -> PlTree<K, V> {
+        PlTree { repr:repr, filter:NoopFilter }
     }
 
     /// Constructs a new PlTree
     /// Note: the argument must be sorted!
     pub fn with_sorted(sorted: Vec<(K, V)>) -> PlTree<K, V> {
-        PlTree { repr: TreeRepr::with_sorted(sorted) }
+        PlTree::with_repr(TreeRepr::with_sorted(sorted))
     }
 
     pub fn with_nodes(nodes: Vec<Option<PlNode<K, V>>>) -> PlTree<K, V> {
-        PlTree { repr: TreeRepr::with_nodes(nodes) }
+        PlTree::with_repr(TreeRepr::with_nodes(nodes))
     }
 
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -93,7 +97,7 @@ impl<K: Key, V> PlTree<K, V> {
 
 
 
-trait PlainDelete<K: Key, V>: TreeBase<PlNode<K,V>> {
+trait PlainDelete<K: Key, V>: TreeDerefMut<PlNode<K,V>> {
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> V {
         debug_assert!(!self.is_nil(idx));
@@ -142,7 +146,9 @@ trait PlainDelete<K: Key, V>: TreeBase<PlNode<K,V>> {
 }
 
 
-trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>> {
+trait PlainDeleteRange<K: Key, V>: BulkDeleteCommon<PlNode<K, V>>
+    where Self::Filter: ItemFilter<K> // TODO why do we need this line?
+{
     /// Delete based on driver decisions.
     /// The items are returned in order.
     #[inline]
@@ -336,19 +342,13 @@ impl<K: Key, V> DerefMut for PlTree<K, V> {
 }
 
 
-impl<K: Key, V> Traverse<PlNode<K, V>> for PlTree<K, V> {
-    #[inline(always)] fn repr(&self) -> &TreeRepr<PlNode<K, V>> {
-        self.deref()
-    }
-
-    #[inline(always)] fn repr_mut(&mut self) -> &mut TreeRepr<PlNode<K, V>> {
-        self.deref_mut()
-    }
-}
-
-
 impl<K: Key, V> BulkDeleteCommon<PlNode<K, V>> for PlTree<K,V> {
     type Visitor = NoUpdate;
+    type Filter = NoopFilter; // TODO
+
+    fn filter_mut(&mut self) -> &mut Self::Filter {
+        &mut self.filter
+    }
 }
 
 impl<K: Key, V> PlainDelete<K, V> for PlTree<K,V> {}

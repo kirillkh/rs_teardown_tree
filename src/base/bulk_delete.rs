@@ -1,4 +1,4 @@
-use base::{Node, TreeBase, lefti, righti};
+use base::{Node, TreeDerefMut, Traverse, lefti, righti};
 use base::{SlotStack, ItemFilter};
 use base::drivers::consume_unchecked;
 
@@ -35,18 +35,20 @@ pub trait ItemVisitor<N: Node>: Sized {
 
 
 //==== methdos common to bulk-delete operations ====================================================
-pub trait BulkDeleteCommon<N: Node>: TreeBase<N>+Sized  {
+pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
+//pub trait BulkDeleteCommon<N: Node>: TreeDeref<N>+Sized  {
     type Visitor: ItemVisitor<N, Tree=Self>;
+    type Filter: ItemFilter<N::K>;
+
+    #[inline] fn filter_mut(&mut self) -> &mut Self::Filter;
 
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline]
-    fn consume_subtree<F>(&mut self, idx: usize, filter: &mut F, output: &mut Vec<(N::K, N::V)>)
-        where F: ItemFilter<N::K>
-    {
-        if F::is_noop() {
+    fn consume_subtree(&mut self, idx: usize, output: &mut Vec<(N::K, N::V)>) {
+        if Self::Filter::is_noop() {
             self.consume_subtree_unfiltered(idx, output);
         } else {
-            self.consume_subtree_filtered(idx, filter, output);
+            self.consume_subtree_filtered(idx, output);
         }
     }
 
@@ -61,15 +63,14 @@ pub trait BulkDeleteCommon<N: Node>: TreeBase<N>+Sized  {
     }
 
     #[inline(never)]
-    fn consume_subtree_filtered<F>(&mut self, idx: usize, filter: &mut F, output: &mut Vec<(N::K, N::V)>)
-        where F: ItemFilter<N::K>
-    {
+    fn consume_subtree_filtered(&mut self, idx: usize, output: &mut Vec<(N::K, N::V)>) {
         if self.is_nil(idx) {
             return;
         }
 
         // consume root if necessary
-        let consumed = if filter.accept(&self.node(idx).key)
+        let node = self.node_unsafe(idx);
+        let consumed = if self.filter_mut().accept(&node.key)
             { Some(self.take(idx)) }
             else
             { None };
@@ -77,7 +78,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeBase<N>+Sized  {
 
         // left subtree
         removed = self.descend_left_fresh_slots(idx, removed,
-                |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, filter, output));
+                |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output));
 
         if consumed.is_some() {
             consume_unchecked(output, consumed.unwrap().into_kv());
@@ -90,7 +91,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeBase<N>+Sized  {
 
         // right subtree
         removed = self.descend_right(idx, removed,
-                |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, filter, output));
+                |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output));
 
         if !removed && self.slots_max().has_open() {
             removed = true;
