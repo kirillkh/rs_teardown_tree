@@ -27,7 +27,7 @@ impl DeleteRangeCache {
 pub trait ItemVisitor<N: Node>: Sized {
     type Tree: BulkDeleteCommon<N, Visitor=Self>;
 
-    #[inline]
+    #[inline(always)]
     fn visit<F>(arg: &mut Self::Tree, idx: usize, f: F)
                                 where F: FnMut(&mut Self::Tree, usize);
 }

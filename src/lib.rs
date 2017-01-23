@@ -260,8 +260,8 @@ mod test_plain {
         assert_eq!(output, &expected_range.collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
 
-        check_bst(&tree_mod.repr, &output, &tree_orig.repr, 0);
-        check_integrity(&tree_mod.repr, &tree_orig.repr);
+        check_bst(&tree_mod, &output, &tree_orig, 0);
+        check_integrity(&tree_mod, &tree_orig);
     }
 
 
@@ -288,8 +288,8 @@ mod test_plain {
         let mut output = Vec::with_capacity(tree.size());
         tree.delete_range(rm.start .. rm.end, &mut output);
 
-        check_bst(&tree.repr, &output, &orig.repr, 0);
-        check_integrity(&tree.repr, &orig.repr);
+        check_bst(&tree, &output, &orig, 0);
+        check_integrity(&tree, &orig);
 
         true
     }
