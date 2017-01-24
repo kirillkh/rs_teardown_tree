@@ -36,7 +36,6 @@ pub trait ItemVisitor<N: Node>: Sized {
 
 //==== methdos common to bulk-delete operations ====================================================
 pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
-//pub trait BulkDeleteCommon<N: Node>: TreeDeref<N>+Sized  {
     type Visitor: ItemVisitor<N, Tree=Self>;
     type Filter: ItemFilter<N::K>;
 

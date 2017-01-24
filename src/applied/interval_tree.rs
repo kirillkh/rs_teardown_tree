@@ -97,13 +97,13 @@ impl<Iv: Interval, V> DerefMut for IvTree<Iv, V> {
 
 impl<Iv: Interval, V> Debug for IvTree<Iv, V> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Debug::fmt(self.deref(), fmt)
+        Debug::fmt(self.repr(), fmt)
     }
 }
 
 impl<Iv: Interval, V> Display for IvTree<Iv, V> where Iv::K: Debug {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Display::fmt(self.deref(), fmt)
+        Display::fmt(self.repr(), fmt)
     }
 }
 

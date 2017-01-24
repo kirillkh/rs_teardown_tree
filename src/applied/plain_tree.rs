@@ -103,6 +103,7 @@ impl<K: Key, V> PlTree<K, V> {
     fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<K>,
                                                                     F: FnMut(&mut PlWorker<K,V,Flt>) -> R
     {
+        // TODO: this can be sped up in several ways, e.g. having TreeRepr::filter of &Flt type, then we don't have to copy repr
         let repr: TreeRepr<PlNode<K, V>> = unsafe {
             ptr::read(self.repr.get())
         };
@@ -132,13 +133,13 @@ impl<K: Key, V> PlTree<K, V> {
 
 impl<K: Key+Clone+Debug, V> Debug for PlTree<K, V> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Debug::fmt(&self.repr, fmt)
+        Debug::fmt(self.repr(), fmt)
     }
 }
 
 impl<K: Key+Clone+Debug, V> Display for PlTree<K, V> {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        Display::fmt(self.deref(), fmt)
+        Display::fmt(self.repr(), fmt)
     }
 }
 
