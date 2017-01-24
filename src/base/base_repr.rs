@@ -143,6 +143,10 @@ impl<N: Node> TreeRepr<N> {
         self.index_of(search).map(|idx| self.val(idx))
     }
 
+    pub fn contains(&self, search: &N::K) -> bool {
+        self.lookup(search).is_some()
+    }
+
     pub fn index_of(&self, search: &N::K) -> Option<usize> {
         if self.data.is_empty() {
             return None;

@@ -44,6 +44,11 @@ mod plain {
             TeardownTreeMap { internal: PlTree::with_sorted(sorted) }
         }
 
+        /// Returns true if the map contains the given key.
+        pub fn contains_key(&self, search: &K) -> bool {
+            self.internal.contains(search)
+        }
+
         /// Deletes the item with the given key from the tree and returns it (or None).
         pub fn delete(&mut self, search: &K) -> Option<V> {
             self.internal.delete(search)
@@ -121,6 +126,11 @@ mod plain {
         pub fn with_sorted(sorted: Vec<T>) -> TeardownTreeSet<T> {
             let map_items = super::conv_to_tuple_vec(sorted);
             TeardownTreeSet { map: TeardownTreeMap::with_sorted(map_items) }
+        }
+
+        /// Returns true if the set contains the given item.
+        pub fn contains(&self, search: &T) -> bool {
+            self.map.contains_key(search)
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -223,6 +233,11 @@ mod interval {
             tree
         }
 
+        /// Returns true if the map contains the given key.
+        pub fn contains_key(&self, search: &Iv) -> bool {
+            self.internal.contains(search)
+        }
+
         /// Deletes the item with the given key from the tree and returns it (or None).
         #[inline]
         pub fn delete(&mut self, search: &Iv) -> Option<V> {
@@ -296,6 +311,11 @@ mod interval {
         pub fn with_sorted(sorted: Vec<Iv>) -> IntervalTeardownTreeSet<Iv> {
             let map_items = super::conv_to_tuple_vec(sorted);
             IntervalTeardownTreeSet { map: IntervalTeardownTreeMap::with_sorted(map_items) }
+        }
+
+        /// Returns true if the set contains the given item.
+        pub fn contains(&self, search: &Iv) -> bool {
+            self.map.contains_key(search)
         }
 
         /// Deletes the given interval from the tree and returns true (or false if it was not found).
