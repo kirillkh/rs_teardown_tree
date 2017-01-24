@@ -35,11 +35,11 @@ impl<K: Key, V> Node for PlNode<K, V> {
     type K = K;
     type V = V;
 
-    fn new(key: K, val: V) -> Self {
+    #[inline] fn new(key: K, val: V) -> Self {
         PlNode { kv: KeyVal::new(key, val) }
     }
 
-    fn into_kv(self) -> KeyVal<K, V> {
+    #[inline] fn into_kv(self) -> KeyVal<K, V> {
         self.kv
     }
 }

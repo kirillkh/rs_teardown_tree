@@ -127,9 +127,8 @@ pub fn consume_unchecked<K: Key, V>(output: &mut Vec<(K, V)>, item: KeyVal<K, V>
         output.set_len(len + 1);
         let p = output.get_unchecked_mut(len);
 
-        // TODO: optimizer fails here, might want to change to "let tuple: (K,V) = mem::transmute(item)" (but that is not guaranteed to work)
-        let KeyVal{key, val} = item;
-        ptr::write(p, (key, val));
+        let kv: (K, V) = item.into();
+        ptr::write(p, kv);
     }
 }
 

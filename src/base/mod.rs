@@ -79,13 +79,8 @@ pub trait ItemFilter<K: Key> {
 pub struct NoopFilter;
 
 impl<K: Key> ItemFilter<K> for NoopFilter {
-    #[inline(always)] fn accept(&mut self, key: &K) -> bool {
-        true
-    }
-
-    #[inline(always)] fn is_noop() -> bool {
-        true
-    }
+    #[inline(always)] fn accept(&mut self, _: &K) -> bool { true }
+    #[inline(always)] fn is_noop() -> bool { true }
 }
 
 

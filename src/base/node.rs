@@ -15,7 +15,7 @@ impl<K, V> KeyVal<K, V> {
 }
 
 impl<K, V> Into<(K,V)> for KeyVal<K, V> {
-    fn into(self) -> (K,V) {
+    #[inline] fn into(self) -> (K,V) {
         (self.key, self.val)
     }
 }
@@ -28,6 +28,6 @@ pub trait Node: Deref<Target=KeyVal<<Self as Node>::K,
     type K: Key;
     type V;
 
-    fn new(key: Self::K, val: Self::V) -> Self;
-    fn into_kv(self) -> KeyVal<Self::K, Self::V>;
+    #[inline] fn new(key: Self::K, val: Self::V) -> Self;
+    #[inline] fn into_kv(self) -> KeyVal<Self::K, Self::V>;
 }
