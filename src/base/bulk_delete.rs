@@ -42,7 +42,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     #[inline] fn filter_mut(&mut self) -> &mut Self::Filter;
 
     //---- consume_subtree_* ---------------------------------------------------------------
-    #[inline]
+    #[inline(always)]
     fn consume_subtree(&mut self, idx: usize, output: &mut Vec<(N::K, N::V)>) {
         if Self::Filter::is_noop() {
             self.consume_subtree_unfiltered(idx, output);
@@ -76,8 +76,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         let mut removed = consumed.is_some();
 
         // left subtree
-        removed = self.descend_left_fresh_slots(idx, removed,
-                |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output));
+        removed = self.descend_consume_left(idx, removed, output);
 
         if consumed.is_some() {
             consume_unchecked(output, consumed.unwrap().into_kv());
@@ -89,8 +88,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         }
 
         // right subtree
-        removed = self.descend_right(idx, removed,
-                |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output));
+        removed = self.descend_consume_right(idx, removed, output);
 
         if !removed && self.slots_max().has_open() {
             removed = true;
@@ -271,6 +269,31 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         self.slots_max().nfilled = nfilled_orig;
 
         result
+    }
+
+
+    #[inline(always)]
+    fn descend_consume_left(&mut self, idx: usize, with_slot: bool, output: &mut Vec<(N::K, N::V)>) -> bool {
+        if Self::Filter::is_noop() {
+            debug_assert!(with_slot);
+            self.consume_subtree_unfiltered(lefti(idx), output);
+            true
+        } else {
+            self.descend_left_fresh_slots(idx, with_slot,
+                                          |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output))
+        }
+    }
+
+    #[inline(always)]
+    fn descend_consume_right(&mut self, idx: usize, with_slot: bool, output: &mut Vec<(N::K, N::V)>) -> bool {
+        if Self::Filter::is_noop() {
+            debug_assert!(with_slot);
+            self.consume_subtree_unfiltered(righti(idx), output);
+            true
+        } else {
+            self.descend_right(idx, with_slot,
+                               |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output))
+        }
     }
 }
 

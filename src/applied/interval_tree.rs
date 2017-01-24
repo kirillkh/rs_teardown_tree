@@ -306,8 +306,8 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
     #[inline(never)]
     fn filter_intersecting_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
-        let node = self.node_unsafe(idx);
-        let k: &Iv = &node.key;
+        let node = self.node_mut_unsafe(idx);
+        let k: &Iv = &node.kv.key;
 
         if &node.maxb < search.a() {
             // whole subtree outside the range
@@ -340,20 +340,23 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
                 { None };
 
             // left subtree
-            let mut removed = consumed.is_some();
-            if let Some(item) = consumed {
+            let mut removed: bool;
+            if let Some(consumed) = consumed {
                 if min_included {
-                    self.consume_subtree(lefti(idx), output)
+                    removed = self.descend_consume_left(idx, true, output);
                 } else {
                     removed = self.descend_filter_intersecting_ivl_left(search, idx, true, false, output);
                 }
+                node.maxb = consumed.maxb.clone();
 
-                consume_unchecked(output, item.into_kv());
+                consume_unchecked(output, consumed.into_kv());
             } else {
-                removed = self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, output);
-                if !removed && self.slots_min().has_open() {
+                self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, output);
+                if self.slots_min().has_open() {
                     removed = true;
                     self.fill_slot_min(idx);
+                } else {
+                    removed = false;
                 }
             }
 
@@ -362,7 +365,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             if right_min_included {
                 let right_max_included = &node.maxb < search.b();
                 if right_max_included {
-                    self.consume_subtree(righti(idx), output);
+                    removed = self.descend_consume_right(idx, removed, output);
                 } else {
                     removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, true, output);
                 }

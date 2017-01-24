@@ -302,10 +302,11 @@ mod test_plain {
 #[cfg(test)]
 mod test_interval {
     use std::ops::Range;
-    use rand::{XorShiftRng, SeedableRng};
+    use rand::{Rng, XorShiftRng, SeedableRng};
     use std::cmp;
+    use std::fmt::Debug;
 
-    use base::{Traverse, Node, parenti, lefti, righti};
+    use base::{Traverse, Node, ItemFilter, NoopFilter, parenti, lefti, righti};
     use base::validation::{check_bst, check_integrity, gen_tree_keys};
     use base::util::make_teardown_seq;
     use applied::interval::{Interval, IvNode, KeyInterval};
@@ -343,11 +344,13 @@ mod test_interval {
             Iv::new(rm.end, rm.start)
         };
         let mut output = Vec::with_capacity(tree.size());
-        check_tree(&mut IntervalTeardownTreeSet::from_internal(tree), rm, &mut output);
+        check_tree(&mut IntervalTeardownTreeSet::from_internal(tree), rm, NoopFilter, &mut output);
         true
     }
 
-    fn test_shape(xs: Vec<Range<usize>>, rm: Range<usize>) {
+    fn test_shape<Flt>(xs: Vec<Range<usize>>, rm: Range<usize>, filter: Flt)
+        where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
+    {
         let nodes = xs.into_iter()
             .map(|r| if r.start<=r.end {
                     Some(IvNode::new(Iv::new(r.start, r.end), ()))
@@ -364,7 +367,7 @@ mod test_interval {
 
         let mut tree = IntervalTeardownTreeSet::from_internal(internal);
         let mut output = Vec::with_capacity(tree.size());
-        check_tree(&mut tree, KeyInterval::from_range(&rm), &mut output);
+        check_tree(&mut tree, KeyInterval::from_range(&rm), filter, &mut output);
     }
 
 
@@ -386,16 +389,19 @@ mod test_interval {
         Tree::with_nodes(nodes)
     }
 
-    fn check_tree(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: Iv, output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>> {
+    fn check_tree<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>, mut filter: Flt,
+                       output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
+        where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
+    {
         let mut tree = orig.clone();
-        tree.delete_intersecting(&rm, output);
+        tree.filter_intersecting(&rm, filter.clone(), output);
 
         {
             let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
             check_bst(tree, &output, orig, 0);
             check_integrity(tree, orig);
-            check_output_intersects(&rm, &output);
-            check_tree_doesnt_intersect(&rm, tree);
+            check_output_intersects(&rm, tree, &output, orig, &filter);
+            check_tree_doesnt_intersect(&rm, tree, &mut filter);
 
             assert!(output.len() + tree.size() == orig.size());
 
@@ -409,15 +415,19 @@ mod test_interval {
         tree
     }
 
-    fn check_output_intersects(search: &Iv, output: &Vec<Iv>) {
-        for iv in output.iter() {
-            assert!(search.intersects(iv));
+    fn check_output_intersects<Flt>(search: &Iv, tree: &Tree, output: &Vec<Iv>, tree_orig: &Tree, filter: &Flt)
+        where Flt: ItemFilter<KeyInterval<usize>>+Debug
+    {
+        for (_, iv) in output.iter().enumerate() {
+            assert!(search.intersects(iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
         }
     }
 
-    fn check_tree_doesnt_intersect(search: &Iv, tree: &mut Tree) {
+    fn check_tree_doesnt_intersect<Flt>(search: &Iv, tree: &mut Tree, flt: &mut Flt)
+        where Flt: ItemFilter<KeyInterval<usize>>
+    {
         tree.traverse_inorder(0, &mut (), |this, _, idx| {
-            assert!(!this.key(idx).intersects(search), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
+            assert!(!this.key(idx).intersects(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
             false
         });
     }
@@ -458,12 +468,15 @@ mod test_interval {
         expected_maxb
     }
 
+    #[test]
+    fn prebuilt_shape() {
+        test_shape(vec![1..1, 0..2], 0..0, NoopFilter);
+        test_shape(vec![1..1, 0..0, 2..2], 0..2, SetFilter::new(vec![2..2, 1..1]));
+    }
 
     #[test]
     fn prebuilt_random_shape() {
         let rng = &mut XorShiftRng::from_seed([3, 1, 4, 15]);
-
-        test_shape(vec![1..1, 0..2], 0..0);
 
         test_random_shape(vec![0..0], 0..0, rng);
         test_random_shape(vec![0..2, 1..1], 0..0, rng);
@@ -485,7 +498,7 @@ mod test_interval {
 
     //---- non-quickcheck --------------------------------------------------------------------------
     fn full_teardown_n(n: usize, rm_items: usize) {
-        let mut rng = XorShiftRng::from_seed([1, 2, 3, 4]);
+        let mut rng = XorShiftRng::from_seed([96511, 42, 1423, 51984]);
         let elems: Vec<_> = (0..n).map(|x| (KeyInterval::new(x,x))).collect();
         let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
 
@@ -495,7 +508,7 @@ mod test_interval {
         for range in ranges.into_iter() {
             output.truncate(0);
             let rm = KeyInterval::from_range(&range);
-            orig = check_tree(&mut orig, rm, &mut output);
+            orig = check_tree(&mut orig, rm, NoopFilter, &mut output);
         }
         assert!(orig.size() == 0);
     }
@@ -511,6 +524,112 @@ mod test_interval {
         full_teardown_n(88165, 9664);
         full_teardown_n(196561, 81669);
         full_teardown_n(756198, 247787);
+    }
+
+
+    #[derive(Clone, Debug)]
+    struct SetRefFilter<'a> {
+        set: &'a IntervalTeardownTreeSet<KeyInterval<usize>>
+    }
+
+    impl<'a> SetRefFilter<'a> {
+        pub fn new(set: &'a IntervalTeardownTreeSet<KeyInterval<usize>>) -> Self {
+            SetRefFilter { set: set }
+        }
+    }
+
+    impl<'a> ItemFilter<KeyInterval<usize>> for SetRefFilter<'a> {
+        fn accept(&mut self, key: &KeyInterval<usize>) -> bool { self.set.contains(key) }
+        fn is_noop() -> bool { false }
+    }
+
+
+    #[derive(Clone, Debug)]
+    struct SetFilter {
+        set: IntervalTeardownTreeSet<KeyInterval<usize>>
+    }
+
+    impl SetFilter {
+        pub fn new(xs: Vec<Range<usize>>) -> Self {
+            let items = xs.into_iter()
+                .map(|r| Iv::new(r.start, r.end))
+                .collect::<Vec<_>>();
+
+            let filter_set = IntervalTeardownTreeSet::new(items);
+            SetFilter { set: filter_set }
+        }
+    }
+
+    impl ItemFilter<KeyInterval<usize>> for SetFilter {
+        fn accept(&mut self, key: &KeyInterval<usize>) -> bool { self.set.contains(key) }
+        fn is_noop() -> bool { false }
+    }
+
+
+
+    fn full_teardown_filter_n(n: usize, rm_items: usize, flt_items: usize) {
+        assert!(flt_items <= n);
+        let mut rng = XorShiftRng::from_seed([96511, 42, 1423, 51984]);
+        let elems: Vec<_> = (0..n).map(|x| (KeyInterval::new(x,x))).collect();
+        let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
+        let mut flt_elems: Vec<_> = elems.clone();
+
+        for i in 0..(n-flt_items) {
+            let pos = rng.gen_range(0, n-flt_items-i);
+            flt_elems.swap_remove(pos);
+        }
+
+        let mut orig = IntervalTeardownTreeSet::new(elems);
+        let mut output = Vec::with_capacity(orig.size());
+        let flt_tree = IntervalTeardownTreeSet::new(flt_elems);
+
+        for range in ranges.into_iter() {
+            output.truncate(0);
+            let rm = KeyInterval::from_range(&range);
+            orig = check_tree(&mut orig, rm, SetRefFilter::new(&flt_tree), &mut output);
+        }
+    }
+
+
+    #[test]
+    fn test_full_teardown_filter() {
+//        for i in 1..260 {
+//            for j in 1..i {
+//                println!("ij = {} {}", i, j);
+//                for k in 0..i {
+//                    full_teardown_filter_n(i, j, k);
+//                }
+//            }
+//        }
+
+
+        full_teardown_filter_n(3, 2, 2);
+
+        full_teardown_n(3, 2);
+        full_teardown_filter_n(3, 2, 3);
+
+        full_teardown_filter_n(3, 2, 2);
+
+        full_teardown_filter_n(5, 2, 0);
+        full_teardown_filter_n(5, 2, 2);
+        full_teardown_filter_n(5, 2, 5);
+
+        full_teardown_filter_n(10, 3, 0);
+        full_teardown_filter_n(10, 3, 5);
+        full_teardown_filter_n(10, 3, 10);
+
+        full_teardown_filter_n(259, 3, 0);
+        full_teardown_filter_n(259, 3, 123);
+        full_teardown_filter_n(259, 3, 259);
+
+        full_teardown_filter_n(1598, 21, 0);
+        full_teardown_filter_n(1598, 21, 711);
+        full_teardown_filter_n(1598, 21, 1598);
+
+        full_teardown_filter_n(65918, 7347, 1965);
+        full_teardown_filter_n(88165, 9664, 1);
+        full_teardown_filter_n(196561, 81669, 97689);
+        full_teardown_filter_n(756198, 247787, 17);
     }
 }
 

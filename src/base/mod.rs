@@ -69,13 +69,12 @@ pub fn righti(idx: usize) -> usize {
 
 
 
-
 pub trait ItemFilter<K: Key> {
     #[inline(always)] fn accept(&mut self, key: &K) -> bool;
     #[inline(always)] fn is_noop() -> bool;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NoopFilter;
 
 impl<K: Key> ItemFilter<K> for NoopFilter {

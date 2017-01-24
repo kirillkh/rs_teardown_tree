@@ -1,4 +1,4 @@
-use base::{Key, Node, TreeRepr, Traverse, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
+use base::{Key, Node, TreeRepr, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, consume_unchecked};
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
