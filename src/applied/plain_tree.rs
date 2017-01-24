@@ -1,4 +1,4 @@
-use base::{Key, Node, TreeRepr, TreeWorker, TreeDerefMut, Traverse, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
+use base::{Key, Node, TreeRepr, Traverse, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, parenti, consume_unchecked};
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
@@ -111,7 +111,7 @@ impl<K: Key, V> PlTree<K, V> {
         let result = f(&mut worker);
 
         unsafe {
-            let x = mem::replace(&mut *self.repr.get(), worker.tworker.repr);
+            let x = mem::replace(&mut *self.repr.get(), worker.repr);
             mem::forget(x);
         }
 
@@ -184,14 +184,15 @@ impl<K: Key, V> DerefMut for PlTree<K, V> {
 
 
 pub struct PlWorker<K: Key, V, Flt> where Flt: ItemFilter<K> {
-    tworker: TreeWorker<PlNode<K, V>, Flt>
+    repr: TreeRepr<PlNode<K, V>>,
+    filter: Flt
 }
 
 impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
     /// Constructs a new FilterTree
     #[inline]
     pub fn new(repr: TreeRepr<PlNode<K, V>>, filter: Flt) -> Self {
-        PlWorker { tworker: TreeWorker { repr:repr, filter:filter } }
+        PlWorker { repr:repr, filter:filter }
     }
 
 
@@ -422,13 +423,13 @@ impl<K: Key, V, Flt: ItemFilter<K>> Deref for PlWorker<K, V, Flt> {
     type Target = TreeRepr<PlNode<K, V>>;
 
     fn deref(&self) -> &Self::Target {
-        self.tworker.deref()
+        &self.repr
     }
 }
 
 impl<K: Key, V, Flt: ItemFilter<K>> DerefMut for PlWorker<K, V, Flt> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.tworker.deref_mut()
+        &mut self.repr
     }
 }
 
@@ -437,13 +438,13 @@ impl<K: Key, V, Flt: ItemFilter<K>> BulkDeleteCommon<PlNode<K, V>> for PlWorker<
     type Filter = Flt;
 
     fn filter_mut(&mut self) -> &mut Self::Filter {
-        &mut self.tworker.filter
+        &mut self.filter
     }
 }
 
 
 impl<K: Key, V, Flt: ItemFilter<K>> TeardownTreeRefill for PlWorker<K, V, Flt> where K: Copy, V: Copy {
     #[inline] fn refill(&mut self, master: &PlWorker<K, V, Flt>) {
-        self.tworker.repr.refill(&master.tworker.repr);
+        self.repr.refill(&master.repr);
     }
 }

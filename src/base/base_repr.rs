@@ -1,4 +1,4 @@
-use base::{Node, ItemFilter, lefti, righti, parenti, consume_unchecked, SlotStack};
+use base::{Node, lefti, righti, parenti, consume_unchecked, SlotStack};
 use base::bulk_delete::DeleteRangeCache;
 use std::cmp::{Ordering};
 use std::fmt::{Debug, Formatter};
@@ -401,28 +401,6 @@ impl<N: Node> TreeRepr<N> {
 
     pub fn slots_max<'a>(&'a mut self) -> &'a mut SlotStack where N: 'a {
         &mut self.delete_range_cache.slots_max
-    }
-}
-
-
-
-pub struct TreeWorker<N: Node, Flt: ItemFilter<N::K>> {
-    pub repr: TreeRepr<N>,
-    pub filter: Flt
-}
-
-
-impl<N: Node, Flt: ItemFilter<N::K>> Deref for TreeWorker<N, Flt> {
-    type Target = TreeRepr<N>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.repr
-    }
-}
-
-impl<N: Node, Flt: ItemFilter<N::K>> DerefMut for TreeWorker<N, Flt> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.repr
     }
 }
 

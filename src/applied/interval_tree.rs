@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, TreeWorker, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
+use base::{TreeRepr, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::ops::{Deref, DerefMut};
 use std::fmt::{Debug, Display, Formatter};
@@ -62,12 +62,11 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         let result = f(&mut worker);
 
         unsafe {
-            let x = mem::replace(&mut *self.repr.get(), worker.tworker.repr);
+            let x = mem::replace(&mut *self.repr.get(), worker.repr);
             mem::forget(x);
         }
 
         result
-
     }
 
 
@@ -117,13 +116,14 @@ impl<Iv: Interval, V: Clone> Clone for IvTree<Iv, V> {
 
 
 pub struct IvWorker<Iv: Interval, V, Flt> where Flt: ItemFilter<Iv> {
-    tworker: TreeWorker<IvNode<Iv, V>, Flt>
+    repr: TreeRepr<IvNode<Iv, V>>,
+    filter: Flt
 }
 
 impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     /// Constructs a new FilterTree
     pub fn new(repr: TreeRepr<IvNode<Iv, V>>, filter: Flt) -> Self {
-        IvWorker { tworker: TreeWorker { repr:repr, filter:filter } }
+        IvWorker { repr:repr, filter:filter }
     }
 
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -405,13 +405,13 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Deref for IvWorker<Iv, V, Flt> {
     type Target = TreeRepr<IvNode<Iv, V>>;
 
     fn deref(&self) -> &Self::Target {
-        self.tworker.deref()
+        &self.repr
     }
 }
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> DerefMut for IvWorker<Iv, V, Flt> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        self.tworker.deref_mut()
+        &mut self.repr
     }
 }
 
@@ -420,14 +420,14 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> BulkDeleteCommon<IvNode<Iv, V>> for I
     type Filter = Flt;
 
     fn filter_mut(&mut self) -> &mut Self::Filter {
-        &mut self.tworker.filter
+        &mut self.filter
     }
 }
 
 
 impl<Iv: Interval, V, Flt: ItemFilter<Iv>> TeardownTreeRefill for IvWorker<Iv, V, Flt> where Iv: Copy, V: Copy {
     fn refill(&mut self, master: &IvWorker<Iv, V, Flt>) {
-        self.tworker.repr.refill(&master.tworker.repr);
+        self.repr.refill(&master.repr);
     }
 }
 
