@@ -185,6 +185,11 @@ impl<N: Node> TreeRepr<N> {
     }
 
     #[inline(always)]
+    pub fn key_unsafe<'b>(&self, idx: usize) -> &'b N::K where N: 'b {
+        &self.node_unsafe(idx).key
+    }
+
+    #[inline(always)]
     pub fn key<'a>(&'a self, idx: usize) -> &'a N::K where N: 'a {
         &self.node(idx).key
     }

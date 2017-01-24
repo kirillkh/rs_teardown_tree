@@ -104,6 +104,17 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
      }
 
 
+    #[inline(always)]
+    fn filter_take(&mut self, idx: usize) -> Option<N> {
+        let key = self.key_unsafe(idx);
+        if self.filter_mut().accept(key) {
+            Some(self.take(idx))
+        } else {
+            None
+        }
+    }
+
+
     //---- fill_slots_* -------------------------------------------------------------------
     #[inline(never)]
     fn fill_slots_min(&mut self, idx: usize) -> bool {

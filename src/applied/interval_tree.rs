@@ -334,22 +334,21 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             }
         } else {
             // consume root if necessary
-            let key = &self.node_unsafe(idx).key;
-            let consumed = if search.intersects(k) && self.filter_mut().accept(key)
-                { Some(self.take(idx)) }
+            let consumed = if search.intersects(k)
+                { self.filter_take(idx) }
             else
                 { None };
 
             // left subtree
             let mut removed = consumed.is_some();
-            if removed {
+            if let Some(item) = consumed {
                 if min_included {
                     self.consume_subtree(lefti(idx), output)
                 } else {
                     removed = self.descend_filter_intersecting_ivl_left(search, idx, true, false, output);
                 }
 
-                consume_unchecked(output, consumed.unwrap().into_kv());
+                consume_unchecked(output, item.into_kv());
             } else {
                 removed = self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, output);
                 if !removed && self.slots_min().has_open() {

@@ -269,12 +269,17 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
                 return;
             }
 
-            let decision = drv.decide(&self.key(idx));
+            let key = self.key_unsafe(idx);
+            let decision = drv.decide(key);
 
             if decision.left() && decision.right() {
-                let item = self.take(idx);
-                let removed = self.descend_delete_max_left(drv, idx, true);
-                consume_unchecked(drv.output(), item.into_kv());
+                let item = self.filter_take(idx);
+                let removed = item.is_some();
+
+                let removed = self.descend_delete_max_left(drv, idx, removed);
+                if let Some(item) = item {
+                    consume_unchecked(drv.output(), item.into_kv());
+                }
                 self.descend_delete_min_right(drv, idx, removed);
                 return;
             } else if decision.left() {
@@ -288,15 +293,19 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
     #[inline(never)]
     fn delete_range_min<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
-        let decision = drv.decide(&self.key(idx));
+        let key = self.key_unsafe(idx);
+        let decision = drv.decide(key);
         debug_assert!(decision.left());
 
         if decision.right() {
             // the root and the whole left subtree are inside the range
-            let item = self.take(idx);
+            let item = self.filter_take(idx);
             self.consume_subtree(lefti(idx), drv.output());
-            consume_unchecked(drv.output(), item.into_kv());
-            self.descend_delete_min_right(drv, idx, true);
+            let removed = item.is_some();
+            if let Some(item) = item {
+                consume_unchecked(drv.output(), item.into_kv());
+            }
+            self.descend_delete_min_right(drv, idx, removed);
         } else {
             // the root and the right subtree are outside the range
             self.descend_delete_min_left(drv, idx, false);
@@ -304,23 +313,23 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
             if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
                 self.descend_fill_min_right(idx, true);
-//                self.descend_right(idx, true, |this: &mut Self, child_idx| {
-//                    this.fill_slots_min2(child_idx);
-//                });
             }
         }
     }
 
     #[inline(never)]
     fn delete_range_max<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
-        let decision = drv.decide(&self.key(idx));
+        let key = self.key_unsafe(idx);
+        let decision = drv.decide(key);
         debug_assert!(decision.right(), "idx={}", idx);
 
         if decision.left() {
             // the root and the whole right subtree are inside the range
-            let item = self.take(idx);
-            self.descend_delete_max_left(drv, idx, true);
-            consume_unchecked(drv.output(), item.into_kv());
+            let item = self.filter_take(idx);
+            self.descend_delete_max_left(drv, idx, item.is_some());
+            if let Some(item) = item {
+                consume_unchecked(drv.output(), item.into_kv());
+            }
             self.consume_subtree(righti(idx), drv.output());
         } else {
             // the root and the left subtree are outside the range
@@ -361,58 +370,6 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
     fn descend_delete_max_right<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
         self.descend_right(idx, with_slot,
                            |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
-    }
-
-
-
-    fn fill_slots_min2(&mut self, root: usize) {
-        debug_assert!(!self.is_nil(root));
-
-        struct State {
-            prev: usize,
-            stopped: bool
-        }
-
-        let mut state = State { prev:0, stopped:false };
-        self.traverse_inorder(root, &mut state,
-            |this: &mut Self, state, idx| {
-                // unwind the stack to the current node
-                if idx < state.prev {
-                    let mut curr = state.prev;
-                    while idx != curr {
-                        debug_assert!(idx < curr);
-                        debug_assert!(curr&1==0 || parenti(curr) == idx);
-
-                        this.slots_min().pop();
-                        curr = parenti(curr);
-                    }
-                    debug_assert!(idx == curr);
-                }
-                state.prev = idx;
-
-                if this.slots_min().has_open() {
-                    this.fill_slot_min(idx);
-                    this.slots_min().push(idx);
-                    false
-                } else {
-                    state.stopped = true;
-                    true
-                }
-            }
-        );
-
-        let mut curr = state.prev;
-        while root != curr {
-            debug_assert!(root < curr);
-            if curr & 1 == 0 {
-                self.slots_min().pop();
-            }
-            curr = parenti(curr);
-        }
-
-        if !state.stopped {
-            self.slots_min().pop();
-        }
     }
 }
 
