@@ -85,11 +85,29 @@ impl<K: Key, V> PlTree<K, V> {
         self.filter_with_driver(&mut RangeDriver::new(range, output), NoopFilter)
     }
 
+    /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
+    /// true and stores them in the output Vec. The items are returned in order.
+    pub fn filter_range<Flt>(&mut self, range: Range<K>, filter: Flt, output: &mut Vec<(K, V)>)
+        where Flt: ItemFilter<K>
+    {
+        output.reserve(self.size());
+        self.filter_with_driver(&mut RangeDriver::new(range, output), filter)
+    }
+
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
     #[inline]
     pub fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
         output.reserve(self.size());
         self.filter_with_driver(&mut RangeRefDriver::new(range, output), NoopFilter)
+    }
+
+    /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
+    /// true and stores them in the output Vec. The items are returned in order.
+    pub fn filter_range_ref<Flt>(&mut self, range: Range<&K>, filter: Flt, output: &mut Vec<(K, V)>)
+        where Flt: ItemFilter<K>
+    {
+        output.reserve(self.size());
+        self.filter_with_driver(&mut RangeRefDriver::new(range, output), filter)
     }
 
     #[inline]
@@ -274,9 +292,9 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
             if decision.left() && decision.right() {
                 let item = self.filter_take(idx);
-                let removed = item.is_some();
+                let mut removed = item.is_some();
 
-                let removed = self.descend_delete_max_left(drv, idx, removed);
+                removed = self.descend_delete_max_left(drv, idx, removed);
                 if let Some(item) = item {
                     consume_unchecked(drv.output(), item.into_kv());
                 }
@@ -300,11 +318,24 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
         if decision.right() {
             // the root and the whole left subtree are inside the range
             let item = self.filter_take(idx);
-            self.consume_subtree(lefti(idx), drv.output());
-            let removed = item.is_some();
+            let mut removed = item.is_some();
+            removed = self.descend_consume_left(idx, removed, drv.output());
             if let Some(item) = item {
                 consume_unchecked(drv.output(), item.into_kv());
             }
+
+            if !Flt::is_noop() {
+                if removed {
+                    removed = self.descend_fill_max_left(idx, true);
+                }
+                if !removed && self.slots_min().has_open() {
+                    self.descend_fill_min_left(idx, false);
+                    debug_assert!(self.slots_min().has_open());
+                    self.fill_slot_min(idx);
+                    removed = true;
+                }
+            }
+
             self.descend_delete_min_right(drv, idx, removed);
         } else {
             // the root and the right subtree are outside the range
@@ -326,11 +357,21 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
         if decision.left() {
             // the root and the whole right subtree are inside the range
             let item = self.filter_take(idx);
-            self.descend_delete_max_left(drv, idx, item.is_some());
+            let mut removed = self.descend_delete_max_left(drv, idx, item.is_some());
             if let Some(item) = item {
                 consume_unchecked(drv.output(), item.into_kv());
             }
-            self.consume_subtree(righti(idx), drv.output());
+            removed = self.descend_consume_right(idx, removed, drv.output());
+
+            if !Flt::is_noop() {
+                if !removed && self.slots_max().has_open() {
+                    self.fill_slot_max(idx);
+                    removed = true
+                }
+                if removed {
+                    self.descend_fill_max_left(idx, true);
+                }
+            }
         } else {
             // the root and the left subtree are outside the range
             self.descend_delete_max_right(drv, idx, false);
@@ -353,8 +394,13 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
     fn descend_delete_max_left<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
-        self.descend_left(idx, with_slot,
-                          |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
+        if Flt::is_noop() {
+            self.descend_left(idx, with_slot,
+                              |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
+        } else {
+            self.descend_left_fresh_slots(idx, with_slot,
+                                          |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
+        }
     }
 
 

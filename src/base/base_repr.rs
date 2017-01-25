@@ -583,7 +583,7 @@ impl<N: Node> Debug for TreeRepr<N> where N: Debug {
             .rev()
             .skip_while(|&(_, flag)| !flag)
             .map(|(i, &flag)| match (self.node(i), flag) {
-                (_, false) => String::from("0"),
+                (_, false) => String::from("X"),
                 (ref node, true) => format!("{:?}", node)
             })
             .collect();

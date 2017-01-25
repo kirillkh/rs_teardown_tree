@@ -18,7 +18,7 @@ pub trait TreeWrapperAccess {
 
 
 mod plain {
-    use base::{TeardownTreeRefill, Key};
+    use base::{TeardownTreeRefill, Key, ItemFilter};
     use applied::plain_tree::{PlTree};
 
     use std::fmt;
@@ -33,12 +33,15 @@ mod plain {
     }
 
     impl<K: Ord+Clone, V> TeardownTreeMap<K, V> {
+        /// Creates a new `TeardownTreeMap` with the given set of items. The items can be given in
+        /// any order. Duplicate keys are allowed and supported.
         pub fn new(mut items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             items.sort_by(|a, b| a.0.cmp(&b.0));
             Self::with_sorted(items)
         }
 
-        /// Creates a new TeardownTree with the given set of items.
+        /// Creates a new `TeardownTreeMap` with the given set of items. Duplicate keys are allowed
+        /// and supported.
         /// **Note**: the items are assumed to be sorted!
         pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             TeardownTreeMap { internal: PlTree::with_sorted(sorted) }
@@ -60,9 +63,25 @@ mod plain {
             self.internal.delete_range(range, output)
         }
 
+        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
+        /// true and stores them in the output Vec. The items are returned in order.
+        pub fn filter_range<Flt>(&mut self, range: Range<K>, filter: Flt, output: &mut Vec<(K, V)>)
+            where Flt: ItemFilter<K>
+        {
+            self.internal.filter_range(range, filter, output)
+        }
+
         /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
         pub fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
             self.internal.delete_range_ref(range, output)
+        }
+
+        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
+        /// true and stores them in the output Vec. The items are returned in order.
+        pub fn filter_range_ref<Flt>(&mut self, range: Range<&K>, filter: Flt, output: &mut Vec<(K, V)>)
+            where Flt: ItemFilter<K>
+        {
+            self.internal.filter_range_ref(range, filter, output)
         }
 
         /// Returns the number of items in this tree.
@@ -116,12 +135,15 @@ mod plain {
     }
 
     impl<T: Ord+Clone> TeardownTreeSet<T> {
+        /// Creates a new `TeardownTreeSet` with the given set of items. The items can be given in any
+        /// order. Duplicates are allowed and supported.
         pub fn new(items: Vec<T>) -> TeardownTreeSet<T> {
             let map_items = super::conv_to_tuple_vec(items);
             TeardownTreeSet { map: TeardownTreeMap::new(map_items) }
         }
 
-        /// Creates a new TeardownTree with the given set of items.
+        /// Creates a new `TeardownTreeSet` with the given set of items. Duplicates are allowed and
+        /// supported.
         /// **Note**: the items are assumed to be sorted!
         pub fn with_sorted(sorted: Vec<T>) -> TeardownTreeSet<T> {
             let map_items = super::conv_to_tuple_vec(sorted);
@@ -145,10 +167,28 @@ mod plain {
             self.map.delete_range(range, map_output)
         }
 
+        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
+        /// true and stores them in the output Vec. The items are returned in order.
+        pub fn filter_range<Flt>(&mut self, range: Range<T>, filter: Flt, output: &mut Vec<T>)
+            where Flt: ItemFilter<T>
+        {
+            let map_output = unsafe { mem::transmute(output) };
+            self.map.filter_range(range, filter, map_output)
+        }
+
         /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
         pub fn delete_range_ref(&mut self, range: Range<&T>, output: &mut Vec<T>) {
             let map_output = unsafe { mem::transmute(output) };
             self.map.delete_range_ref(range, map_output)
+        }
+
+        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
+        /// true and stores them in the output Vec. The items are returned in order.
+        pub fn filter_range_ref<Flt>(&mut self, range: Range<&T>, filter: Flt, output: &mut Vec<T>)
+            where Flt: ItemFilter<T>
+        {
+            let map_output = unsafe { mem::transmute(output) };
+            self.map.filter_range_ref(range, filter, map_output)
         }
 
         /// Returns the number of items in this tree.
@@ -207,12 +247,15 @@ mod interval {
     }
 
     impl<Iv: Interval, V> IntervalTeardownTreeMap<Iv, V> {
+        /// Creates a new `IntervalTeardownTreeMap` with the given set of intervals. The items can be
+        /// given in any order. Duplicates are allowed and supported.
         pub fn new(mut items: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
             items.sort_by(|a, b| a.0.cmp(&b.0));
             Self::with_sorted(items)
         }
 
-        /// Creates a new `IntervalTeardownTree` with the given set of intervals.
+        /// Creates a new `IntervalTeardownTreeMap` with the given set of intervals. Duplicates are
+        /// allowed and supported.
         /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
             let mut tree = IntervalTeardownTreeMap { internal: IvTree::with_sorted(sorted) };
@@ -244,14 +287,14 @@ mod interval {
             self.internal.delete(search)
         }
 
-        /// Deletes all intervals intersecting with the `search` interval from the tree and stores them
-        /// in the output Vec. The items are returned in order.
+        /// Deletes all intervals that intersect with the `search` interval from the tree and stores
+        /// them in the output Vec. The items are returned in order.
         #[inline]
         pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
             self.internal.delete_intersecting(search, output)
         }
 
-        /// Deletes all intervals intersecting with the `search` interval that match the filter from
+        /// Deletes all intervals that intersect with the `search` interval and match the filter from
         /// the tree and stores the associated items in the output Vec. The items are returned in order.
         pub fn filter_intersecting<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
             where Flt: ItemFilter<Iv>
@@ -301,12 +344,15 @@ mod interval {
     }
 
     impl<Iv: Interval> IntervalTeardownTreeSet<Iv> {
+        /// Creates a new `IntervalTeardownTreeSet` with the given set of intervals. The items can be
+        /// given in any order. Duplicates are allowed and supported.
         pub fn new(items: Vec<Iv>) -> IntervalTeardownTreeSet<Iv> {
             let map_items = super::conv_to_tuple_vec(items);
             IntervalTeardownTreeSet { map: IntervalTeardownTreeMap::new(map_items) }
         }
 
-        /// Creates a new IntervalTeardownTreeSet with the given set of items.
+        /// Creates a new `IntervalTeardownTreeSet` with the given set of items. Duplicates are allowed
+        /// and supported.
         /// **Note**: the items are assumed to be sorted!
         pub fn with_sorted(sorted: Vec<Iv>) -> IntervalTeardownTreeSet<Iv> {
             let map_items = super::conv_to_tuple_vec(sorted);
@@ -323,14 +369,14 @@ mod interval {
             self.map.delete(search).is_some()
         }
 
-        /// Deletes all intervals intersecting with the `search` interval from the tree and stores
+        /// Deletes all intervals that intersect with the `search` interval from the tree and stores
         /// them in the output Vec. The items are returned in order.
         pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>) {
             let map_output = unsafe { mem::transmute(output) };
             self.map.delete_intersecting(search, map_output)
         }
 
-        /// Deletes all intervals intersecting with the `search` interval that match the filter from
+        /// Deletes all intervals that intersect with the `search` interval and match the filter from
         /// the tree and stores them in the output Vec. The items are returned in order.
         pub fn filter_intersecting<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
             where Flt: ItemFilter<Iv>

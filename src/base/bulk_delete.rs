@@ -275,9 +275,8 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     #[inline(always)]
     fn descend_consume_left(&mut self, idx: usize, with_slot: bool, output: &mut Vec<(N::K, N::V)>) -> bool {
         if Self::Filter::is_noop() {
-            debug_assert!(with_slot);
             self.consume_subtree_unfiltered(lefti(idx), output);
-            true
+            with_slot
         } else {
             self.descend_left_fresh_slots(idx, with_slot,
                                           |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output))
@@ -287,9 +286,8 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     #[inline(always)]
     fn descend_consume_right(&mut self, idx: usize, with_slot: bool, output: &mut Vec<(N::K, N::V)>) -> bool {
         if Self::Filter::is_noop() {
-            debug_assert!(with_slot);
             self.consume_subtree_unfiltered(righti(idx), output);
-            true
+            with_slot
         } else {
             self.descend_right(idx, with_slot,
                                |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output))

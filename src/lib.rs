@@ -23,11 +23,17 @@ pub use self::base::util;
 
 #[cfg(test)]
 mod test_plain {
-    use base::{Node, lefti, righti};
-    use base::validation::{check_bst, check_integrity};
+    use base::{Node, ItemFilter, NoopFilter, Traverse, lefti, righti};
+    use base::util::make_teardown_seq;
+    use base::validation::{check_bst_del_range, check_integrity_del_range};
     use applied::plain_tree::{PlTree, PlNode};
+    use applied::interval::{Interval, KeyInterval};
     use external_api::{TeardownTreeSet, TreeWrapperAccess};
+    use super::check_output_sorted;
+
+    use rand::{Rng, XorShiftRng, SeedableRng};
     use std::cmp;
+    use std::fmt::Debug;
 
     type Nd = PlNode<usize, ()>;
     type Tree = PlTree<usize, ()>;
@@ -73,16 +79,9 @@ mod test_plain {
 
     fn test_prebuilt(items: &[usize], range: Range<usize>) {
         let nodes: Vec<Option<Nd>> = mk_prebuilt(items);
-        let mut tree_mod = Tree::with_nodes(nodes);
-
-        let mut output = Vec::with_capacity(tree_mod.size());
-
-//        println!("tree={:?}, range=({}, {}), {}", &tree, from, to, &tree);
-        let tree_orig = tree_mod.clone();
-        tree_mod.delete_range(range.clone(), &mut output);
-
-        let output = super::conv_from_tuple_vec(&mut output);
-        delete_range_check(items.iter().filter(|&&x| x!=0).count(), range, output, tree_mod, &tree_orig);
+        let tree = Tree::with_nodes(nodes);
+        let mut output = Vec::with_capacity(tree.size());
+        check_tree(&mut TeardownTreeSet::from_internal(tree), range, NoopFilter, &mut output);
     }
 
     #[test]
@@ -97,11 +96,16 @@ mod test_plain {
 
         test_prebuilt(&[3, 2, 0, 1], 1..3);
 
+        test_prebuilt(&[3, 2, 0, 1], 2..4);
+
         test_prebuilt(&[3, 2, 4, 1], 1..3);
 
         test_prebuilt(&[3, 1, 4, 0, 2], 2..4);
 
         test_prebuilt(&[4, 2, 0, 1, 3], 3..4);
+
+
+        test_prebuilt(&[2, 2, 2, 1], 2..3);
 
 
         test_prebuilt(&[4, 3, 0, 2, 0, 0, 0, 1], 1..1);
@@ -235,7 +239,7 @@ mod test_plain {
             let deleted = tree_mod.delete(&i);
             assert!(deleted.is_some());
             output.push(i);
-            delete_range_check(n, i..i+1, &mut output, tree_mod, &tree);
+            delete_range_check(n, i..i+1, &mut output, tree_mod, &tree, &NoopFilter);
         }
     }
 
@@ -249,49 +253,174 @@ mod test_plain {
                 output.truncate(0);
                 tree_mod.delete_range(i..j, &mut output);
                 let output = super::conv_from_tuple_vec(&mut output);
-                delete_range_check(n, i..j, output, tree_mod, &tree);
+                delete_range_check(n, i..j, output, tree_mod, &tree, &NoopFilter);
             }
         }
     }
 
-    fn delete_range_check(n: usize, range: Range<usize>, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree) {
+    fn delete_range_check<Flt>(n: usize, range: Range<usize>, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree, filter: &Flt)
+        where Flt: ItemFilter<usize>+Debug
+    {
         let expected_range = cmp::max(1, range.start) .. cmp::min(n+1, range.end);
 
         assert_eq!(output, &expected_range.collect::<Vec<_>>(), "tree_orig={}", tree_orig);
         assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
 
-        check_bst(&tree_mod, &output, &tree_orig, 0);
-        check_integrity(&tree_mod, &tree_orig);
+        check_bst_del_range(&range, &tree_mod, &output, &tree_orig, filter);
+        check_integrity_del_range(&range, &tree_mod, output, &tree_orig, filter);
     }
-
 
 
 
 
     quickcheck! {
         fn quickcheck_plain_(xs: Vec<usize>, rm: Range<usize>) -> bool {
-            check_plain_tree(xs, rm)
+            let mut output = Vec::with_capacity(xs.len());
+            check_plain_tree(xs, rm, &mut output)
         }
     }
 
-    fn check_plain_tree(xs: Vec<usize>, rm: Range<usize>) -> bool {
+    fn check_plain_tree(xs: Vec<usize>, rm: Range<usize>, output: &mut Vec<usize>) -> bool {
         let rm = if rm.start <= rm.end { rm } else {rm.end .. rm.start};
 
-        let tree = TeardownTreeSet::new(xs);
-        check_tree(tree, rm)
+        let mut tree = TeardownTreeSet::new(xs);
+        check_tree(&mut tree, rm, NoopFilter, output);
+        true
     }
 
-    fn check_tree(mut tree: TeardownTreeSet<usize>, rm: Range<usize>) -> bool {
-        let tree: &mut Tree = tree.internal();
-        let orig = tree.clone();
+    fn check_tree<Flt>(orig: &mut TeardownTreeSet<usize>, rm: Range<usize>, mut filter: Flt,
+                       output: &mut Vec<usize>) -> TeardownTreeSet<usize>
+        where Flt: ItemFilter<usize>+Clone+Debug
+    {
+        let mut tree = orig.clone();
+        tree.filter_range(rm.clone(), filter.clone(), output);
 
-        let mut output = Vec::with_capacity(tree.size());
-        tree.delete_range(rm.start .. rm.end, &mut output);
+        {
+            let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
+            check_bst_del_range(&rm, tree, output, orig, &filter);
+            check_integrity_del_range(&rm, tree, output, orig, &filter);
+            check_output_intersects(&rm, tree, output, orig, &filter);
+            check_tree_doesnt_intersect(&rm, tree, &mut filter);
 
-        check_bst(&tree, &output, &orig, 0);
-        check_integrity(&tree, &orig);
+            assert!(output.len() + tree.size() == orig.size());
 
-        true
+            check_output_sorted(output, orig, &rm);
+        }
+
+        tree
+    }
+
+
+    #[derive(Clone, Debug)]
+    struct SetRefFilter<'a> {
+        set: &'a TeardownTreeSet<usize>
+    }
+
+    impl<'a> SetRefFilter<'a> {
+        pub fn new(set: &'a TeardownTreeSet<usize>) -> Self {
+            SetRefFilter { set: set }
+        }
+    }
+
+    impl<'a> ItemFilter<usize> for SetRefFilter<'a> {
+        fn accept(&mut self, key: &usize) -> bool { self.set.contains(key) }
+        fn is_noop() -> bool { false }
+    }
+
+    fn full_teardown_filter_n(n: usize, rm_items: usize, flt_items: usize) {
+        assert!(flt_items <= n);
+        let mut rng = XorShiftRng::from_seed([96511, 42, 1423, 51984]);
+        let elems: Vec<_> = (0..n).collect();
+        let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
+        let mut flt_elems: Vec<_> = elems.clone();
+
+        for i in 0..(n-flt_items) {
+            let pos = rng.gen_range(0, n-flt_items-i);
+            flt_elems.swap_remove(pos);
+        }
+
+        let mut orig = TeardownTreeSet::new(elems);
+        let mut output = Vec::with_capacity(orig.size());
+        let flt_tree = TeardownTreeSet::new(flt_elems);
+
+        for range in ranges.into_iter() {
+            output.truncate(0);
+            orig = check_tree(&mut orig, range, SetRefFilter::new(&flt_tree), &mut output);
+        }
+    }
+
+    #[test]
+    fn test_full_teardown_filter() {
+//        for i in 1..260 {
+//            for j in 1..i {
+//                println!("ij = {} {}", i, j);
+//                for k in 0..i {
+////                    println!("ijk = {} {} {}", i, j, k);
+//                    full_teardown_filter_n(i, j, k);
+//                }
+//            }
+//        }
+
+
+        full_teardown_filter_n(3, 2, 2);
+
+        full_teardown_filter_n(3, 2, 3);
+
+        full_teardown_filter_n(3, 2, 2);
+
+        full_teardown_filter_n(4, 2, 3);
+
+        full_teardown_filter_n(4, 3, 2);
+
+        full_teardown_filter_n(4, 3, 3);
+
+        full_teardown_filter_n(5, 2, 0);
+        full_teardown_filter_n(5, 2, 2);
+        full_teardown_filter_n(5, 2, 5);
+
+        full_teardown_filter_n(6, 3, 2);
+
+        full_teardown_filter_n(8, 3, 5);
+
+        full_teardown_filter_n(10, 3, 0);
+        full_teardown_filter_n(10, 3, 5);
+        full_teardown_filter_n(10, 3, 10);
+
+        full_teardown_filter_n(15, 3, 12);
+
+        full_teardown_filter_n(259, 3, 0);
+        full_teardown_filter_n(259, 3, 123);
+        full_teardown_filter_n(259, 3, 259);
+
+        full_teardown_filter_n(1598, 21, 0);
+        full_teardown_filter_n(1598, 21, 711);
+        full_teardown_filter_n(1598, 21, 1598);
+
+        full_teardown_filter_n(65918, 7347, 1965);
+        full_teardown_filter_n(88165, 9664, 1);
+        full_teardown_filter_n(196561, 81669, 97689);
+        full_teardown_filter_n(756198, 247787, 17);
+    }
+
+
+    fn check_output_intersects<Flt>(search: &Range<usize>, tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, filter: &Flt)
+        where Flt: ItemFilter<usize>+Debug
+    {
+        let search = KeyInterval::from_range(search);
+        for (_, &x) in output.iter().enumerate() {
+            let iv = KeyInterval::new(x,x);
+            assert!(search.intersects(&iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
+        }
+    }
+
+    fn check_tree_doesnt_intersect<Flt>(search: &Range<usize>, tree: &mut Tree, flt: &mut Flt)
+        where Flt: ItemFilter<usize>
+    {
+        tree.traverse_inorder(0, &mut (), |this, _, idx| {
+            let &x = this.key(idx);
+            assert!((x<search.start || search.end<=x) || !flt.accept(&x), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, x, search, this, this);
+            false
+        });
     }
 }
 
@@ -307,11 +436,12 @@ mod test_interval {
     use std::fmt::Debug;
 
     use base::{Traverse, Node, ItemFilter, NoopFilter, parenti, lefti, righti};
-    use base::validation::{check_bst, check_integrity, gen_tree_keys};
+    use base::validation::{check_bst_del_range, check_integrity_del_range, gen_tree_keys};
     use base::util::make_teardown_seq;
     use applied::interval::{Interval, IvNode, KeyInterval};
     use applied::interval_tree::{IvTree};
     use external_api::{IntervalTeardownTreeSet, TreeWrapperAccess};
+    use super::check_output_sorted;
 
     type Iv = KeyInterval<usize>;
     type Tree = IvTree<Iv, ()>;
@@ -398,8 +528,8 @@ mod test_interval {
 
         {
             let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
-            check_bst(tree, &output, orig, 0);
-            check_integrity(tree, orig);
+            check_bst_del_range(&rm, tree, &output, orig, &filter);
+            check_integrity_del_range(&rm.to_range(), tree, output, orig, &filter);
             check_output_intersects(&rm, tree, &output, orig, &filter);
             check_tree_doesnt_intersect(&rm, tree, &mut filter);
 
@@ -409,7 +539,7 @@ mod test_interval {
                 check_maxb(orig, tree, 0);
             }
 
-            check_output_sorted(&output, orig, &rm);
+            check_output_sorted(&output, orig, &rm.to_range());
         }
 
         tree
@@ -430,12 +560,6 @@ mod test_interval {
             assert!(!this.key(idx).intersects(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
             false
         });
-    }
-
-    fn check_output_sorted(output: &Vec<Iv>, orig: &mut Tree, rm: &Iv) {
-        for i in 1..output.len() {
-            assert!(output[i-1] <= output[i], "output={:?}, rm={:?}, orig={:?}, {}", output, rm, orig, orig);
-        }
     }
 
     fn init_maxb(tree: &mut Tree, idx: usize) -> usize {
@@ -634,8 +758,20 @@ mod test_interval {
 }
 
 
+
+use base::{Node, TreeDeref, TreeRepr};
+use std::fmt::Debug;
+
 #[cfg(test)]
 fn conv_from_tuple_vec<K>(items: &mut Vec<(K, ())>) -> &mut Vec<K> {
     use std::mem;
     unsafe { mem::transmute(items) }
+}
+
+fn check_output_sorted<N: Node, Rm>(output: &Vec<N::K>, orig: &mut TreeDeref<N, Target=TreeRepr<N>>, rm: &Rm)
+    where N::K: Debug, N: Debug, Rm: Debug
+{
+    for i in 1..output.len() {
+        assert!(output[i-1] <= output[i], "output={:?}, rm={:?}, orig={:?}, {}", output, rm, orig.deref(), orig.deref());
+    }
 }

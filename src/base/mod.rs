@@ -88,53 +88,84 @@ impl<K: Key> ItemFilter<K> for NoopFilter {
 pub mod validation {
     use rand::{Rng, XorShiftRng};
     use std::fmt::Debug;
-    use base::{Key, TreeRepr, Node, lefti, righti, parenti};
+    use std::ops::Range;
+    use base::{Key, ItemFilter, TreeRepr, Node, lefti, righti, parenti};
 
     type Tree<N> = TreeRepr<N>;
 
     /// Validates the BST property.
-    pub fn check_bst<'a, N: Node, U: Ord+Debug>(tree: &'a Tree<N>, output: &Vec<U>, tree_orig: &Tree<N>, idx: usize) -> Option<(&'a N::K, &'a N::K)>
-        where N: Debug, N::K: Debug
-    {
+    pub fn check_bst<'a, N: Node>(tree: &'a Tree<N>, idx: usize) ->  Result<Option<(&'a N::K, &'a N::K)>, (usize, N::K, N::K)> {
         let node = tree.node_opt(idx);
         if node.is_none() {
-            return None;
+            return Ok(None);
         } else {
             let key = &node.unwrap().key;
-            let left = check_bst(tree, output, tree_orig, lefti(idx));
-            let right = check_bst(tree, output, tree_orig, righti(idx));
+            let left = check_bst(tree, lefti(idx))?;
+            let right = check_bst(tree, righti(idx))?;
 
             let min =
                 if let Some((lmin, lmax)) = left {
-                    debug_assert!(lmax <= key, "lmax={:?}, key={:?}, tree_orig: {:?}, tree: {:?}, output: {:?}", lmax, key, tree_orig, tree, output);
+                    if key < lmax {
+                        return Err((idx, lmax.clone(), key.clone()))
+                    }
                     lmin
                 } else {
                     key
                 };
             let max =
                 if let Some((rmin, rmax)) = right {
-                    debug_assert!(key <= rmin, "tree_orig: {:?}, tree: {:?}, output: {:?}", tree_orig, tree, output);
+                    if rmin < key {
+                        return Err((idx, rmin.clone(), key.clone()))
+                    }
                     rmax
                 } else {
                     key
                 };
 
-            return Some((min, max));
+            return Ok(Some((min, max)));
+        }
+    }
+
+    pub fn check_bst_del_range<Flt, N: Node, Search, Out>(search: &Search, tree: &Tree<N>, output: &Out, tree_orig: &Tree<N>, filter: &Flt)
+        where N: Debug, N::K: Debug, Search: Debug, Out: Debug, Flt: Debug
+    {
+        if let Err((idx, maxmin, key)) = check_bst(tree, 0) {
+            if key < maxmin {
+                debug_assert!(false, "key<lmax! idx={}, lmax={:?}, key={:?}, search={:?}, filter: {:?}, tree: {:?}, output: {:?}, tree_orig: {:?}, {}", idx, maxmin, key, search, filter, tree, output, tree_orig, tree_orig);
+            } else {
+                debug_assert!(false, "rmin<key! idx={}, rmin={:?}, key={:?}, search={:?}, filter: {:?}, tree: {:?}, output: {:?}, tree_orig: {:?}, {}", idx, maxmin, key, search, filter, tree, output, tree_orig, tree_orig);
+            }
         }
     }
 
     /// Checks that there are no dangling items (the parent of every item marked as present is also marked as present).
-    pub fn check_integrity<N: Node>(tree: &Tree<N>, tree_orig: &Tree<N>) where N: Debug {
+    pub fn check_integrity<N: Node>(tree: &Tree<N>) -> Result<(), isize> {
         let mut noccupied = 0;
 
         for i in 0..tree.data.len() {
             if tree.mask[i] {
-                debug_assert!(i == 0 || tree.mask[parenti(i)], "i={}, tree_orig: {:?}, {}, tree: {:?}, {}", i, tree_orig, tree_orig, tree, tree);
+                if i != 0 && !tree.mask[parenti(i)] {
+                    return Err(i as isize);
+                }
+
                 noccupied += 1;
             }
         }
 
-        debug_assert!(noccupied == tree.size());
+        if noccupied == tree.size() {
+            Ok(())
+        } else {
+            Err(0)
+        }
+    }
+
+
+    pub fn check_integrity_del_range<Flt, N: Node, Out>(search: &Range<usize>, tree: &Tree<N>, output: &Out, tree_orig: &Tree<N>, filter: &Flt)
+        where Flt: ItemFilter<N::K>+Debug, N: Debug, Out: Debug
+    {
+        if check_integrity(tree).is_err() {
+            debug_assert!(false, "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
+        }
     }
 
 
