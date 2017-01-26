@@ -1,5 +1,4 @@
 
-1. test filtering
 1. test IntervalTree single delete
 1. rename delete_range to drain_range and add remove_range that throws the data away
 1. find, query_range, query_intersecting
