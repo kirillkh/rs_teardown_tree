@@ -287,20 +287,20 @@ mod interval {
             self.internal.delete(search)
         }
 
-        /// Deletes all intervals that intersect with the `search` interval from the tree and stores
+        /// Deletes all intervals that overlap with the `search` interval from the tree and stores
         /// them in the output Vec. The items are returned in order.
         #[inline]
-        pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
-            self.internal.delete_intersecting(search, output)
+        pub fn delete_overlap(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
+            self.internal.delete_overlap(search, output)
         }
 
-        /// Deletes all intervals that intersect with the `search` interval and match the filter from
+        /// Deletes all intervals that overlap with the `search` interval and match the filter from
         /// the tree and stores the associated items in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
+        pub fn filter_overlap<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
             where Flt: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };
-            self.internal.filter_intersecting(search, f, map_output)
+            self.internal.filter_overlap(search, f, map_output)
         }
 
         /// Returns the number of items in this tree.
@@ -369,20 +369,20 @@ mod interval {
             self.map.delete(search).is_some()
         }
 
-        /// Deletes all intervals that intersect with the `search` interval from the tree and stores
+        /// Deletes all intervals that overlap with the `search` interval from the tree and stores
         /// them in the output Vec. The items are returned in order.
-        pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<Iv>) {
+        pub fn delete_overlap(&mut self, search: &Iv, output: &mut Vec<Iv>) {
             let map_output = unsafe { mem::transmute(output) };
-            self.map.delete_intersecting(search, map_output)
+            self.map.delete_overlap(search, map_output)
         }
 
-        /// Deletes all intervals that intersect with the `search` interval and match the filter from
+        /// Deletes all intervals that overlap with the `search` interval and match the filter from
         /// the tree and stores them in the output Vec. The items are returned in order.
-        pub fn filter_intersecting<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
+        pub fn filter_overlap<Flt>(&mut self, search: &Iv, f: Flt, output: &mut Vec<Iv>)
             where Flt: ItemFilter<Iv>
         {
             let map_output = unsafe { mem::transmute(output) };
-            self.map.filter_intersecting(search, f, map_output)
+            self.map.filter_overlap(search, f, map_output)
         }
 
 

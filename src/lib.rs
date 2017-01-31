@@ -299,8 +299,8 @@ mod test_plain {
             let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
             check_bst_del_range(&rm, tree, output, orig, &filter);
             check_integrity_del_range(&rm, tree, output, orig, &filter);
-            check_output_intersects(&rm, tree, output, orig, &filter);
-            check_tree_doesnt_intersect(&rm, tree, &mut filter);
+            check_output_overlaps(&rm, tree, output, orig, &filter);
+            check_tree_doesnt_overlap(&rm, tree, &mut filter);
 
             assert!(output.len() + tree.size() == orig.size());
 
@@ -403,17 +403,17 @@ mod test_plain {
     }
 
 
-    fn check_output_intersects<Flt>(search: &Range<usize>, tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, filter: &Flt)
+    fn check_output_overlaps<Flt>(search: &Range<usize>, tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, filter: &Flt)
         where Flt: ItemFilter<usize>+Debug
     {
         let search = KeyInterval::from_range(search);
         for (_, &x) in output.iter().enumerate() {
             let iv = KeyInterval::new(x,x);
-            assert!(search.intersects(&iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
+            assert!(search.overlaps(&iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
         }
     }
 
-    fn check_tree_doesnt_intersect<Flt>(search: &Range<usize>, tree: &mut Tree, flt: &mut Flt)
+    fn check_tree_doesnt_overlap<Flt>(search: &Range<usize>, tree: &mut Tree, flt: &mut Flt)
         where Flt: ItemFilter<usize>
     {
         tree.traverse_inorder(0, &mut (), |this, _, idx| {
@@ -449,19 +449,28 @@ mod test_interval {
 
     //---- quickcheck ------------------------------------------------------------------------------
     quickcheck! {
-        fn quickcheck_interval_(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
+        fn quickcheck_interval_delete_overlap(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
             let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
             test_random_shape(xs, rm, &mut rng)
         }
     }
 
+    fn test_shape_delete_range<Flt>(xs: Vec<Range<usize>>, filter: Flt, rm: Range<usize>)
+        where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
+    {
+        test_shape(xs, filter, |tree: &mut IntervalTeardownTreeSet<Iv>, filter, output| {
+            check_delete_range(tree, KeyInterval::from_range(&rm), filter, output);
+        });
+    }
+
+
     fn test_random_shape(xs: Vec<Range<usize>>, rm: Range<usize>, rng: &mut XorShiftRng) -> bool {
         let mut intervals = xs.into_iter()
             .map(|r| if r.start<=r.end {
-                Iv::new(r.start, r.end)
-            } else {
-                Iv::new(r.end, r.start)
-            }
+                    Iv::new(r.start, r.end)
+                } else {
+                    Iv::new(r.end, r.start)
+                }
             )
             .collect::<Vec<_>>();
         intervals.sort();
@@ -474,12 +483,13 @@ mod test_interval {
             Iv::new(rm.end, rm.start)
         };
         let mut output = Vec::with_capacity(tree.size());
-        check_tree(&mut IntervalTeardownTreeSet::from_internal(tree), rm, NoopFilter, &mut output);
+        check_delete_range(&mut IntervalTeardownTreeSet::from_internal(tree), rm, NoopFilter, &mut output);
         true
     }
 
-    fn test_shape<Flt>(xs: Vec<Range<usize>>, rm: Range<usize>, filter: Flt)
-        where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
+    fn test_shape<Flt, C>(xs: Vec<Range<usize>>, filter: Flt, mut check: C)
+        where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug,
+              C: FnMut(&mut IntervalTeardownTreeSet<Iv>, Flt, &mut Vec<KeyInterval<usize>>)
     {
         let nodes = xs.into_iter()
             .map(|r| if r.start<=r.end {
@@ -497,7 +507,7 @@ mod test_interval {
 
         let mut tree = IntervalTeardownTreeSet::from_internal(internal);
         let mut output = Vec::with_capacity(tree.size());
-        check_tree(&mut tree, KeyInterval::from_range(&rm), filter, &mut output);
+        check(&mut tree, filter, &mut output);
     }
 
 
@@ -519,19 +529,19 @@ mod test_interval {
         Tree::with_nodes(nodes)
     }
 
-    fn check_tree<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>, mut filter: Flt,
-                       output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
+    fn check_delete_range<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>, mut filter: Flt,
+                               output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
     {
         let mut tree = orig.clone();
-        tree.filter_intersecting(&rm, filter.clone(), output);
+        tree.filter_overlap(&rm, filter.clone(), output);
 
         {
             let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
             check_bst_del_range(&rm, tree, &output, orig, &filter);
             check_integrity_del_range(&rm.to_range(), tree, output, orig, &filter);
-            check_output_intersects(&rm, tree, &output, orig, &filter);
-            check_tree_doesnt_intersect(&rm, tree, &mut filter);
+            check_output_overlaps(&rm, tree, &output, orig, &filter);
+            check_tree_doesnt_overlap(&rm, tree, &mut filter);
 
             assert!(output.len() + tree.size() == orig.size());
 
@@ -545,19 +555,19 @@ mod test_interval {
         tree
     }
 
-    fn check_output_intersects<Flt>(search: &Iv, tree: &Tree, output: &Vec<Iv>, tree_orig: &Tree, filter: &Flt)
+    fn check_output_overlaps<Flt>(search: &Iv, tree: &Tree, output: &Vec<Iv>, tree_orig: &Tree, filter: &Flt)
         where Flt: ItemFilter<KeyInterval<usize>>+Debug
     {
         for (_, iv) in output.iter().enumerate() {
-            assert!(search.intersects(iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
+            assert!(search.overlaps(iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
         }
     }
 
-    fn check_tree_doesnt_intersect<Flt>(search: &Iv, tree: &mut Tree, flt: &mut Flt)
+    fn check_tree_doesnt_overlap<Flt>(search: &Iv, tree: &mut Tree, flt: &mut Flt)
         where Flt: ItemFilter<KeyInterval<usize>>
     {
         tree.traverse_inorder(0, &mut (), |this, _, idx| {
-            assert!(!this.key(idx).intersects(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
+            assert!(!this.key(idx).overlaps(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
             false
         });
     }
@@ -594,8 +604,8 @@ mod test_interval {
 
     #[test]
     fn prebuilt_shape() {
-        test_shape(vec![1..1, 0..2], 0..0, NoopFilter);
-        test_shape(vec![1..1, 0..0, 2..2], 0..2, SetFilter::new(vec![2..2, 1..1]));
+        test_shape_delete_range(vec![1..1, 0..2], NoopFilter, 0..0);
+        test_shape_delete_range(vec![1..1, 0..0, 2..2], SetFilter::new(vec![2..2, 1..1]), 0..2);
     }
 
     #[test]
@@ -632,7 +642,7 @@ mod test_interval {
         for range in ranges.into_iter() {
             output.truncate(0);
             let rm = KeyInterval::from_range(&range);
-            orig = check_tree(&mut orig, rm, NoopFilter, &mut output);
+            orig = check_delete_range(&mut orig, rm, NoopFilter, &mut output);
         }
         assert!(orig.size() == 0);
     }
@@ -710,7 +720,7 @@ mod test_interval {
         for range in ranges.into_iter() {
             output.truncate(0);
             let rm = KeyInterval::from_range(&range);
-            orig = check_tree(&mut orig, rm, SetRefFilter::new(&flt_tree), &mut output);
+            orig = check_delete_range(&mut orig, rm, SetRefFilter::new(&flt_tree), &mut output);
         }
     }
 

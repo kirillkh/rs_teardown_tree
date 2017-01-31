@@ -722,7 +722,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.delete_intersecting(&KeyInterval::new(range.start, range.end), output);
+            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -779,7 +779,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.filter_intersecting(&KeyInterval::new(range.start, range.end), NoopFilter, output);
+            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {

@@ -11,7 +11,7 @@ pub trait Interval: Sized+Ord+Clone {
     fn a(&self) -> &Self::K;
     fn b(&self) -> &Self::K;
 
-    fn intersects(&self, other: &Self) -> bool {
+    fn overlaps(&self, other: &Self) -> bool {
         self.a() < other.b() && other.a() < self.b()
             || self.a() == other.a() // interpret empty intervals as points
     }

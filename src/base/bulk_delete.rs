@@ -259,7 +259,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     fn descend_left_fresh_slots<F>(&mut self, idx: usize, with_slot: bool, f: F) -> bool
         where F: FnMut(&mut Self, usize)
     {
-        // this slots_max business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
+        // this slots_max business is asymmetric (we don't do it in descend_delete_overlap_ivl_right) because of the program flow: we enter the left subtree first
         let nfilled_orig = self.slots_max().nfilled;
         self.slots_max().nfilled = self.slots_max().nslots;
 

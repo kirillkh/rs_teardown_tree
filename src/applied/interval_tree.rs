@@ -38,15 +38,15 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     }
 
     #[inline]
-    pub fn delete_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
-        self.filter_intersecting(search, NoopFilter, output)
+    pub fn delete_overlap(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
+        self.filter_overlap(search, NoopFilter, output)
     }
 
     #[inline]
-    pub fn filter_intersecting<Flt>(&mut self, search: &Iv, filter: Flt, output: &mut Vec<(Iv, V)>)
+    pub fn filter_overlap<Flt>(&mut self, search: &Iv, filter: Flt, output: &mut Vec<(Iv, V)>)
         where Flt: ItemFilter<Iv>
     {
-        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_intersecting(search, output))
+        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_overlap(search, output))
     }
 
 
@@ -137,11 +137,11 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     }
 
     #[inline]
-    pub fn filter_intersecting(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
+    pub fn filter_overlap(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
         if self.size() != 0 {
             output.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
-                this.filter_intersecting_ivl_rec(search, 0, false, output)
+                this.filter_overlap_ivl_rec(search, 0, false, output)
             )
         }
     }
@@ -305,7 +305,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
 
     #[inline(never)]
-    fn filter_intersecting_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
+    fn filter_overlap_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
         let node = self.node_mut_unsafe(idx);
         let k: &Iv = &node.kv.key;
 
@@ -319,7 +319,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             }
         } else if search.b() <= k.a() && k.a() != search.a() {
             // root and right are outside the range
-            self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, output);
+            self.descend_filter_overlap_ivl_left(search, idx, false, min_included, output);
 
             let removed = if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
@@ -334,7 +334,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             }
         } else {
             // consume root if necessary
-            let consumed = if search.intersects(k)
+            let consumed = if search.overlaps(k)
                 { self.filter_take(idx) }
             else
                 { None };
@@ -345,13 +345,13 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
                 if min_included {
                     removed = self.descend_consume_left(idx, true, output);
                 } else {
-                    removed = self.descend_filter_intersecting_ivl_left(search, idx, true, false, output);
+                    removed = self.descend_filter_overlap_ivl_left(search, idx, true, false, output);
                 }
                 node.maxb = consumed.maxb.clone();
 
                 consume_unchecked(output, consumed.into_kv());
             } else {
-                self.descend_filter_intersecting_ivl_left(search, idx, false, min_included, output);
+                self.descend_filter_overlap_ivl_left(search, idx, false, min_included, output);
                 if self.slots_min().has_open() {
                     removed = true;
                     self.fill_slot_min(idx);
@@ -367,10 +367,10 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
                 if right_max_included {
                     removed = self.descend_consume_right(idx, removed, output);
                 } else {
-                    removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, true, output);
+                    removed = self.descend_filter_overlap_ivl_right(search, idx, removed, true, output);
                 }
             } else {
-                removed = self.descend_filter_intersecting_ivl_right(search, idx, removed, false, output);
+                removed = self.descend_filter_overlap_ivl_right(search, idx, removed, false, output);
             }
 
             if !removed && self.slots_max().has_open() {
@@ -387,17 +387,17 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_intersecting_ivl_left(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
-        // this pinning business is asymmetric (we don't do it in descend_delete_intersecting_ivl_right) because of the program flow: we enter the left subtree first
+    fn descend_filter_overlap_ivl_left(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
+        // this pinning business is asymmetric (we don't do it in descend_delete_overlap_ivl_right) because of the program flow: we enter the left subtree first
         self.descend_left_fresh_slots(idx, with_slot,
-                                      |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, output))
+                                      |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(search, child_idx, min_included, output))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_intersecting_ivl_right(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
+    fn descend_filter_overlap_ivl_right(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
         self.descend_right(idx, with_slot,
-                           |this: &mut Self, child_idx| this.filter_intersecting_ivl_rec(search, child_idx, min_included, output))
+                           |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(search, child_idx, min_included, output))
     }
 }
 
