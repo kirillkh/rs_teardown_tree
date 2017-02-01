@@ -447,90 +447,52 @@ mod test_interval {
     type Tree = IvTree<Iv, ()>;
 
 
-    //---- quickcheck ------------------------------------------------------------------------------
+    //---- quickcheck overlap ----------------------------------------------------------------------
     quickcheck! {
         fn quickcheck_interval_delete_overlap(xs: Vec<Range<usize>>, rm: Range<usize>) -> bool {
             let mut rng = XorShiftRng::from_seed([3, 1, 4, 15]);
-            test_random_shape(xs, rm, &mut rng)
+            test_random_shape_overlap(xs, rm, &mut rng)
         }
     }
 
-    fn test_shape_delete_range<Flt>(xs: Vec<Range<usize>>, filter: Flt, rm: Range<usize>)
+    fn test_shape_delete_overlap<Flt>(xs: Vec<Range<usize>>, filter: Flt, rm: Range<usize>)
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
     {
         test_shape(xs, filter, |tree: &mut IntervalTeardownTreeSet<Iv>, filter, output| {
-            check_delete_range(tree, KeyInterval::from_range(&rm), filter, output);
+            check_delete_overlap(tree, KeyInterval::from_range(&rm), filter, output);
         });
     }
 
 
-    fn test_random_shape(xs: Vec<Range<usize>>, rm: Range<usize>, rng: &mut XorShiftRng) -> bool {
-        let mut intervals = xs.into_iter()
-            .map(|r| if r.start<=r.end {
-                    Iv::new(r.start, r.end)
-                } else {
-                    Iv::new(r.end, r.start)
-                }
-            )
-            .collect::<Vec<_>>();
-        intervals.sort();
-
-        let tree = gen_tree(intervals, rng);
-
-        let rm = if rm.start <= rm.end {
-            Iv::new(rm.start, rm.end)
-        } else {
-            Iv::new(rm.end, rm.start)
-        };
-        let mut output = Vec::with_capacity(tree.size());
-        check_delete_range(&mut IntervalTeardownTreeSet::from_internal(tree), rm, NoopFilter, &mut output);
-        true
+    #[test]
+    fn prebuilt_shape_overlap() {
+        test_shape_delete_overlap(vec![1..1, 0..2], NoopFilter, 0..0);
+        test_shape_delete_overlap(vec![1..1, 0..0, 2..2], SetFilter::new(vec![2..2, 1..1]), 0..2);
     }
 
-    fn test_shape<Flt, C>(xs: Vec<Range<usize>>, filter: Flt, mut check: C)
-        where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug,
-              C: FnMut(&mut IntervalTeardownTreeSet<Iv>, Flt, &mut Vec<KeyInterval<usize>>)
-    {
-        let nodes = xs.into_iter()
-            .map(|r| if r.start<=r.end {
-                    Some(IvNode::new(Iv::new(r.start, r.end), ()))
-                } else {
-                    None
-                }
-            )
-            .collect::<Vec<_>>();
+    #[test]
+    fn prebuilt_random_shape_overlap() {
+        let rng = &mut XorShiftRng::from_seed([3, 1, 4, 15]);
 
-        let mut internal = Tree::with_nodes(nodes);
-        if internal.size() > 0 {
-            init_maxb(&mut internal, 0);
-        }
+        test_random_shape_overlap(vec![0..0], 0..0, rng);
+        test_random_shape_overlap(vec![0..2, 1..1], 0..0, rng);
+        test_random_shape_overlap(vec![0..0, 0..0, 0..1], 0..1, rng);
+        test_random_shape_overlap(vec![0..0, 1..1, 2..2], 0..1, rng);
 
-        let mut tree = IntervalTeardownTreeSet::from_internal(internal);
-        let mut output = Vec::with_capacity(tree.size());
-        check(&mut tree, filter, &mut output);
+        test_random_shape_overlap(vec![1..1, 0..0, 0..0, 0..0], 0..1, rng);
+        test_random_shape_overlap(vec![0..0, 1..1, 0..0, 0..0], 0..1, rng);
+        test_random_shape_overlap(vec![0..0, 0..0, 1..1, 0..0], 0..1, rng);
+        test_random_shape_overlap(vec![0..0, 0..0, 0..0, 1..1], 0..1, rng);
+        test_random_shape_overlap(vec![1..1, 1..1, 1..1, 1..1], 0..1, rng);
+
+        test_random_shape_overlap(vec![0..2, 1..2, 1..1, 1..2], 1..2, rng);
+        test_random_shape_overlap(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2, rng);
+        test_random_shape_overlap(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2, rng);
     }
 
 
-    fn gen_tree(items: Vec<Iv>, rng: &mut XorShiftRng) -> Tree {
-        let items: Vec<Option<Iv>> = gen_tree_keys(items, rng);
-        let mut nodes = items.into_iter()
-            .map(|opt| opt.map(|k| IvNode::new(k.clone(), ())))
-            .collect::<Vec<_>>();
-        for i in (1..nodes.len()).rev() {
-            let maxb = if let Some(ref node) = nodes[i] {
-                node.maxb as usize
-            } else {
-                continue
-            };
-
-            let parent = nodes[parenti(i)].as_mut().unwrap();
-            parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
-        }
-        Tree::with_nodes(nodes)
-    }
-
-    fn check_delete_range<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>, mut filter: Flt,
-                               output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
+    fn check_delete_overlap<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>, mut filter: Flt,
+                                 output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
     {
         let mut tree = orig.clone();
@@ -572,6 +534,88 @@ mod test_interval {
         });
     }
 
+    fn test_random_shape_overlap(xs: Vec<Range<usize>>, rm: Range<usize>, rng: &mut XorShiftRng) -> bool {
+        let rm = normalize_range(rm);
+        let mut output = Vec::with_capacity(xs.len());
+        test_random_shape(xs, rng, |tree| { check_delete_overlap(tree, rm.clone().into(), NoopFilter, &mut output); } )
+    }
+
+    //---- quickcheck single -----------------------------------------------------------------------
+    quickcheck! {
+        fn quickcheck_interval_delete_single(xs: Vec<Range<usize>>, rm: usize) -> bool {
+            let mut rng = XorShiftRng::from_seed([561, 92881, 12, 562453]);
+            test_random_shape_single(xs, rm, &mut rng)
+        }
+    }
+
+    #[test]
+    fn prebuilt_random_shape_single() {
+        let rng = &mut XorShiftRng::from_seed([3, 1, 4, 15]);
+
+        test_random_shape_single(vec![0..0], 0, rng);
+        test_random_shape_single(vec![0..2, 1..1], 0, rng);
+        test_random_shape_single(vec![0..0, 0..0, 0..1], 2, rng);
+        test_random_shape_single(vec![0..0, 1..1, 2..2], 1, rng);
+
+        test_random_shape_single(vec![1..1, 0..0, 0..0, 0..0], 0, rng);
+        test_random_shape_single(vec![1..1, 0..0, 0..0, 0..0], 1, rng);
+        test_random_shape_single(vec![1..1, 0..0, 0..0, 0..0], 2, rng);
+        test_random_shape_single(vec![1..1, 0..0, 0..0, 0..0], 3, rng);
+        test_random_shape_single(vec![1..1, 1..1, 1..1, 1..1], 3, rng);
+
+        test_random_shape_single(vec![0..2, 1..2, 1..1, 1..2], 1, rng);
+        test_random_shape_single(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 3, rng);
+        test_random_shape_single(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 4, rng);
+    }
+
+
+    fn test_random_shape_single(xs: Vec<Range<usize>>, rm: usize, rng: &mut XorShiftRng) -> bool {
+        let iv = {
+            if !xs.is_empty() {
+                xs[rm % xs.len()].clone().into()
+            } else {
+                KeyInterval::new(0, 1)
+            }
+        };
+
+        test_random_shape(xs, rng, |tree| {
+            check_delete_single(tree, iv);
+        });
+
+        true
+    }
+
+
+    fn check_delete_single(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
+    {
+        let mut tree = orig.clone();
+
+        let deleted = tree.delete(&rm);
+
+        {
+            let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
+            check_bst_del_range(&rm, tree, &(), orig, &());
+            check_integrity_del_range(&rm.to_range(), tree, &(), orig, &());
+            assert!(deleted == orig.contains(&rm));
+            assert!(deleted && tree.size()+1 == orig.size() || !deleted && tree.size() == orig.size());
+
+            if tree.size() > 0 {
+                check_maxb(orig, tree, 0);
+            }
+        }
+
+        tree
+    }
+
+
+
+    //---- quickcheck helpers ----------------------------------------------------------------------
+    use std::borrow::Borrow;
+    fn normalize_range<R: Borrow<Range<usize>>>(r: R) -> Range<usize> {
+        let r: &Range<usize> = r.borrow();
+        cmp::min(r.start, r.end) .. cmp::max(r.start, r.end)
+    }
+
     fn init_maxb(tree: &mut Tree, idx: usize) -> usize {
         assert!(!tree.is_nil(idx));
 
@@ -586,6 +630,64 @@ mod test_interval {
         tree.node_mut(idx).maxb = maxb;
         maxb
     }
+
+
+    fn test_random_shape<C>(xs: Vec<Range<usize>>, rng: &mut XorShiftRng, mut check: C) -> bool
+        where C: FnMut(&mut IntervalTeardownTreeSet<Iv>)
+    {
+        let mut intervals = xs.into_iter()
+            .map(|r| normalize_range(r).into())
+            .collect::<Vec<_>>();
+        intervals.sort();
+
+        let tree = gen_tree(intervals, rng);
+
+        check(&mut IntervalTeardownTreeSet::from_internal(tree));
+        true
+    }
+
+    fn test_shape<Flt, C>(xs: Vec<Range<usize>>, filter: Flt, mut check: C)
+        where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug,
+              C: FnMut(&mut IntervalTeardownTreeSet<Iv>, Flt, &mut Vec<KeyInterval<usize>>)
+    {
+        let nodes = xs.into_iter()
+                .map(|r| if r.start<=r.end {
+                    Some(IvNode::new(Iv::new(r.start, r.end), ()))
+                } else {
+                    None
+                }
+            )
+            .collect::<Vec<_>>();
+
+        let mut internal = Tree::with_nodes(nodes);
+        if internal.size() > 0 {
+            init_maxb(&mut internal, 0);
+        }
+
+        let mut tree = IntervalTeardownTreeSet::from_internal(internal);
+        let mut output = Vec::with_capacity(tree.size());
+        check(&mut tree, filter, &mut output);
+    }
+
+
+    fn gen_tree(items: Vec<Iv>, rng: &mut XorShiftRng) -> Tree {
+        let items: Vec<Option<Iv>> = gen_tree_keys(items, rng);
+        let mut nodes = items.into_iter()
+            .map(|opt| opt.map(|k| IvNode::new(k.clone(), ())))
+            .collect::<Vec<_>>();
+        for i in (1..nodes.len()).rev() {
+            let maxb = if let Some(ref node) = nodes[i] {
+                node.maxb as usize
+            } else {
+                continue
+            };
+
+            let parent = nodes[parenti(i)].as_mut().unwrap();
+            parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
+        }
+        Tree::with_nodes(nodes)
+    }
+
 
     fn check_maxb(orig: &Tree, tree: &Tree, idx: usize) -> usize {
         assert!(!tree.is_nil(idx));
@@ -602,32 +704,6 @@ mod test_interval {
         expected_maxb
     }
 
-    #[test]
-    fn prebuilt_shape() {
-        test_shape_delete_range(vec![1..1, 0..2], NoopFilter, 0..0);
-        test_shape_delete_range(vec![1..1, 0..0, 2..2], SetFilter::new(vec![2..2, 1..1]), 0..2);
-    }
-
-    #[test]
-    fn prebuilt_random_shape() {
-        let rng = &mut XorShiftRng::from_seed([3, 1, 4, 15]);
-
-        test_random_shape(vec![0..0], 0..0, rng);
-        test_random_shape(vec![0..2, 1..1], 0..0, rng);
-        test_random_shape(vec![0..0, 0..0, 0..1], 0..1, rng);
-        test_random_shape(vec![0..0, 1..1, 2..2], 0..1, rng);
-
-        test_random_shape(vec![1..1, 0..0, 0..0, 0..0], 0..1, rng);
-        test_random_shape(vec![0..0, 1..1, 0..0, 0..0], 0..1, rng);
-        test_random_shape(vec![0..0, 0..0, 1..1, 0..0], 0..1, rng);
-        test_random_shape(vec![0..0, 0..0, 0..0, 1..1], 0..1, rng);
-        test_random_shape(vec![1..1, 1..1, 1..1, 1..1], 0..1, rng);
-
-        test_random_shape(vec![0..2, 1..2, 1..1, 1..2], 1..2, rng);
-        test_random_shape(vec![0..2, 0..2, 2..0, 1..2, 0..2, 1..2, 0..2, 0..2, 1..0, 1..2], 1..2, rng);
-        test_random_shape(vec![0..2, 1..1, 0..2, 0..2, 1..2, 1..2, 1..2, 0..2, 1..2, 0..2], 1..2, rng);
-    }
-
 
 
     //---- non-quickcheck --------------------------------------------------------------------------
@@ -642,7 +718,7 @@ mod test_interval {
         for range in ranges.into_iter() {
             output.truncate(0);
             let rm = KeyInterval::from_range(&range);
-            orig = check_delete_range(&mut orig, rm, NoopFilter, &mut output);
+            orig = check_delete_overlap(&mut orig, rm, NoopFilter, &mut output);
         }
         assert!(orig.size() == 0);
     }
@@ -720,7 +796,7 @@ mod test_interval {
         for range in ranges.into_iter() {
             output.truncate(0);
             let rm = KeyInterval::from_range(&range);
-            orig = check_delete_range(&mut orig, rm, SetRefFilter::new(&flt_tree), &mut output);
+            orig = check_delete_overlap(&mut orig, rm, SetRefFilter::new(&flt_tree), &mut output);
         }
     }
 

@@ -49,6 +49,13 @@ impl<K: Ord+Clone> Interval for KeyInterval<K> {
     }
 }
 
+impl<K: Ord+Clone> From<Range<K>> for KeyInterval<K> {
+    fn from(range: Range<K>) -> Self {
+        Self::from_range(&range)
+    }
+}
+
+
 
 #[derive(Clone)]
 pub struct IvNode<Iv: Interval, V> {

@@ -163,7 +163,7 @@ pub mod validation {
 
 
     pub fn check_integrity_del_range<Flt, N: Node, Out>(search: &Range<usize>, tree: &Tree<N>, output: &Out, tree_orig: &Tree<N>, filter: &Flt)
-        where Flt: ItemFilter<N::K>+Debug, N: Debug, Out: Debug
+        where Flt: Debug, N: Debug, Out: Debug
     {
         if check_integrity(tree).is_err() {
             debug_assert!(false, "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
