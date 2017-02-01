@@ -571,7 +571,7 @@ impl<N: Node, T> Traverse<N> for T where T: TreeDerefMut<N> {}
 
 
 
-struct Iter<'a, N: Node> where N: 'a, N::K: 'a, N::V: 'a {
+pub struct Iter<'a, N: Node> where N: 'a, N::K: 'a, N::V: 'a {
     tree: &'a TreeRepr<N>,
     next_idx: usize,
     next: Option<(&'a N::K, &'a N::V)>

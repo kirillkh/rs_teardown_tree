@@ -91,7 +91,7 @@ pub mod validation {
     use rand::{Rng, XorShiftRng};
     use std::fmt::Debug;
     use std::ops::Range;
-    use base::{Key, ItemFilter, TreeRepr, Node, lefti, righti, parenti};
+    use base::{Key, TreeRepr, Node, lefti, righti, parenti};
 
     type Tree<N> = TreeRepr<N>;
 
