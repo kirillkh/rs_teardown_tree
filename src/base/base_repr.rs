@@ -304,7 +304,7 @@ impl<N: Node> TreeRepr<N> {
     }
 
     #[inline]
-    pub fn find_max(&mut self, mut idx: usize) -> usize {
+    pub fn find_max(&self, mut idx: usize) -> usize {
         while self.has_right(idx) {
             idx = righti(idx);
         }
@@ -312,7 +312,7 @@ impl<N: Node> TreeRepr<N> {
     }
 
     #[inline]
-    pub fn find_min(&mut self, mut idx: usize) -> usize {
+    pub fn find_min(&self, mut idx: usize) -> usize {
         while self.has_left(idx) {
             idx = lefti(idx);
         }
@@ -560,10 +560,65 @@ pub trait Traverse<N: Node>: TreeDerefMut<N> {
             }
         }
     }
+
+
+    fn iter<'a>(&'a self) -> Iter<'a, N> {
+        Iter::new(self)
+    }
 }
 
-
 impl<N: Node, T> Traverse<N> for T where T: TreeDerefMut<N> {}
+
+
+
+struct Iter<'a, N: Node> where N: 'a, N::K: 'a, N::V: 'a {
+    tree: &'a TreeRepr<N>,
+    next_idx: usize,
+    next: Option<(&'a N::K, &'a N::V)>
+}
+
+impl <'a, N: Node> Iter<'a, N> where N::K: 'a, N::V: 'a {
+    fn new(tree: &'a TreeRepr<N>) -> Iter<'a, N> {
+        let next_idx = tree.find_min(0);
+        let next = if tree.is_nil(next_idx) {
+            None
+        } else {
+            let node = tree.node(next_idx);
+            Some((&node.key, &node.val))
+        };
+        Iter { tree:tree, next_idx:next_idx, next:next }
+    }
+}
+
+impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
+    type Item = (&'a N::K, &'a N::V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(next) = self.next.take() {
+            let next_idx = self.next_idx;
+
+            self.next_idx = if self.tree.has_right(next_idx) {
+                self.tree.find_min(righti(next_idx))
+            } else {
+                let l_enclosing = <&mut TreeRepr<N>>::left_enclosing(next_idx+1);
+
+                if l_enclosing <= 1 {
+                    // done
+                    return Some(next);
+                }
+
+                parenti(l_enclosing-1)
+            };
+
+            let node = self.tree.node(self.next_idx);
+            self.next = Some((&node.key, &node.val));
+
+            Some(next)
+        } else {
+            None
+        }
+    }
+}
 
 
 
