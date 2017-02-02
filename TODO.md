@@ -1,5 +1,4 @@
 
-1. test IntervalTree single delete
 1. rename delete_range to drain_range and add remove_range that throws the data away
 1. find, query_range, query_overlap
 1. make conv_to_tuple_vec() less unsafe, check all transmutes

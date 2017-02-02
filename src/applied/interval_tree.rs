@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, TeardownTreeRefill, NoopFilter, Node, KeyVal, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
+use base::{TreeRepr, TeardownTreeRefill, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::ops::{Deref, DerefMut};
 use std::fmt::{Debug, Display, Formatter};
@@ -130,9 +130,9 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     #[inline]
     pub fn delete(&mut self, search: &Iv) -> Option<V> {
         self.index_of(search).map(|idx| {
-            let kv = self.delete_idx(idx);
-            self.update_ancestors_after_delete(idx, 0, &kv.key.b());
-            kv.val
+            let entry = self.delete_idx(idx);
+            self.update_ancestors_after_delete(idx, 0, &entry.key.b());
+            entry.val
         })
     }
 
@@ -179,66 +179,66 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     }
 
 //    #[inline]
-//    fn delete_idx(&mut self, idx: usize) -> KeyVal<Iv, V> {
+//    fn delete_idx(&mut self, idx: usize) -> Entry<Iv, V> {
 //        debug_assert!(!self.is_nil(idx));
 //
 //        let node = self.node_mut_unsafe(idx);
 //
-//        let repl_kv = match (self.has_left(idx), self.has_right(idx)) {
+//        let repl_entry = match (self.has_left(idx), self.has_right(idx)) {
 //            (false, false) => {
-//                let IvNode{kv, ..} = self.take(idx);
-//                kv
+//                let IvNode{entry, ..} = self.take(idx);
+//                entry
 //            },
 //
 //            (true, false)  => {
-//                let (kv, left_maxb) = self.delete_max(lefti(idx));
+//                let (entry, left_maxb) = self.delete_max(lefti(idx));
 //                node.maxb = left_maxb;
-//                kv
+//                entry
 //            },
 //
 //            (false, true)  => {
 ////                let (removed, right_maxb) = self.delete_min(righti(idx));
 ////                item.maxb = right_maxb;
-//                let kv = self.delete_min(righti(idx));
-//                if &node.maxb == kv.key.b() {
+//                let entry = self.delete_min(righti(idx));
+//                if &node.maxb == entry.key.b() {
 //                    self.update_maxb(idx)
 //                } else { // maxb remains the same
-//                    debug_assert!(kv.key.b() < &node.maxb);
+//                    debug_assert!(entry.key.b() < &node.maxb);
 //                }
-//                kv
+//                entry
 //            },
 //
 //            (true, true)   => {
-//                let (kv, left_maxb) = self.delete_max(lefti(idx));
-//                if &node.maxb == kv.key.b() {
+//                let (entry, left_maxb) = self.delete_max(lefti(idx));
+//                if &node.maxb == entry.key.b() {
 //                    node.maxb = cmp::max(left_maxb, self.right(idx).maxb.clone());
 //                } else { // maxb remains the same
-//                    debug_assert!(kv.key.b() < &node.maxb);
+//                    debug_assert!(entry.key.b() < &node.maxb);
 //                }
-//                kv
+//                entry
 //            },
 //        };
 //
-//        mem::replace(&mut node.kv, repl_kv)
+//        mem::replace(&mut node.entry, repl_entry)
 //    }
 //
 //
 //    /// returns the removed max-item of this subtree and the old maxb (before removal)
 //    #[inline]
 //    // we attempt to reduce the number of memory accesses as much as possible; might be overengineered
-//    fn delete_max(&mut self, idx: usize) -> (KeyVal<Iv,V>, Iv::K) {
+//    fn delete_max(&mut self, idx: usize) -> (Entry<Iv,V>, Iv::K) {
 //        let max_idx = self.find_max(idx);
 //
-//        let (kv, mut old_maxb, mut new_maxb) = if self.has_left(max_idx) {
+//        let (entry, mut old_maxb, mut new_maxb) = if self.has_left(max_idx) {
 //            let node = self.node_mut_unsafe(max_idx);
-//            let (left_max_kv, left_maxb) = self.delete_max(lefti(max_idx));
-//            let kv = mem::replace(&mut node.kv, left_max_kv);
+//            let (left_max_entry, left_maxb) = self.delete_max(lefti(max_idx));
+//            let entry = mem::replace(&mut node.entry, left_max_entry);
 //
 //            let old_maxb = mem::replace(&mut node.maxb, left_maxb.clone());
-//            (kv, old_maxb, Some(left_maxb))
+//            (entry, old_maxb, Some(left_maxb))
 //        } else {
-//            let IvNode { kv, maxb:old_maxb } = self.take(max_idx);
-//            (kv, old_maxb, None)
+//            let IvNode { entry, maxb:old_maxb } = self.take(max_idx);
+//            (entry, old_maxb, None)
 //        };
 //
 //        // update ancestors
@@ -248,7 +248,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 //
 //            let node = self.node_mut_unsafe(upd_idx);
 //            old_maxb = node.maxb.clone();
-//            if &node.maxb == kv.key.b() {
+//            if &node.maxb == entry.key.b() {
 //                let mb = {
 //                    let self_left_maxb =
 //                        if self.has_left(upd_idx) {
@@ -267,29 +267,29 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 //            }
 //        }
 //
-//        (kv, old_maxb)
+//        (entry, old_maxb)
 //    }
 //
 //    // TODO: check whether optimizations similar to delete_max() are worth it
 //    #[inline]
-//    fn delete_min(&mut self, idx: usize) -> KeyVal<Iv,V> {
+//    fn delete_min(&mut self, idx: usize) -> Entry<Iv,V> {
 //        let min_idx = self.find_min(idx);
 //
-//        let replacement_kv = if self.has_right(min_idx) {
-//            let right_min_kv = self.delete_min(righti(min_idx));
+//        let replacement_entry = if self.has_right(min_idx) {
+//            let right_min_entry = self.delete_min(righti(min_idx));
 //            let node = self.node_mut_unsafe(min_idx);
 //
 //            if self.has_right(min_idx) {
 //                let right_maxb = &self.right(min_idx).maxb;
-//                node.maxb = cmp::max(right_maxb, right_min_kv.key.b()).clone();
+//                node.maxb = cmp::max(right_maxb, right_min_entry.key.b()).clone();
 //            } else {
-//                node.maxb = right_min_kv.key.b().clone();
+//                node.maxb = right_min_entry.key.b().clone();
 //            }
 //
-//            mem::replace(&mut node.kv, right_min_kv)
+//            mem::replace(&mut node.entry, right_min_entry)
 //        } else {
-//            let IvNode{kv, ..} = self.take(min_idx);
-//            kv
+//            let IvNode{entry, ..} = self.take(min_idx);
+//            entry
 //        };
 //
 //        // update ancestors
@@ -299,59 +299,59 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 //            self.update_maxb(upd_idx);
 //        }
 //
-//        replacement_kv
+//        replacement_entry
 //    }
 
     #[inline]
-    fn delete_idx(&mut self, idx: usize) -> KeyVal<Iv, V> {
+    fn delete_idx(&mut self, idx: usize) -> Entry<Iv, V> {
         debug_assert!(!self.is_nil(idx));
 
-        let repl_kv = if self.has_left(idx) {
+        let repl_entry = if self.has_left(idx) {
             self.delete_max(lefti(idx))
         } else if self.has_right(idx) {
             self.delete_min(righti(idx))
         } else {
-            let IvNode{kv, ..} = self.take(idx);
-            return kv;
+            let IvNode{entry, ..} = self.take(idx);
+            return entry;
         };
 
-        let kv = mem::replace(&mut self.node_mut(idx).kv, repl_kv);
+        let entry = mem::replace(&mut self.node_mut(idx).entry, repl_entry);
         self.update_maxb(idx);
-        kv
+        entry
     }
 
     #[inline]
-    fn delete_max(&mut self, idx: usize) -> KeyVal<Iv, V> {
+    fn delete_max(&mut self, idx: usize) -> Entry<Iv, V> {
         let max_idx = self.find_max(idx);
-        let kv = if self.has_left(max_idx) {
-            let repl_kv = self.delete_max(lefti(max_idx));
-            let kv = mem::replace(&mut self.node_mut(max_idx).kv, repl_kv);
+        let entry = if self.has_left(max_idx) {
+            let repl_entry = self.delete_max(lefti(max_idx));
+            let entry = mem::replace(&mut self.node_mut(max_idx).entry, repl_entry);
             self.update_maxb(max_idx);
-            kv
+            entry
         } else {
-            let IvNode{kv, ..} = self.take(max_idx);
-            kv
+            let IvNode{entry, ..} = self.take(max_idx);
+            entry
         };
 
-        self.update_ancestors_after_delete(max_idx, idx, &kv.key.b());
-        kv
+        self.update_ancestors_after_delete(max_idx, idx, &entry.key.b());
+        entry
     }
 
     #[inline]
-    fn delete_min(&mut self, idx: usize) -> KeyVal<Iv, V> {
+    fn delete_min(&mut self, idx: usize) -> Entry<Iv, V> {
         let min_idx = self.find_min(idx);
-        let kv = if self.has_right(min_idx) {
-            let repl_kv = self.delete_min(righti(min_idx));
-            let kv = mem::replace(&mut self.node_mut(min_idx).kv, repl_kv);
+        let entry = if self.has_right(min_idx) {
+            let repl_entry = self.delete_min(righti(min_idx));
+            let entry = mem::replace(&mut self.node_mut(min_idx).entry, repl_entry);
             self.update_maxb(min_idx);
-            kv
+            entry
         } else {
-            let IvNode{kv, ..} = self.take(min_idx);
-            kv
+            let IvNode{entry, ..} = self.take(min_idx);
+            entry
         };
 
-        self.update_ancestors_after_delete(min_idx, idx, &kv.key.b());
-        kv
+        self.update_ancestors_after_delete(min_idx, idx, &entry.key.b());
+        entry
     }
 
 
@@ -359,7 +359,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     #[inline(never)]
     fn filter_overlap_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
         let node = self.node_mut_unsafe(idx);
-        let k: &Iv = &node.kv.key;
+        let k: &Iv = &node.entry.key;
 
         if &node.maxb < search.a() {
             // whole subtree outside the range
@@ -401,7 +401,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
                 }
                 node.maxb = consumed.maxb.clone();
 
-                consume_unchecked(output, consumed.into_kv());
+                consume_unchecked(output, consumed.into_entry());
             } else {
                 self.descend_filter_overlap_ivl_left(search, idx, false, min_included, output);
                 if self.slots_min().has_open() {

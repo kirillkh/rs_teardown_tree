@@ -29,6 +29,7 @@ pub struct TreeRepr<N: Node> {
 }
 
 
+// entry points
 impl<N: Node> TreeRepr<N> {
     pub fn new(mut items: Vec<(N::K, N::V)>) -> TreeRepr<N> {
         items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -51,52 +52,6 @@ impl<N: Node> TreeRepr<N> {
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
         TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache }
-    }
-
-    pub fn calc_height(nodes: &Vec<Option<N>>, idx: usize) -> usize {
-        if idx < nodes.len() && nodes[idx].is_some() {
-            1 + max(Self::calc_height(nodes, lefti(idx)),
-                    Self::calc_height(nodes, righti(idx)))
-        } else {
-            0
-        }
-    }
-
-    /// Finds the point to partition n keys for a nearly-complete binary tree
-    /// http://stackoverflow.com/a/26896494/3646645
-    pub fn build_select_root(n: usize) -> usize {
-        // the highest power of two <= n
-        let x = if n.is_power_of_two() { n }
-            else { n.next_power_of_two() / 2 };
-
-        if x/2 <= (n-x) + 1 {
-            debug_assert!(x >= 1, "x={}, n={}", x, n);
-            x - 1
-        } else {
-            n - x/2
-        }
-    }
-
-    /// Returns the height of the tree.
-    pub fn build(sorted: &mut [(N::K, N::V)], idx: usize, data: &mut [N]) -> usize {
-        match sorted.len() {
-            0 => 0,
-            n => {
-                let mid = Self::build_select_root(n);
-                let (lefti, righti) = (lefti(idx), righti(idx));
-                let lh = Self::build(&mut sorted[..mid], lefti, data);
-                let rh = Self::build(&mut sorted[mid+1..], righti, data);
-
-                unsafe {
-                    let p = sorted.get_unchecked(mid);
-                    let (k, v) = ptr::read(p);
-                    ptr::write(data.get_unchecked_mut(idx), N::new(k, v));
-                }
-
-                debug_assert!(rh <= lh);
-                1 + lh
-            }
-        }
     }
 
     /// Constructs a new TeardownTree<T> based on raw nodes vec.
@@ -134,10 +89,8 @@ impl<N: Node> TreeRepr<N> {
 //                })
 //            .collect::<Vec<Option<Node<T>>>>()
 //    }
-}
 
 
-impl<N: Node> TreeRepr<N> {
     /// Finds the item with the given key and returns it (or None).
     pub fn lookup<'a>(&'a self, search: &'a N::K) -> Option<&'a N::V> where N: 'a {
         self.index_of(search).map(|idx| self.val(idx))
@@ -146,6 +99,64 @@ impl<N: Node> TreeRepr<N> {
     pub fn contains(&self, search: &N::K) -> bool {
         self.lookup(search).is_some()
     }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn clear(&mut self) {
+        self.drop_items();
+    }
+}
+
+// helpers
+impl<N: Node> TreeRepr<N> {
+    fn calc_height(nodes: &Vec<Option<N>>, idx: usize) -> usize {
+        if idx < nodes.len() && nodes[idx].is_some() {
+            1 + max(Self::calc_height(nodes, lefti(idx)),
+                    Self::calc_height(nodes, righti(idx)))
+        } else {
+            0
+        }
+    }
+
+    /// Finds the point to partition n keys for a nearly-complete binary tree
+    /// http://stackoverflow.com/a/26896494/3646645
+    fn build_select_root(n: usize) -> usize {
+        // the highest power of two <= n
+        let x = if n.is_power_of_two() { n }
+            else { n.next_power_of_two() / 2 };
+
+        if x/2 <= (n-x) + 1 {
+            debug_assert!(x >= 1, "x={}, n={}", x, n);
+            x - 1
+        } else {
+            n - x/2
+        }
+    }
+
+    /// Returns the height of the tree.
+    fn build(sorted: &mut [(N::K, N::V)], idx: usize, data: &mut [N]) -> usize {
+        match sorted.len() {
+            0 => 0,
+            n => {
+                let mid = Self::build_select_root(n);
+                let (lefti, righti) = (lefti(idx), righti(idx));
+                let lh = Self::build(&mut sorted[..mid], lefti, data);
+                let rh = Self::build(&mut sorted[mid+1..], righti, data);
+
+                unsafe {
+                    let p = sorted.get_unchecked(mid);
+                    let (k, v) = ptr::read(p);
+                    ptr::write(data.get_unchecked_mut(idx), N::new(k, v));
+                }
+
+                debug_assert!(rh <= lh);
+                1 + lh
+            }
+        }
+    }
+
 
     pub fn index_of(&self, search: &N::K) -> Option<usize> {
         if self.data.is_empty() {
@@ -280,10 +291,6 @@ impl<N: Node> TreeRepr<N> {
         idx >= self.data.len() || !unsafe { *self.mask.get_unchecked(idx) }
     }
 
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
     #[inline(always)]
     pub fn node_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut N {
         unsafe {
@@ -343,7 +350,7 @@ impl<N: Node> TreeRepr<N> {
         let p: *const N = self.data.get_unchecked(idx);
 
         let node = ptr::read(&*p);
-        consume_unchecked(output, node.into_kv());
+        consume_unchecked(output, node.into_entry());
     }
 
     #[inline(always)]
@@ -372,11 +379,7 @@ impl<N: Node> TreeRepr<N> {
         }
     }
 
-    pub fn clear(&mut self) {
-        self.drop_items();
-    }
-
-    pub fn drop_items(&mut self) {
+    fn drop_items(&mut self) {
         if self.size*2 <= self.data.len() {
             let mut this: &mut TreeRepr<N> = &mut *self; // magic! doesn't compile without this
             this.traverse_preorder(0, &mut 0, |this, _, idx| {

@@ -79,7 +79,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         removed = self.descend_consume_left(idx, removed, output);
 
         if consumed.is_some() {
-            consume_unchecked(output, consumed.unwrap().into_kv());
+            consume_unchecked(output, consumed.unwrap().into_entry());
         }
 
         if !removed && self.slots_min().has_open() {

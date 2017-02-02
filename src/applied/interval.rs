@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut, Range};
 use std::fmt;
 
-use base::{Node, KeyVal};
+use base::{Node, Entry};
 
 
 pub trait Interval: Sized+Ord+Clone {
@@ -59,21 +59,21 @@ impl<K: Ord+Clone> From<Range<K>> for KeyInterval<K> {
 
 #[derive(Clone)]
 pub struct IvNode<Iv: Interval, V> {
-    pub kv: KeyVal<Iv, V>,
+    pub entry: Entry<Iv, V>,
     pub maxb: Iv::K
 }
 
 impl<Iv: Interval, V> Deref for IvNode<Iv, V> {
-    type Target = KeyVal<Iv, V>;
+    type Target = Entry<Iv, V>;
 
     fn deref(&self) -> &Self::Target {
-        &self.kv
+        &self.entry
     }
 }
 
 impl<Iv: Interval, V> DerefMut for IvNode<Iv, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.kv
+        &mut self.entry
     }
 }
 
@@ -84,11 +84,11 @@ impl<Iv: Interval, V> Node for IvNode<Iv, V> {
 
     fn new(key: Iv, val: V) -> Self {
         let maxb = key.b().clone();
-        IvNode { kv: KeyVal::new(key, val), maxb:maxb }
+        IvNode { entry: Entry::new(key, val), maxb:maxb }
     }
 
-    fn into_kv(self) -> KeyVal<Iv, V> {
-        self.kv
+    fn into_entry(self) -> Entry<Iv, V> {
+        self.entry
     }
 }
 

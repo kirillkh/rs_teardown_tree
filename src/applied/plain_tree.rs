@@ -1,4 +1,4 @@
-use base::{Key, Node, TreeRepr, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, KeyVal, righti, lefti, consume_unchecked};
+use base::{Key, Node, TreeRepr, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti, consume_unchecked};
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
@@ -13,21 +13,21 @@ pub struct PlTree<K: Key, V> {
 
 #[derive(Clone)]
 pub struct PlNode<K: Key, V> {
-    pub kv: KeyVal<K, V>,
+    pub entry: Entry<K, V>,
 }
 
 
 impl<K: Key, V> Deref for PlNode<K, V> {
-    type Target = KeyVal<K, V>;
+    type Target = Entry<K, V>;
 
     fn deref(&self) -> &Self::Target {
-        &self.kv
+        &self.entry
     }
 }
 
 impl<K: Key, V> DerefMut for PlNode<K, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.kv
+        &mut self.entry
     }
 }
 
@@ -36,17 +36,17 @@ impl<K: Key, V> Node for PlNode<K, V> {
     type V = V;
 
     #[inline] fn new(key: K, val: V) -> Self {
-        PlNode { kv: KeyVal::new(key, val) }
+        PlNode { entry: Entry::new(key, val) }
     }
 
-    #[inline] fn into_kv(self) -> KeyVal<K, V> {
-        self.kv
+    #[inline] fn into_entry(self) -> Entry<K, V> {
+        self.entry
     }
 }
 
 impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.kv.key, fmt)
+        fmt::Debug::fmt(&self.entry.key, fmt)
     }
 }
 
@@ -233,7 +233,7 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
         } else if self.has_right(idx) {
             self.delete_min(idx, righti(idx));
         }
-        node.kv.val
+        node.entry.val
     }
 
 
@@ -296,7 +296,7 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
                 removed = self.descend_delete_max_left(drv, idx, removed);
                 if let Some(item) = item {
-                    consume_unchecked(drv.output(), item.into_kv());
+                    consume_unchecked(drv.output(), item.into_entry());
                 }
                 self.descend_delete_min_right(drv, idx, removed);
                 return;
@@ -321,7 +321,7 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
             let mut removed = item.is_some();
             removed = self.descend_consume_left(idx, removed, drv.output());
             if let Some(item) = item {
-                consume_unchecked(drv.output(), item.into_kv());
+                consume_unchecked(drv.output(), item.into_entry());
             }
 
             if !Flt::is_noop() {
@@ -359,7 +359,7 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
             let item = self.filter_take(idx);
             let mut removed = self.descend_delete_max_left(drv, idx, item.is_some());
             if let Some(item) = item {
-                consume_unchecked(drv.output(), item.into_kv());
+                consume_unchecked(drv.output(), item.into_entry());
             }
             removed = self.descend_consume_right(idx, removed, drv.output());
 

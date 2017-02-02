@@ -1,6 +1,6 @@
 use std::ptr;
 use std::ops::Range;
-use base::{Key, KeyVal};
+use base::{Key, Entry};
 
 pub trait TraversalDriver<K: Key, V> {
     type Decision: TraversalDecision;
@@ -120,21 +120,21 @@ impl<'a, K: Key +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
 
 
 #[inline(always)]
-pub fn consume_unchecked<K: Key, V>(output: &mut Vec<(K, V)>, item: KeyVal<K, V>) {
+pub fn consume_unchecked<K: Key, V>(output: &mut Vec<(K, V)>, item: Entry<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
         output.set_len(len + 1);
         let p = output.get_unchecked_mut(len);
 
-        let kv: (K, V) = item.into();
-        ptr::write(p, kv);
+        let entry: (K, V) = item.into();
+        ptr::write(p, entry);
     }
 }
 
 
 #[inline(always)]
-pub fn consume_ptr<K: Key, V>(output: &mut Vec<(K, V)>, src: *const KeyVal<K, V>) {
+pub fn consume_ptr<K: Key, V>(output: &mut Vec<(K, V)>, src: *const Entry<K, V>) {
     unsafe {
         let len = output.len();
         debug_assert!(len < output.capacity());
@@ -142,7 +142,7 @@ pub fn consume_ptr<K: Key, V>(output: &mut Vec<(K, V)>, src: *const KeyVal<K, V>
         let p = output.get_unchecked_mut(len);
 
         // TODO: optimizer fails here, might want to change to "let tuple: (K,V) = mem::transmute(item)" (but that is not guaranteed to work)
-        let KeyVal{key, val} = ptr::read(src);
+        let Entry {key, val} = ptr::read(src);
         ptr::write(p, (key, val));
     }
 }
