@@ -131,7 +131,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     pub fn delete(&mut self, search: &Iv) -> Option<V> {
         self.index_of(search).map(|idx| {
             let kv = self.delete_idx(idx);
-            self.update_ancestors_after_delete(idx, &kv.key.b());
+            self.update_ancestors_after_delete(idx, 0, &kv.key.b());
             kv.val
         })
     }
@@ -167,8 +167,8 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     }
 
     #[inline]
-    fn update_ancestors_after_delete(&mut self, mut idx: usize, removed_b: &Iv::K) {
-        while idx != 0 {
+    fn update_ancestors_after_delete(&mut self, mut idx: usize, idx_to: usize, removed_b: &Iv::K) {
+        while idx != idx_to {
             idx = parenti(idx);
             if removed_b == &self.node(idx).maxb {
                 self.update_maxb(idx);
@@ -178,128 +178,180 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
         }
     }
 
+//    #[inline]
+//    fn delete_idx(&mut self, idx: usize) -> KeyVal<Iv, V> {
+//        debug_assert!(!self.is_nil(idx));
+//
+//        let node = self.node_mut_unsafe(idx);
+//
+//        let repl_kv = match (self.has_left(idx), self.has_right(idx)) {
+//            (false, false) => {
+//                let IvNode{kv, ..} = self.take(idx);
+//                kv
+//            },
+//
+//            (true, false)  => {
+//                let (kv, left_maxb) = self.delete_max(lefti(idx));
+//                node.maxb = left_maxb;
+//                kv
+//            },
+//
+//            (false, true)  => {
+////                let (removed, right_maxb) = self.delete_min(righti(idx));
+////                item.maxb = right_maxb;
+//                let kv = self.delete_min(righti(idx));
+//                if &node.maxb == kv.key.b() {
+//                    self.update_maxb(idx)
+//                } else { // maxb remains the same
+//                    debug_assert!(kv.key.b() < &node.maxb);
+//                }
+//                kv
+//            },
+//
+//            (true, true)   => {
+//                let (kv, left_maxb) = self.delete_max(lefti(idx));
+//                if &node.maxb == kv.key.b() {
+//                    node.maxb = cmp::max(left_maxb, self.right(idx).maxb.clone());
+//                } else { // maxb remains the same
+//                    debug_assert!(kv.key.b() < &node.maxb);
+//                }
+//                kv
+//            },
+//        };
+//
+//        mem::replace(&mut node.kv, repl_kv)
+//    }
+//
+//
+//    /// returns the removed max-item of this subtree and the old maxb (before removal)
+//    #[inline]
+//    // we attempt to reduce the number of memory accesses as much as possible; might be overengineered
+//    fn delete_max(&mut self, idx: usize) -> (KeyVal<Iv,V>, Iv::K) {
+//        let max_idx = self.find_max(idx);
+//
+//        let (kv, mut old_maxb, mut new_maxb) = if self.has_left(max_idx) {
+//            let node = self.node_mut_unsafe(max_idx);
+//            let (left_max_kv, left_maxb) = self.delete_max(lefti(max_idx));
+//            let kv = mem::replace(&mut node.kv, left_max_kv);
+//
+//            let old_maxb = mem::replace(&mut node.maxb, left_maxb.clone());
+//            (kv, old_maxb, Some(left_maxb))
+//        } else {
+//            let IvNode { kv, maxb:old_maxb } = self.take(max_idx);
+//            (kv, old_maxb, None)
+//        };
+//
+//        // update ancestors
+//        let mut upd_idx = max_idx;
+//        while upd_idx != idx {
+//            upd_idx = parenti(upd_idx);
+//
+//            let node = self.node_mut_unsafe(upd_idx);
+//            old_maxb = node.maxb.clone();
+//            if &node.maxb == kv.key.b() {
+//                let mb = {
+//                    let self_left_maxb =
+//                        if self.has_left(upd_idx) {
+//                            cmp::max(&self.left(upd_idx).maxb, &node.maxb)
+//                        } else {
+//                            &node.maxb
+//                        };
+//
+//                    new_maxb.map_or(self_left_maxb.clone(),
+//                                    |mb| cmp::max(mb, self_left_maxb.clone()))
+//                };
+//                node.maxb = mb.clone();
+//                new_maxb = Some(mb);
+//            } else {
+//                new_maxb = Some(old_maxb.clone());
+//            }
+//        }
+//
+//        (kv, old_maxb)
+//    }
+//
+//    // TODO: check whether optimizations similar to delete_max() are worth it
+//    #[inline]
+//    fn delete_min(&mut self, idx: usize) -> KeyVal<Iv,V> {
+//        let min_idx = self.find_min(idx);
+//
+//        let replacement_kv = if self.has_right(min_idx) {
+//            let right_min_kv = self.delete_min(righti(min_idx));
+//            let node = self.node_mut_unsafe(min_idx);
+//
+//            if self.has_right(min_idx) {
+//                let right_maxb = &self.right(min_idx).maxb;
+//                node.maxb = cmp::max(right_maxb, right_min_kv.key.b()).clone();
+//            } else {
+//                node.maxb = right_min_kv.key.b().clone();
+//            }
+//
+//            mem::replace(&mut node.kv, right_min_kv)
+//        } else {
+//            let IvNode{kv, ..} = self.take(min_idx);
+//            kv
+//        };
+//
+//        // update ancestors
+//        let mut upd_idx = min_idx;
+//        while upd_idx != idx {
+//            upd_idx = parenti(upd_idx);
+//            self.update_maxb(upd_idx);
+//        }
+//
+//        replacement_kv
+//    }
+
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> KeyVal<Iv, V> {
         debug_assert!(!self.is_nil(idx));
 
-        let node = self.node_mut_unsafe(idx);
-
-        let repl_kv = match (self.has_left(idx), self.has_right(idx)) {
-            (false, false) => {
-                let IvNode{kv, ..} = self.take(idx);
-                kv
-            },
-
-            (true, false)  => {
-                let (kv, left_maxb) = self.delete_max(lefti(idx));
-                node.maxb = left_maxb;
-                kv
-            },
-
-            (false, true)  => {
-//                let (removed, right_maxb) = self.delete_min(righti(idx));
-//                item.maxb = right_maxb;
-                let kv = self.delete_min(righti(idx));
-                if &node.maxb == kv.key.b() {
-                    self.update_maxb(idx)
-                } else { // maxb remains the same
-                    debug_assert!(kv.key.b() < &node.maxb);
-                }
-                kv
-            },
-
-            (true, true)   => {
-                let (kv, left_maxb) = self.delete_max(lefti(idx));
-                if &node.maxb == kv.key.b() {
-                    node.maxb = cmp::max(left_maxb, self.right(idx).maxb.clone());
-                } else { // maxb remains the same
-                    debug_assert!(kv.key.b() < &node.maxb);
-                }
-                kv
-            },
-        };
-
-        mem::replace(&mut node.kv, repl_kv)
-    }
-
-
-    /// returns the removed max-item of this subtree and the old maxb (before removal)
-    #[inline]
-    // we attempt to reduce the number of memory accesses as much as possible; might be overengineered
-    fn delete_max(&mut self, idx: usize) -> (KeyVal<Iv,V>, Iv::K) {
-        let max_idx = self.find_max(idx);
-
-        let (kv, mut old_maxb, mut new_maxb) = if self.has_left(max_idx) {
-            let node = self.node_mut_unsafe(max_idx);
-            let (left_max_kv, left_maxb) = self.delete_max(lefti(max_idx));
-            let kv = mem::replace(&mut node.kv, left_max_kv);
-
-            let old_maxb = mem::replace(&mut node.maxb, left_maxb.clone());
-            (kv, old_maxb, Some(left_maxb))
+        let repl_kv = if self.has_left(idx) {
+            self.delete_max(lefti(idx))
+        } else if self.has_right(idx) {
+            self.delete_min(righti(idx))
         } else {
-            let IvNode { kv, maxb:old_maxb } = self.take(max_idx);
-            (kv, old_maxb, None)
+            let IvNode{kv, ..} = self.take(idx);
+            return kv;
         };
 
-        // update ancestors
-        let mut upd_idx = max_idx;
-        while upd_idx != idx {
-            upd_idx = parenti(upd_idx);
-
-            let node = self.node_mut_unsafe(upd_idx);
-            old_maxb = node.maxb.clone();
-            if &node.maxb == kv.key.b() {
-                let mb = {
-                    let self_left_maxb =
-                        if self.has_left(upd_idx) {
-                            cmp::max(&self.left(upd_idx).maxb, &node.maxb)
-                        } else {
-                            &node.maxb
-                        };
-
-                    new_maxb.map_or(self_left_maxb.clone(),
-                                    |mb| cmp::max(mb, self_left_maxb.clone()))
-                };
-                node.maxb = mb.clone();
-                new_maxb = Some(mb);
-            } else {
-                new_maxb = Some(old_maxb.clone());
-            }
-        }
-
-        (kv, old_maxb)
+        let kv = mem::replace(&mut self.node_mut(idx).kv, repl_kv);
+        self.update_maxb(idx);
+        kv
     }
 
-    // TODO: check whether optimizations similar to delete_max() are worth it
     #[inline]
-    fn delete_min(&mut self, idx: usize) -> KeyVal<Iv,V> {
+    fn delete_max(&mut self, idx: usize) -> KeyVal<Iv, V> {
+        let max_idx = self.find_max(idx);
+        let kv = if self.has_left(max_idx) {
+            let repl_kv = self.delete_max(lefti(max_idx));
+            let kv = mem::replace(&mut self.node_mut(max_idx).kv, repl_kv);
+            self.update_maxb(max_idx);
+            kv
+        } else {
+            let IvNode{kv, ..} = self.take(max_idx);
+            kv
+        };
+
+        self.update_ancestors_after_delete(max_idx, idx, &kv.key.b());
+        kv
+    }
+
+    #[inline]
+    fn delete_min(&mut self, idx: usize) -> KeyVal<Iv, V> {
         let min_idx = self.find_min(idx);
-
-        let replacement_kv = if self.has_right(min_idx) {
-            let right_min_kv = self.delete_min(righti(min_idx));
-            let node = self.node_mut_unsafe(min_idx);
-
-            if self.has_right(min_idx) {
-                let right_maxb = &self.right(min_idx).maxb;
-                node.maxb = cmp::max(right_maxb, right_min_kv.key.b()).clone();
-            } else {
-                node.maxb = right_min_kv.key.b().clone();
-            }
-
-            mem::replace(&mut node.kv, right_min_kv)
+        let kv = if self.has_right(min_idx) {
+            let repl_kv = self.delete_min(righti(min_idx));
+            let kv = mem::replace(&mut self.node_mut(min_idx).kv, repl_kv);
+            self.update_maxb(min_idx);
+            kv
         } else {
             let IvNode{kv, ..} = self.take(min_idx);
             kv
         };
 
-        // update ancestors
-        let mut upd_idx = min_idx;
-        while upd_idx != idx {
-            upd_idx = parenti(upd_idx);
-            self.update_maxb(upd_idx);
-        }
-
-        replacement_kv
+        self.update_ancestors_after_delete(min_idx, idx, &kv.key.b());
+        kv
     }
 
 

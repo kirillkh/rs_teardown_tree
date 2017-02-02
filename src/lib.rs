@@ -570,12 +570,10 @@ mod test_interval {
 
 
     fn test_random_shape_single(xs: Vec<Range<usize>>, rm: usize, rng: &mut XorShiftRng) -> bool {
-        let iv = {
-            if !xs.is_empty() {
-                xs[rm % xs.len()].clone().into()
-            } else {
-                KeyInterval::new(0, 1)
-            }
+        let iv = if !xs.is_empty() {
+            xs[rm % xs.len()].clone().into()
+        } else {
+            KeyInterval::new(0, 1)
         };
 
         test_random_shape(xs, rng, |tree| {
