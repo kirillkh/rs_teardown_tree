@@ -51,6 +51,17 @@ impl<N: Node> TeardownTreeRefill for TreeRepr<N> where N::K: Copy, N::V: Copy {
 //}
 
 
+pub trait Sink<T> {
+    fn consume(&mut self, x: T);
+}
+
+
+impl<T> Sink<T> for Vec<T> {
+    fn consume(&mut self, x: T) {
+        self.push(x);
+    }
+}
+
 
 #[inline(always)]
 pub fn parenti(idx: usize) -> usize {

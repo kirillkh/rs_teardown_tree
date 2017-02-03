@@ -6,24 +6,12 @@ use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp::{max};
-use std::ops::{Deref, DerefMut, Range};
+use std::ops::{Deref, DerefMut};
 
 
 pub trait Key: Ord+Clone {}
 
 impl<T: Ord+Clone> Key for T {}
-
-
-pub trait Sink<T> {
-    fn consume(&mut self, x: T);
-}
-
-
-impl<T> Sink<T> for Vec<T> {
-    fn consume(&mut self, x: T) {
-        self.push(x);
-    }
-}
 
 
 pub trait TreeDeref<N: Node>: Deref<Target=TreeRepr<N>> {}
@@ -125,23 +113,6 @@ impl<N: Node> TreeRepr<N> {
     pub fn clear(&mut self) {
         self.drop_items();
     }
-
-    pub fn query_range<'a, S: Sink<&'a Entry<N::K, N::V>>>(&'a self, range: Range<N::K>, sink: &mut S) {
-        let mut from = self.index_of(&range.start);
-        if self.is_nil(from) {
-            from = self.succ(from);
-        }
-
-        self.traverse_inorder_from(from, 0, sink, |this, sink, idx| {
-            let node = this.node(idx);
-            if node.key < range.end {
-                sink.consume(node);
-                false
-            } else {
-                true
-            }
-        })
-    }
 }
 
 // helpers
@@ -194,7 +165,7 @@ impl<N: Node> TreeRepr<N> {
 
 
 
-    fn succ(&self, idx: usize) -> usize {
+    pub fn succ(&self, idx: usize) -> usize {
         if self.has_right(idx) {
             righti(idx)
         } else {
@@ -418,8 +389,7 @@ impl<N: Node> TreeRepr<N> {
 
     fn drop_items(&mut self) {
         if self.size*2 <= self.data.len() {
-            let mut this: &mut TreeRepr<N> = &mut *self; // magic! doesn't compile without this
-            this.traverse_preorder_mut(0, &mut 0, |this, _, idx| {
+            Self::traverse_preorder_mut(self, 0, &mut 0, |this, _, idx| {
                 unsafe {
                     let p = this.data.get_unchecked_mut(idx);
                     ptr::drop_in_place(p);
@@ -450,6 +420,10 @@ impl<N: Node> TreeRepr<N> {
 
     pub fn slots_max<'a>(&'a mut self) -> &'a mut SlotStack where N: 'a {
         &mut self.delete_range_cache.slots_max
+    }
+
+    fn iter<'a>(&'a self) -> Iter<'a, N> {
+        Iter::new(self)
     }
 }
 
@@ -561,70 +535,67 @@ macro_rules! traverse_inorder_rev_block {
     )
 }
 
-pub trait Traverse<N: Node>: TreeDeref<N> {
-    fn traverse_preorder_mut<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&mut Self, &mut A, usize)
+pub trait Traverse<N: Node> {
+    #[inline(always)]
+    fn traverse_preorder<'a, A, F>(tree: &'a TreeRepr<N>, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize)
     {
-        traverse_preorder_block!(self, root, a, on_next);
+        traverse_preorder_block!(tree, root, a, on_next);
     }
 
     #[inline(always)]
-    fn traverse_inorder<A, F>(&self, root: usize, a: &mut A, on_next: F)
-        where F: FnMut(&Self, &mut A, usize) -> bool
+    fn traverse_inorder<'a, A, F>(tree: &'a TreeRepr<N>, root: usize, a: &mut A, on_next: F)
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> bool
     {
-        self.traverse_inorder_from(self.find_min(root), root, a, on_next)
+        TreeRepr::traverse_inorder_from(tree, tree.find_min(root), root, a, on_next)
     }
 
-    fn traverse_inorder_from<A, F>(&self, from: usize, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&Self, &mut A, usize) -> bool
+    fn traverse_inorder_from<'a, A, F>(tree: &'a TreeRepr<N>, from: usize, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> bool
     {
-        traverse_inorder_block!(self, from, root, a, on_next);
+        traverse_inorder_block!(tree, from, root, a, on_next);
     }
 
-    fn traverse_inorder_rev<A, F>(&self, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&Self, &mut A, usize)
+    fn traverse_inorder_rev<'a, A, F>(tree: &'a TreeRepr<N>, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize)
     {
-        traverse_inorder_rev_block!(self, root, a, on_next);
+        traverse_inorder_rev_block!(tree, root, a, on_next);
     }
 }
 
-pub trait TraverseMut<N: Node>: Traverse<N>+TreeDerefMut<N> {
-    #[inline(always)]
-    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&mut Self, &mut A, usize)
+pub trait TraverseMut<N: Node>: Traverse<N> {
+    fn traverse_preorder_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, mut on_next: F)
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize)
     {
-        traverse_preorder_block!(self, root, a, on_next);
+        traverse_preorder_block!(tree, root, a, on_next);
     }
 
     #[inline(always)]
-    fn traverse_inorder_mut<A, F>(&mut self, root: usize, a: &mut A, on_next: F)
-        where F: FnMut(&mut Self, &mut A, usize) -> bool
+    fn traverse_inorder_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, on_next: F)
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> bool
     {
-        let from = self.find_min(root);
-        self.traverse_inorder_from_mut(from, root, a, on_next)
+        let from = tree.find_min(root);
+        Self::traverse_inorder_from_mut(tree, from, root, a, on_next)
     }
 
-    fn traverse_inorder_from_mut<A, F>(&mut self, from: usize, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&mut Self, &mut A, usize) -> bool
+    fn traverse_inorder_from_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, from: usize, root: usize, a: &mut A, mut on_next: F)
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> bool
     {
-        traverse_inorder_block!(self, from, root, a, on_next);
-    }
-
-
-    fn traverse_inorder_rev_mut<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&mut Self, &mut A, usize)
-    {
-        traverse_inorder_rev_block!(self, root, a, on_next);
+        traverse_inorder_block!(tree, from, root, a, on_next);
     }
 
 
-    fn iter<'a>(&'a self) -> Iter<'a, N> {
-        Iter::new(self)
+    fn traverse_inorder_rev_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, mut on_next: F)
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize)
+    {
+        traverse_inorder_rev_block!(tree, root, a, on_next);
     }
 }
 
-impl<N: Node, T> Traverse<N> for T where T: TreeDeref<N> {}
-impl<N: Node, T> TraverseMut<N> for T where T: TreeDerefMut<N> {}
+impl<N: Node> Traverse<N> for TreeRepr<N> {}
+impl<N: Node> TraverseMut<N> for TreeRepr<N> {}
+
+
 
 /// Returns the closest subtree A enclosing `idx`, such that A is the left child (or 0 if no such
 /// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the left
@@ -719,10 +690,9 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
 
 impl<N: Node> Drop for TreeRepr<N> {
     fn drop(&mut self) {
-        let mut this = &mut *self;
-        this.drop_items();
+        self.drop_items();
         unsafe {
-            this.data.set_len(0)
+            self.data.set_len(0)
         }
     }
 }

@@ -23,7 +23,7 @@ pub use self::base::util;
 
 #[cfg(test)]
 mod test_plain {
-    use base::{Node, ItemFilter, NoopFilter, Traverse, lefti, righti};
+    use base::{TreeRepr, Node, ItemFilter, NoopFilter, Traverse, lefti, righti};
     use base::util::make_teardown_seq;
     use base::validation::{check_bst_del_range, check_integrity_del_range};
     use applied::plain_tree::{PlTree, PlNode};
@@ -416,7 +416,7 @@ mod test_plain {
     fn check_tree_doesnt_overlap<Flt>(search: &Range<usize>, tree: &mut Tree, flt: &mut Flt)
         where Flt: ItemFilter<usize>
     {
-        tree.traverse_inorder(0, &mut (), |this, _, idx| {
+        TreeRepr::traverse_inorder(tree, 0, &mut (), |this, _, idx| {
             let &x = this.key(idx);
             assert!((x<search.start || search.end<=x) || !flt.accept(&x), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, x, search, this, this);
             false
@@ -435,7 +435,7 @@ mod test_interval {
     use std::cmp;
     use std::fmt::Debug;
 
-    use base::{Traverse, Node, ItemFilter, NoopFilter, parenti, lefti, righti};
+    use base::{TreeRepr, Traverse, Node, ItemFilter, NoopFilter, parenti, lefti, righti};
     use base::validation::{check_bst_del_range, check_integrity_del_range, gen_tree_keys};
     use base::util::make_teardown_seq;
     use applied::interval::{Interval, IvNode, KeyInterval};
@@ -528,7 +528,7 @@ mod test_interval {
     fn check_tree_doesnt_overlap<Flt>(search: &Iv, tree: &mut Tree, flt: &mut Flt)
         where Flt: ItemFilter<KeyInterval<usize>>
     {
-        tree.traverse_inorder(0, &mut (), |this, _, idx| {
+        TreeRepr::traverse_inorder(tree, 0, &mut (), |this, _, idx| {
             assert!(!this.key(idx).overlaps(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
             false
         });

@@ -1,4 +1,4 @@
-use base::{Key, Node, TreeRepr, TeardownTreeRefill, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti, consume_unchecked};
+use base::{Key, Node, TreeRepr, Traverse, TeardownTreeRefill, Sink, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti, consume_unchecked};
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
@@ -116,6 +116,24 @@ impl<K: Key, V> PlTree<K, V> {
     {
         self.work(filter, |worker: &mut PlWorker<K,V,Flt>| worker.filter_with_driver(driver))
     }
+
+    pub fn query_range<'a, S: Sink<&'a Entry<K, V>>>(&'a self, range: Range<K>, sink: &mut S) {
+        let mut from = self.index_of(&range.start);
+        if self.is_nil(from) {
+            from = self.succ(from);
+        }
+
+        TreeRepr::traverse_inorder_from(self, from, 0, sink, |this, sink, idx| {
+            let node = this.node(idx);
+            if node.key < range.end {
+                sink.consume(node);
+                false
+            } else {
+                true
+            }
+        })
+    }
+
 
     #[inline]
     fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<K>,

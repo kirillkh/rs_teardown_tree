@@ -1,4 +1,4 @@
-use base::{Node, TreeDerefMut, TraverseMut, lefti, righti};
+use base::{Node, TreeRepr, TreeDerefMut, TraverseMut, lefti, righti};
 use base::{SlotStack, ItemFilter};
 use base::drivers::consume_unchecked;
 
@@ -53,7 +53,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
 
     #[inline]
     fn consume_subtree_unfiltered(&mut self, root: usize, output: &mut Vec<(N::K, N::V)>) {
-        self.traverse_inorder_mut(root, output, |this, output, idx| {
+        TreeRepr::traverse_inorder_mut(self, root, output, |this, output, idx| {
             unsafe {
                 this.move_to(idx, output);
             }
