@@ -1,4 +1,4 @@
-use base::{Node, lefti, righti, parenti, consume_unchecked, SlotStack};
+use base::{Node, Entry, lefti, righti, parenti, consume_unchecked, SlotStack};
 use base::bulk_delete::DeleteRangeCache;
 use std::cmp::{Ordering};
 use std::fmt::{Debug, Formatter};
@@ -6,12 +6,25 @@ use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp::{max};
-use std::ops::{Deref, DerefMut};
+use std::ops::{Deref, DerefMut, Range};
 
 
 pub trait Key: Ord+Clone {}
 
 impl<T: Ord+Clone> Key for T {}
+
+
+pub trait Sink<T> {
+    fn consume(&mut self, x: T);
+}
+
+
+impl<T> Sink<T> for Vec<T> {
+    fn consume(&mut self, x: T) {
+        self.push(x);
+    }
+}
+
 
 pub trait TreeDeref<N: Node>: Deref<Target=TreeRepr<N>> {}
 pub trait TreeDerefMut<N: Node>: TreeDeref<N> + DerefMut {}
@@ -93,7 +106,12 @@ impl<N: Node> TreeRepr<N> {
 
     /// Finds the item with the given key and returns it (or None).
     pub fn lookup<'a>(&'a self, search: &'a N::K) -> Option<&'a N::V> where N: 'a {
-        self.index_of(search).map(|idx| self.val(idx))
+        let idx = self.index_of(search);
+        if self.is_nil(idx) {
+            None
+        } else {
+            Some(self.val(idx))
+        }
     }
 
     pub fn contains(&self, search: &N::K) -> bool {
@@ -106,6 +124,23 @@ impl<N: Node> TreeRepr<N> {
 
     pub fn clear(&mut self) {
         self.drop_items();
+    }
+
+    pub fn query_range<'a, S: Sink<&'a Entry<N::K, N::V>>>(&'a self, range: Range<N::K>, sink: &mut S) {
+        let mut from = self.index_of(&range.start);
+        if self.is_nil(from) {
+            from = self.succ(from);
+        }
+
+        self.traverse_inorder_from(from, 0, sink, |this, sink, idx| {
+            let node = this.node(idx);
+            if node.key < range.end {
+                sink.consume(node);
+                false
+            } else {
+                true
+            }
+        })
     }
 }
 
@@ -158,36 +193,38 @@ impl<N: Node> TreeRepr<N> {
     }
 
 
-    pub fn index_of(&self, search: &N::K) -> Option<usize> {
+
+    fn succ(&self, idx: usize) -> usize {
+        if self.has_right(idx) {
+            righti(idx)
+        } else {
+            let left = left_enclosing(idx);
+            return if left == 0 { self.data.len() }
+                   else         { parenti(left) };
+        }
+    }
+
+    /// Returns either the current index of an element equal to `search` if it is contained in the tree;
+    /// or the index where it can be inserted if it is not.
+    pub fn index_of(&self, search: &N::K) -> usize {
         if self.data.is_empty() {
-            return None;
+            return 0;
         }
 
         let mut idx = 0;
-        let mut key =
-        if self.mask[idx] {
-            self.key(idx)
-        } else {
-            return None;
-        };
+        if !self.mask[idx] {
+            return idx;
+        }
 
         loop {
-            let ordering = search.cmp(&key);
-
-            idx = match ordering {
-                Ordering::Equal   => return Some(idx),
+            idx = match search.cmp(self.key(idx)) {
+                Ordering::Equal   => return idx,
                 Ordering::Less    => lefti(idx),
                 Ordering::Greater => righti(idx),
             };
 
-            if idx >= self.data.len() {
-                return None;
-            }
-
-            if self.mask[idx] {
-                key = self.key(idx);
-            } else {
-                return None;
+            if self.is_nil(idx) {
+                return idx;
             }
         }
     }
@@ -382,7 +419,7 @@ impl<N: Node> TreeRepr<N> {
     fn drop_items(&mut self) {
         if self.size*2 <= self.data.len() {
             let mut this: &mut TreeRepr<N> = &mut *self; // magic! doesn't compile without this
-            this.traverse_preorder(0, &mut 0, |this, _, idx| {
+            this.traverse_preorder_mut(0, &mut 0, |this, _, idx| {
                 unsafe {
                     let p = this.data.get_unchecked_mut(idx);
                     ptr::drop_in_place(p);
@@ -418,61 +455,21 @@ impl<N: Node> TreeRepr<N> {
 
 
 
-pub trait Traverse<N: Node>: TreeDerefMut<N> {
-    /// Returns the closest subtree A enclosing `idx`, such that A is the left child (or 0 if no such
-    /// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the left
-    /// child.
-    /// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
-    #[inline(always)]
-    fn left_enclosing(idx: usize) -> usize {
-        if idx & 1 == 0 {
-            idx
-        } else if idx & 2 == 0 {
-            idx >> 1
-        } else {
-            // optimizaion: the two lines below could be the sole body of this function; the 2 branches
-            // above are special cases
-            let shift = (idx + 1).trailing_zeros();
-            idx >> shift
-        }
-    }
-
-    /// Returns the closest subtree A enclosing `idx`, such that A is the right child (or 0 if no such
-    /// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the right
-    /// child.
-    /// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
-    #[inline(always)]
-    fn right_enclosing(idx: usize) -> usize {
-        if idx & 1 == 1 {
-            idx
-        } else if idx & 2 == 1 {
-            idx >> 1
-        } else {
-            // optimizaion: the two lines below could be the sole body of this function; the 2 branches
-            // above are special cases
-            let shift = idx.trailing_zeros();
-            idx >> shift
-        }
-    }
-
-
-    #[inline]
-    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
-        where F: FnMut(&mut Self, &mut A, usize)
-    {
-        if self.is_nil(root) {
+macro_rules! traverse_preorder_block {
+    ($this:expr, $root:expr, $a:expr, $on_next:expr) => (
+        if $this.is_nil($root) {
             return;
         }
 
-        let mut next = root;
+        let mut next = $root;
 
         loop {
             next = {
-                f(self, a, next);
+                $on_next($this, $a, next);
 
-                if self.has_left(next) {
+                if $this.has_left(next) {
                     lefti(next)
-                } else if self.has_right(next) {
+                } else if $this.has_right(next) {
                     righti(next)
                 } else {
                     loop {
@@ -482,17 +479,17 @@ pub trait Traverse<N: Node>: TreeDerefMut<N> {
                             if z == z & (!z+1) {
                                 0
                             } else {
-                                Self::left_enclosing(next+1)-1
+                                left_enclosing(next+1)-1
                             }
                         };
 
-                        if l_enclosing <= root {
+                        if l_enclosing <= $root {
                             // done
                             return;
                         }
 
                         next = l_enclosing + 1; // right sibling
-                        if !self.is_nil(next) {
+                        if !$this.is_nil(next) {
                             break;
                         }
                     }
@@ -500,30 +497,30 @@ pub trait Traverse<N: Node>: TreeDerefMut<N> {
                 }
             };
         }
-    }
+    )
+}
 
-    #[inline(never)]
-    fn traverse_inorder<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&mut Self, &mut A, usize) -> bool {
-        if self.is_nil(root) {
+macro_rules! traverse_inorder_block {
+    ($this:expr, $from:expr, $root:expr, $a:expr, $on_next:expr) => (
+        if $this.is_nil($root) {
             return;
         }
 
-        let mut next = self.find_min(root);
+        let mut next = $from;
 
         loop {
             next = {
-                let stop = on_next(self, a, next);
+                let stop = $on_next($this, $a, next);
                 if stop {
                     break;
                 }
 
-                if self.has_right(next) {
-                    self.find_min(righti(next))
+                if $this.has_right(next) {
+                    $this.find_min(righti(next))
                 } else {
-                    let l_enclosing = Self::left_enclosing(next+1);
+                    let l_enclosing = left_enclosing(next+1);
 
-                    if l_enclosing <= root+1 {
+                    if l_enclosing <= $root+1 {
                         // done
                         break;
                     }
@@ -532,28 +529,27 @@ pub trait Traverse<N: Node>: TreeDerefMut<N> {
                 }
             }
         }
-    }
+    )
+}
 
-
-    #[inline]
-    fn traverse_inorder_rev<A, F>(&mut self, root: usize, a: &mut A, mut f: F)
-        where F: FnMut(&mut Self, &mut A, usize) {
-        if self.is_nil(root) {
+macro_rules! traverse_inorder_rev_block {
+    ($this:expr, $root:expr, $a:expr, $on_next:expr) => (
+        if $this.is_nil($root) {
             return;
         }
 
-        let mut next = self.find_max(root);
+        let mut next = $this.find_max($root);
 
         loop {
             next = {
-                f(self, a, next);
+                $on_next($this, $a, next);
 
-                if self.has_left(next) {
-                    self.find_max(lefti(next))
+                if $this.has_left(next) {
+                    $this.find_max(lefti(next))
                 } else {
-                    let r_enclosing = Self::right_enclosing(next);
+                    let r_enclosing = right_enclosing(next);
 
-                    if r_enclosing <= root {
+                    if r_enclosing <= $root {
                         // done
                         return;
                     }
@@ -562,6 +558,63 @@ pub trait Traverse<N: Node>: TreeDerefMut<N> {
                 }
             }
         }
+    )
+}
+
+pub trait Traverse<N: Node>: TreeDeref<N> {
+    fn traverse_preorder_mut<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&mut Self, &mut A, usize)
+    {
+        traverse_preorder_block!(self, root, a, on_next);
+    }
+
+    #[inline(always)]
+    fn traverse_inorder<A, F>(&self, root: usize, a: &mut A, on_next: F)
+        where F: FnMut(&Self, &mut A, usize) -> bool
+    {
+        self.traverse_inorder_from(self.find_min(root), root, a, on_next)
+    }
+
+    fn traverse_inorder_from<A, F>(&self, from: usize, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&Self, &mut A, usize) -> bool
+    {
+        traverse_inorder_block!(self, from, root, a, on_next);
+    }
+
+    fn traverse_inorder_rev<A, F>(&self, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&Self, &mut A, usize)
+    {
+        traverse_inorder_rev_block!(self, root, a, on_next);
+    }
+}
+
+pub trait TraverseMut<N: Node>: Traverse<N>+TreeDerefMut<N> {
+    #[inline(always)]
+    fn traverse_preorder<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&mut Self, &mut A, usize)
+    {
+        traverse_preorder_block!(self, root, a, on_next);
+    }
+
+    #[inline(always)]
+    fn traverse_inorder_mut<A, F>(&mut self, root: usize, a: &mut A, on_next: F)
+        where F: FnMut(&mut Self, &mut A, usize) -> bool
+    {
+        let from = self.find_min(root);
+        self.traverse_inorder_from_mut(from, root, a, on_next)
+    }
+
+    fn traverse_inorder_from_mut<A, F>(&mut self, from: usize, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&mut Self, &mut A, usize) -> bool
+    {
+        traverse_inorder_block!(self, from, root, a, on_next);
+    }
+
+
+    fn traverse_inorder_rev_mut<A, F>(&mut self, root: usize, a: &mut A, mut on_next: F)
+        where F: FnMut(&mut Self, &mut A, usize)
+    {
+        traverse_inorder_rev_block!(self, root, a, on_next);
     }
 
 
@@ -570,14 +623,53 @@ pub trait Traverse<N: Node>: TreeDerefMut<N> {
     }
 }
 
-impl<N: Node, T> Traverse<N> for T where T: TreeDerefMut<N> {}
+impl<N: Node, T> Traverse<N> for T where T: TreeDeref<N> {}
+impl<N: Node, T> TraverseMut<N> for T where T: TreeDerefMut<N> {}
+
+/// Returns the closest subtree A enclosing `idx`, such that A is the left child (or 0 if no such
+/// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the left
+/// child.
+/// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
+#[inline(always)]
+fn left_enclosing(idx: usize) -> usize {
+    if idx & 1 == 0 {
+        idx
+    } else if idx & 2 == 0 {
+        idx >> 1
+    } else {
+        // optimizaion: the two lines below could be the sole body of this function; the 2 branches
+        // above are special cases
+        let shift = (idx + 1).trailing_zeros();
+        idx >> shift
+    }
+}
+
+/// Returns the closest subtree A enclosing `idx`, such that A is the right child (or 0 if no such
+/// node is found). `idx` is considered to enclose itself, so we return `idx` if it is the right
+/// child.
+/// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
+#[inline(always)]
+fn right_enclosing(idx: usize) -> usize {
+    if idx & 1 == 1 {
+        idx
+    } else if idx & 2 == 1 {
+        idx >> 1
+    } else {
+        // optimizaion: the two lines below could be the sole body of this function; the 2 branches
+        // above are special cases
+        let shift = idx.trailing_zeros();
+        idx >> shift
+    }
+}
+
+
 
 
 
 pub struct Iter<'a, N: Node> where N: 'a, N::K: 'a, N::V: 'a {
     tree: &'a TreeRepr<N>,
     next_idx: usize,
-    next: Option<(&'a N::K, &'a N::V)>
+    next: Option<&'a Entry<N::K, N::V>>
 }
 
 impl <'a, N: Node> Iter<'a, N> where N::K: 'a, N::V: 'a {
@@ -587,14 +679,14 @@ impl <'a, N: Node> Iter<'a, N> where N::K: 'a, N::V: 'a {
             None
         } else {
             let node = tree.node(next_idx);
-            Some((&node.key, &node.val))
+            Some(node.deref())
         };
         Iter { tree:tree, next_idx:next_idx, next:next }
     }
 }
 
 impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
-    type Item = (&'a N::K, &'a N::V);
+    type Item = &'a Entry<N::K, N::V>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(next) = self.next.take() {
@@ -603,7 +695,7 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
             self.next_idx = if self.tree.has_right(next_idx) {
                 self.tree.find_min(righti(next_idx))
             } else {
-                let l_enclosing = <&mut TreeRepr<N>>::left_enclosing(next_idx+1);
+                let l_enclosing = left_enclosing(next_idx+1);
 
                 if l_enclosing <= 1 {
                     // done
@@ -614,7 +706,7 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
             };
 
             let node = self.tree.node(self.next_idx);
-            self.next = Some((&node.key, &node.val));
+            self.next = Some(node);
 
             Some(next)
         } else {

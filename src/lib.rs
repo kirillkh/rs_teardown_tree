@@ -430,7 +430,7 @@ mod test_plain {
 
 #[cfg(test)]
 mod test_interval {
-    use std::ops::Range;
+    use std::ops::{Range};
     use rand::{Rng, XorShiftRng, SeedableRng};
     use std::cmp;
     use std::fmt::Debug;

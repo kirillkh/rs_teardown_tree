@@ -218,9 +218,12 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
     pub fn delete(&mut self, search: &K) -> Option<V> {
-        self.index_of(search).map(|idx| {
-            self.delete_idx(idx)
-        })
+        let idx = self.index_of(search);
+        if self.is_nil(idx) {
+            None
+        } else {
+            Some(self.delete_idx(idx))
+        }
     }
 
     #[inline]
