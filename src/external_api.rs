@@ -1,10 +1,11 @@
 use std::mem;
+use std::marker::PhantomData;
 
 pub use applied::interval::{Interval, KeyInterval};
 
 pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
 pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
-pub use base::TeardownTreeRefill;
+pub use base::{TeardownTreeRefill, Sink, Entry};
 
 
 pub trait TreeWrapperAccess {
@@ -18,8 +19,9 @@ pub trait TreeWrapperAccess {
 
 
 mod plain {
-    use base::{TeardownTreeRefill, Key, ItemFilter};
+    use base::{TeardownTreeRefill, Sink, Entry, Key, ItemFilter};
     use applied::plain_tree::{PlTree};
+    use super::SinkAdapter;
 
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
@@ -50,6 +52,11 @@ mod plain {
         /// Returns true if the map contains the given key.
         pub fn contains_key(&self, search: &K) -> bool {
             self.internal.contains(search)
+        }
+
+        /// Executes a range query.
+        pub fn query_range<'a, S: Sink<&'a Entry<K, V>>>(&'a self, range: Range<K>, sink: &mut S) {
+            self.internal.query_range(range, sink)
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -155,6 +162,11 @@ mod plain {
             self.map.contains_key(search)
         }
 
+        /// Executes a range query.
+        pub fn query_range<'a, S: Sink<&'a T>>(&'a self, range: Range<T>, sink: &mut S) {
+            self.map.query_range(range, &mut SinkAdapter::new(sink))
+        }
+
         /// Deletes the item with the given key from the tree and returns it (or None).
         pub fn delete(&mut self, search: &T) -> bool {
             self.map.delete(search).is_some()
@@ -236,7 +248,8 @@ mod interval {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
-    use base::{TeardownTreeRefill, ItemFilter, parenti};
+    use base::{TeardownTreeRefill, ItemFilter, Entry, Sink, parenti};
+    use super::SinkAdapter;
 
     use applied::interval::{Interval};
     use applied::interval_tree::{IvTree};
@@ -279,6 +292,11 @@ mod interval {
         /// Returns true if the map contains the given key.
         pub fn contains_key(&self, search: &Iv) -> bool {
             self.internal.contains(search)
+        }
+
+        /// Executes an overlap query.
+        pub fn query_overlap<'a, S: Sink<&'a Entry<Iv, V>>>(&'a self, search: &Iv, sink: &mut S) {
+            self.internal.query_overlap(search, sink)
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -364,6 +382,11 @@ mod interval {
             self.map.contains_key(search)
         }
 
+        /// Executes an overlap query.
+        pub fn query_overlap<'a, S: Sink<&'a Iv>>(&'a self, search: &Iv, sink: &mut S) {
+            self.map.query_overlap(search, &mut SinkAdapter::new(sink))
+        }
+
         /// Deletes the given interval from the tree and returns true (or false if it was not found).
         pub fn delete(&mut self, search: &Iv) -> bool {
             self.map.delete(search).is_some()
@@ -446,4 +469,23 @@ mod interval {
 #[inline(always)]
 fn conv_to_tuple_vec<K>(items: Vec<K>) -> Vec<(K, ())> {
     unsafe { mem::transmute(items) }
+}
+
+
+
+struct SinkAdapter<'a, 'b, T: 'a, S: Sink<&'a T>+'b> {
+    sink: &'b mut S,
+    _ph: PhantomData<&'a T>
+}
+
+impl<'a, 'b, T: 'a, S: Sink<&'a T>+'b> SinkAdapter<'a, 'b, T, S> {
+    fn new(sink: &'b mut S) -> Self {
+        SinkAdapter { sink: sink, _ph: PhantomData }
+    }
+}
+
+impl<'a, 'b, T: 'a, S: Sink<&'a T>+'b> Sink<&'a Entry<T, ()>> for SinkAdapter<'a, 'b, T, S> {
+    #[inline] fn consume(&mut self, entry: &'a Entry<T, ()>) {
+        self.sink.consume(&entry.key)
+    }
 }

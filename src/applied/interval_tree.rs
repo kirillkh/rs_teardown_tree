@@ -1,5 +1,5 @@
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, TeardownTreeRefill, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
+use base::{TreeRepr, TeardownTreeRefill, Traverse, Sink, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 use std::ops::{Deref, DerefMut};
 use std::fmt::{Debug, Display, Formatter};
@@ -49,6 +49,45 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_overlap(search, output))
     }
 
+
+    pub fn query_overlap<'a, S: Sink<&'a Entry<Iv, V>>>(&'a self, search: &Iv, sink: &mut S) {
+        let from = self.lower_bound(search);
+
+        TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
+            let node = this.node(idx);
+            if node.key.b() <= search.a() && node.key.a() != search.a() {
+                true
+            } else if search.b() <= node.key.a() && node.key.a() != search.a() {
+                assert!(false);
+                true
+            } else {
+                assert!(search.overlaps(&node.key));
+                sink.consume(node);
+                false
+            }
+        })
+    }
+
+    /// returns index of the first item in the tree that may overlap `search`
+    fn lower_bound(&self, search: &Iv) -> usize {
+        let mut parent = 0;
+        let mut next = 0;
+        while !self.is_nil(next) {
+            if &self.node(next).maxb <= search.a() {
+                // whole subtree outside the range
+                if next == parent {
+                    return self.size();
+                } else {
+                    return parent;
+                }
+            }
+
+            parent = next;
+            next = lefti(parent);
+        }
+
+        parent
+    }
 
     #[inline]
     fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<Iv>,

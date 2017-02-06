@@ -123,7 +123,7 @@ impl<K: Key, V> PlTree<K, V> {
             from = self.succ(from);
         }
 
-        TreeRepr::traverse_inorder_from(self, from, 0, sink, |this, sink, idx| {
+        TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
             let node = this.node(idx);
             if node.key < range.end {
                 sink.consume(node);
