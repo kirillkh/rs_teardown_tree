@@ -18,7 +18,7 @@ path = "src/lib.rs"
 
 [dependencies]
 rand = "0.3.14"
-derive-new = "0.3"
+derive-new = "0.4"
 #wio = "0.1.2"
 
 [dev-dependencies]
