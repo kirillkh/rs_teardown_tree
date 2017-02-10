@@ -63,6 +63,32 @@ impl<T> Sink<T> for Vec<T> {
 }
 
 
+#[derive(new)]
+pub struct CopyingSink<T: Key+Copy> {
+    pub output: Vec<T>
+}
+
+impl<'a, T: Key+Copy+'a> Sink<&'a T> for CopyingSink<T> {
+    fn consume(&mut self, x: &'a T) {
+        self.output.push(*x);
+    }
+}
+
+
+#[derive(new)]
+pub struct CloningSink<T: Key> {
+    pub output: Vec<T>
+}
+
+impl<'a, T: Key+'a> Sink<&'a T> for CloningSink<T> {
+    fn consume(&mut self, x: &'a T) {
+        self.output.push(x.clone());
+    }
+}
+
+
+
+
 #[inline(always)]
 pub fn parenti(idx: usize) -> usize {
     (idx-1) >> 1
@@ -101,7 +127,6 @@ impl<K: Key> ItemFilter<K> for NoopFilter {
 pub mod validation {
     use rand::{Rng, XorShiftRng};
     use std::fmt::Debug;
-    use std::ops::Range;
     use base::{Key, TreeRepr, Node, lefti, righti, parenti};
 
     type Tree<N> = TreeRepr<N>;
@@ -173,8 +198,8 @@ pub mod validation {
     }
 
 
-    pub fn check_integrity_del_range<Flt, N: Node, Out>(search: &Range<usize>, tree: &Tree<N>, output: &Out, tree_orig: &Tree<N>, filter: &Flt)
-        where Flt: Debug, N: Debug, Out: Debug
+    pub fn check_integrity_del_range<Flt, N: Node, Search, Out>(search: &Search, tree: &Tree<N>, output: &Out, tree_orig: &Tree<N>, filter: &Flt)
+        where Flt: Debug, N: Debug, Search: Debug, Out: Debug
     {
         if check_integrity(tree).is_err() {
             debug_assert!(false, "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);

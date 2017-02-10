@@ -9,18 +9,21 @@ pub use base::{TeardownTreeRefill, Sink, Entry};
 
 
 pub trait TreeWrapperAccess {
+    type Repr;
     type Wrapper;
 
-    fn internal(&mut self) -> &mut Self::Wrapper;
+    fn internal(&self) -> &Self::Wrapper;
+    fn internal_mut(&mut self) -> &mut Self::Wrapper;
     fn into_internal(self) -> Self::Wrapper;
     fn from_internal(wrapper: Self::Wrapper) -> Self;
+    fn from_repr(repr: Self::Repr) -> Self;
 }
 
 
 
 mod plain {
-    use base::{TeardownTreeRefill, Sink, Entry, Key, ItemFilter};
-    use applied::plain_tree::{PlTree};
+    use base::{TreeRepr, TeardownTreeRefill, Sink, Entry, Key, ItemFilter};
+    use applied::plain_tree::{PlTree, PlNode};
     use super::SinkAdapter;
 
     use std::fmt;
@@ -37,7 +40,7 @@ mod plain {
     impl<K: Ord+Clone, V> TeardownTreeMap<K, V> {
         /// Creates a new `TeardownTreeMap` with the given set of items. The items can be given in
         /// any order. Duplicate keys are allowed and supported.
-        pub fn new(mut items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
+        #[inline] pub fn new(mut items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             items.sort_by(|a, b| a.0.cmp(&b.0));
             Self::with_sorted(items)
         }
@@ -45,59 +48,59 @@ mod plain {
         /// Creates a new `TeardownTreeMap` with the given set of items. Duplicate keys are allowed
         /// and supported.
         /// **Note**: the items are assumed to be sorted!
-        pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
+        #[inline] pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             TeardownTreeMap { internal: PlTree::with_sorted(sorted) }
         }
 
         /// Returns true if the map contains the given key.
-        pub fn contains_key(&self, search: &K) -> bool {
+        #[inline] pub fn contains_key(&self, search: &K) -> bool {
             self.internal.contains(search)
         }
 
         /// Executes a range query.
-        pub fn query_range<'a, S: Sink<&'a Entry<K, V>>>(&'a self, range: Range<K>, sink: &mut S) {
+        #[inline] pub fn query_range<'a, S: Sink<&'a Entry<K, V>>>(&'a self, range: Range<K>, sink: &mut S) {
             self.internal.query_range(range, sink)
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
-        pub fn delete(&mut self, search: &K) -> Option<V> {
+        #[inline] pub fn delete(&mut self, search: &K) -> Option<V> {
             self.internal.delete(search)
         }
 
         /// Deletes all items inside the half-open `range` from the tree and stores them in the output
         /// Vec. The items are returned in order.
-        pub fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>) {
+        #[inline] pub fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>) {
             self.internal.delete_range(range, output)
         }
 
         /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
         /// true and stores them in the output Vec. The items are returned in order.
-        pub fn filter_range<Flt>(&mut self, range: Range<K>, filter: Flt, output: &mut Vec<(K, V)>)
+        #[inline] pub fn filter_range<Flt>(&mut self, range: Range<K>, filter: Flt, output: &mut Vec<(K, V)>)
             where Flt: ItemFilter<K>
         {
             self.internal.filter_range(range, filter, output)
         }
 
         /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
-        pub fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
+        #[inline] pub fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
             self.internal.delete_range_ref(range, output)
         }
 
         /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
         /// true and stores them in the output Vec. The items are returned in order.
-        pub fn filter_range_ref<Flt>(&mut self, range: Range<&K>, filter: Flt, output: &mut Vec<(K, V)>)
+        #[inline] pub fn filter_range_ref<Flt>(&mut self, range: Range<&K>, filter: Flt, output: &mut Vec<(K, V)>)
             where Flt: ItemFilter<K>
         {
             self.internal.filter_range_ref(range, filter, output)
         }
 
         /// Returns the number of items in this tree.
-        pub fn size(&self) -> usize { self.internal.size() }
+        #[inline] pub fn size(&self) -> usize { self.internal.size() }
 
-        pub fn is_empty(&self) -> bool { self.size() == 0 }
+        #[inline] pub fn is_empty(&self) -> bool { self.size() == 0 }
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
-        pub fn clear(&mut self) { self.internal.clear(); }
+        #[inline] pub fn clear(&mut self) { self.internal.clear(); }
     }
 
     impl<K: Ord+Clone+Debug, V> Debug for TeardownTreeMap<K, V> {
@@ -120,9 +123,14 @@ mod plain {
 
 
     impl<K: Ord+Clone, V> super::TreeWrapperAccess for TeardownTreeMap<K, V> {
+        type Repr = TreeRepr<PlNode<K,V>>;
         type Wrapper = PlTree<K,V>;
 
-        fn internal(&mut self) -> &mut PlTree<K,V> {
+        fn internal(&self) -> &PlTree<K,V> {
+            &self.internal
+        }
+
+        fn internal_mut(&mut self) -> &mut Self::Wrapper {
             &mut self.internal
         }
 
@@ -132,6 +140,10 @@ mod plain {
 
         fn from_internal(wrapper: PlTree<K, V>) -> Self {
             TeardownTreeMap { internal: wrapper }
+        }
+
+        fn from_repr(repr: Self::Repr) -> Self {
+            Self::from_internal(PlTree::with_repr(repr))
         }
     }
 
@@ -219,9 +231,14 @@ mod plain {
     }
 
     impl<K: Key> super::TreeWrapperAccess for TeardownTreeSet<K> {
+        type Repr = TreeRepr<PlNode<K, ()>>;
         type Wrapper = PlTree<K, ()>;
 
-        fn internal(&mut self) -> &mut PlTree<K,()> {
+        fn internal(&self) -> &PlTree<K,()> {
+            &self.map.internal
+        }
+
+        fn internal_mut(&mut self) -> &mut PlTree<K,()> {
             &mut self.map.internal
         }
 
@@ -231,6 +248,10 @@ mod plain {
 
         fn from_internal(wrapper: PlTree<K, ()>) -> Self {
             TeardownTreeSet { map: TeardownTreeMap { internal: wrapper } }
+        }
+
+        fn from_repr(repr: Self::Repr) -> Self {
+            Self::from_internal(PlTree::with_repr(repr))
         }
     }
 
@@ -248,10 +269,11 @@ mod interval {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
-    use base::{TeardownTreeRefill, ItemFilter, Entry, Sink, parenti};
+    use base::{TreeRepr, TeardownTreeRefill, ItemFilter, Entry, Sink};
     use super::SinkAdapter;
 
-    use applied::interval::{Interval};
+    use applied::AppliedTree;
+    use applied::interval::{Interval, IvNode};
     use applied::interval_tree::{IvTree};
 
     #[derive(Clone)]
@@ -271,22 +293,7 @@ mod interval {
         /// allowed and supported.
         /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
-            let mut tree = IntervalTeardownTreeMap { internal: IvTree::with_sorted(sorted) };
-            {
-                let internal = &mut tree.internal;
-
-                // initialize maxb values
-                for i in (1..internal.size()).rev() {
-                    let parent = internal.node_mut_unsafe(parenti(i));
-                    let node = internal.node(i);
-
-                    if node.maxb > parent.maxb {
-                        parent.maxb = node.maxb.clone()
-                    }
-                }
-            }
-
-            tree
+            IntervalTeardownTreeMap { internal: IvTree::with_sorted(sorted) }
         }
 
         /// Returns true if the map contains the given key.
@@ -334,9 +341,14 @@ mod interval {
 
 
     impl<Iv: Interval, V> super::TreeWrapperAccess for IntervalTeardownTreeMap<Iv, V> {
+        type Repr = TreeRepr<IvNode<Iv,V>>;
         type Wrapper = IvTree<Iv,V>;
 
-        fn internal(&mut self) -> &mut IvTree<Iv, V> {
+        fn internal(&self) -> &IvTree<Iv, V> {
+            &self.internal
+        }
+
+        fn internal_mut(&mut self) -> &mut IvTree<Iv, V> {
             &mut self.internal
         }
 
@@ -346,6 +358,10 @@ mod interval {
 
         fn from_internal(wrapper: IvTree<Iv, V>) -> Self {
             IntervalTeardownTreeMap { internal: wrapper }
+        }
+
+        fn from_repr(repr: Self::Repr) -> Self {
+            Self::from_internal(IvTree::with_repr(repr))
         }
     }
 
@@ -419,9 +435,14 @@ mod interval {
     }
 
     impl<Iv: Interval> super::TreeWrapperAccess for IntervalTeardownTreeSet<Iv> {
+        type Repr = TreeRepr<IvNode<Iv, ()>>;
         type Wrapper = IvTree<Iv, ()>;
 
-        fn internal(&mut self) -> &mut IvTree<Iv, ()> {
+        fn internal(&self) -> &IvTree<Iv, ()> {
+            &self.map.internal
+        }
+
+        fn internal_mut(&mut self) -> &mut IvTree<Iv, ()> {
             &mut self.map.internal
         }
 
@@ -431,6 +452,10 @@ mod interval {
 
         fn from_internal(wrapper: IvTree<Iv, ()>) -> Self {
             IntervalTeardownTreeSet { map: IntervalTeardownTreeMap { internal: wrapper } }
+        }
+
+        fn from_repr(repr: Self::Repr) -> Self {
+            Self::from_internal(IvTree::with_repr(repr))
         }
     }
 

@@ -8,6 +8,7 @@
 
 
 extern crate rand;
+#[macro_use] extern crate derive_new;
 
 mod base;
 mod applied;
@@ -22,18 +23,17 @@ pub use self::base::util;
 
 
 #[cfg(test)]
-mod test_plain {
-    use base::{TreeRepr, Node, ItemFilter, NoopFilter, Traverse, lefti, righti};
+mod test_delete_plain {
+    use base::{Node, ItemFilter, NoopFilter};
     use base::util::make_teardown_seq;
     use base::validation::{check_bst_del_range, check_integrity_del_range};
     use applied::plain_tree::{PlTree, PlNode};
-    use applied::interval::{Interval, KeyInterval};
     use external_api::{TeardownTreeSet, TreeWrapperAccess};
-    use super::check_output_sorted;
+    use super::common::{conv_from_tuple_vec, check_tree, test_exhaustive_items, exhaustive_range_check, mk_prebuilt};
 
     use rand::{Rng, XorShiftRng, SeedableRng};
-    use std::cmp;
     use std::fmt::Debug;
+    use std::ops::Range;
 
     type Nd = PlNode<usize, ()>;
     type Tree = PlTree<usize, ()>;
@@ -70,7 +70,7 @@ mod test_plain {
 
 
     fn delete_range_n(n: usize) {
-        let tree = Tree::new((1..n+1)
+        let tree = PlTree::new((1..n+1)
             .zip( vec![(); n].into_iter() )
             .collect::<Vec<_>>());
         delete_range_exhaustive_with_tree(tree);
@@ -79,10 +79,30 @@ mod test_plain {
 
     fn test_prebuilt(items: &[usize], range: Range<usize>) {
         let nodes: Vec<Option<Nd>> = mk_prebuilt(items);
-        let tree = Tree::with_nodes(nodes);
+        let tree = PlTree::with_nodes(nodes);
         let mut output = Vec::with_capacity(tree.size());
-        check_tree(&mut TeardownTreeSet::from_internal(tree), range, NoopFilter, &mut output);
+        delete_and_check(&mut TeardownTreeSet::from_internal(tree), range, &mut NoopFilter, &mut output);
     }
+
+    pub fn test_exhaustive_n<F>(n: usize, check: &F)
+        where F: Fn(Tree) -> ()
+    {
+        let elems: Vec<_> = (1..n + 1).collect();
+        println!("exhaustive {}: items={:?} ------------------------", n, &elems);
+
+        let mut items: Vec<_> = elems.into_iter().map(|x| Some((x, ()))).collect();
+        test_exhaustive_items::<_, Tree, _>(&mut items, check);
+    }
+
+    fn delete_and_check<Flt>(orig: &mut TeardownTreeSet<usize>, search: Range<usize>, filter: &mut Flt, output: &mut Vec<usize>) -> TeardownTreeSet<usize>
+        where Flt: ItemFilter<usize>+Clone+Debug
+    {
+        let mut tree = orig.clone();
+        tree.filter_range(search.clone(), filter.clone(), output);
+        check_tree(orig.internal(), tree.internal_mut(), &search, filter, output);
+        tree
+    }
+
 
     #[test]
     fn delete_range_prebuilt() {
@@ -137,27 +157,6 @@ mod test_plain {
     }
 
 
-    fn mk_prebuilt(items: &[usize]) -> Vec<Option<Nd>> {
-        let nodes: Vec<_> = items.iter().map(|&x| if x==0 {
-            None
-        } else {
-            Some(Node::new(x, ()))
-        }).collect();
-
-        nodes
-    }
-
-
-
-
-    use std::ops::Range;
-
-    #[derive(Debug)]
-    struct TreeRangeInfo {
-        range: Range<usize>,
-        root_idx: usize
-    }
-
 
     #[test]
     fn delete_range_exhaustive() {
@@ -181,53 +180,6 @@ mod test_plain {
         test_exhaustive_n(n, &|tree| delete_range_exhaustive_with_tree(tree));
     }
 
-    fn test_exhaustive_n<F>(n: usize, check: &F)
-                        where F: Fn(Tree) -> () {
-        let elems: Vec<_> = (1..n+1).collect();
-        println!("exhaustive {}: elems={:?} ------------------------", n, &elems);
-
-        let mut stack = vec![TreeRangeInfo { range: (1..n+1), root_idx: 0 }];
-        let mut items: Vec<usize> = vec![0; 1 << n];
-        test_exhaustive_rec(&mut stack, &mut items, check);
-    }
-
-    fn test_exhaustive_rec<F>(stack: &mut Vec<TreeRangeInfo>, items: &mut Vec<usize>, check: &F)
-                                                            where F: Fn(Tree) -> () {
-        if stack.is_empty() {
-            let nodes: Vec<Option<Nd>> = mk_prebuilt(items);
-            let tree = Tree::with_nodes(nodes);
-            check(tree);
-        } else {
-            let info = stack.pop().unwrap();
-            let (lefti, righti) = (lefti(info.root_idx), righti(info.root_idx));
-            for i in info.range.clone() {
-                items[info.root_idx] = i;
-
-                let mut pushed = 0;
-                if info.range.start < i {
-                    let range1 = info.range.start .. i;
-                    stack.push(TreeRangeInfo { range: range1, root_idx: lefti });
-                    pushed += 1;
-                }
-
-                if i+1 < info.range.end {
-                    let range2 = i+1 .. info.range.end;
-                    stack.push(TreeRangeInfo { range: range2, root_idx: righti });
-                    pushed += 1;
-                }
-
-                test_exhaustive_rec(stack, items, check);
-
-                for _ in 0..pushed {
-                    stack.pop();
-                }
-            }
-
-            items[info.root_idx] = 0;
-            stack.push(info);
-        }
-    }
-
 
     fn delete_single_exhaustive_with_tree(tree: Tree) {
         let n = tree.size();
@@ -239,7 +191,7 @@ mod test_plain {
             let deleted = tree_mod.delete(&i);
             assert!(deleted.is_some());
             output.push(i);
-            delete_range_check(n, i..i+1, &mut output, tree_mod, &tree, &NoopFilter);
+            exhaustive_check(n, i..i+1, &mut output, tree_mod, &tree, &NoopFilter);
         }
     }
 
@@ -252,25 +204,11 @@ mod test_plain {
 //                println!("tree={:?}, from={}, to={}, {}", &tree, i, j, &tree);
                 output.truncate(0);
                 tree_mod.delete_range(i..j, &mut output);
-                let output = super::conv_from_tuple_vec(&mut output);
-                delete_range_check(n, i..j, output, tree_mod, &tree, &NoopFilter);
+                let output = conv_from_tuple_vec(&mut output);
+                exhaustive_check(n, i..j, output, tree_mod, &tree, &NoopFilter);
             }
         }
     }
-
-    fn delete_range_check<Flt>(n: usize, range: Range<usize>, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree, filter: &Flt)
-        where Flt: ItemFilter<usize>+Debug
-    {
-        let expected_range = cmp::max(1, range.start) .. cmp::min(n+1, range.end);
-
-        assert_eq!(output, &expected_range.collect::<Vec<_>>(), "tree_orig={}", tree_orig);
-        assert!(tree_mod.size() + output.len() == n, "tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", tree_orig, tree_orig, tree_mod, tree_mod.size(), output, n);
-
-        check_bst_del_range(&range, &tree_mod, &output, &tree_orig, filter);
-        check_integrity_del_range(&range, &tree_mod, output, &tree_orig, filter);
-    }
-
-
 
 
     quickcheck! {
@@ -284,32 +222,9 @@ mod test_plain {
         let rm = if rm.start <= rm.end { rm } else {rm.end .. rm.start};
 
         let mut tree = TeardownTreeSet::new(xs);
-        check_tree(&mut tree, rm, NoopFilter, output);
+        delete_and_check(&mut tree, rm, &mut NoopFilter, output);
         true
     }
-
-    fn check_tree<Flt>(orig: &mut TeardownTreeSet<usize>, rm: Range<usize>, mut filter: Flt,
-                       output: &mut Vec<usize>) -> TeardownTreeSet<usize>
-        where Flt: ItemFilter<usize>+Clone+Debug
-    {
-        let mut tree = orig.clone();
-        tree.filter_range(rm.clone(), filter.clone(), output);
-
-        {
-            let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
-            check_bst_del_range(&rm, tree, output, orig, &filter);
-            check_integrity_del_range(&rm, tree, output, orig, &filter);
-            check_output_overlaps(&rm, tree, output, orig, &filter);
-            check_tree_doesnt_overlap(&rm, tree, &mut filter);
-
-            assert!(output.len() + tree.size() == orig.size());
-
-            check_output_sorted(output, orig, &rm);
-        }
-
-        tree
-    }
-
 
     #[derive(Clone, Debug)]
     struct SetRefFilter<'a> {
@@ -345,7 +260,7 @@ mod test_plain {
 
         for range in ranges.into_iter() {
             output.truncate(0);
-            orig = check_tree(&mut orig, range, SetRefFilter::new(&flt_tree), &mut output);
+            orig = delete_and_check(&mut orig, range, &mut SetRefFilter::new(&flt_tree), &mut output);
         }
     }
 
@@ -402,46 +317,109 @@ mod test_plain {
         full_teardown_filter_n(756198, 247787, 17);
     }
 
-
-    fn check_output_overlaps<Flt>(search: &Range<usize>, tree: &Tree, output: &Vec<usize>, tree_orig: &Tree, filter: &Flt)
-        where Flt: ItemFilter<usize>+Debug
+    fn exhaustive_check<Flt>(n: usize, range: Range<usize>, output: &mut Vec<usize>, tree_mod: Tree, tree_orig: &Tree, filter: &Flt)
+        where Flt: Debug
     {
-        let search = KeyInterval::from_range(search);
-        for (_, &x) in output.iter().enumerate() {
-            let iv = KeyInterval::new(x,x);
-            assert!(search.overlaps(&iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
-        }
-    }
-
-    fn check_tree_doesnt_overlap<Flt>(search: &Range<usize>, tree: &mut Tree, flt: &mut Flt)
-        where Flt: ItemFilter<usize>
-    {
-        TreeRepr::traverse_inorder(tree, 0, &mut (), |this, _, idx| {
-            let &x = this.key(idx);
-            assert!((x<search.start || search.end<=x) || !flt.accept(&x), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, x, search, this, this);
-            false
-        });
+        exhaustive_range_check(n, &range, output, tree_orig);
+        check_bst_del_range(&range, &tree_mod, &output, &tree_orig, filter);
+        check_integrity_del_range(&range, &tree_mod, output, &tree_orig, filter);
+        assert!(tree_mod.size() + output.len() == n, "filter={:?}, tree'={:?}, tree={}, tree_mod={}, sz={}, output={:?}, n={}", filter, **tree_orig, **tree_orig, *tree_mod, tree_mod.size(), output, n);
     }
 }
 
 
 
+#[cfg(test)]
+mod test_query_plain {
+    use std::cmp;
+    use std::fmt::Debug;
+    use std::ops::Range;
+
+    use applied::interval::{KeyInterval, Interval};
+    use applied::plain_tree::{PlTree, PlNode};
+    use external_api::{TeardownTreeSet, TreeWrapperAccess};
+    use base::{TreeRepr, Traverse, Entry, ItemFilter, CopyingSink, NoopFilter, Key, Sink};
+    use super::test_delete_plain::test_exhaustive_n;
+    use super::common::{exhaustive_range_check, mk_prebuilt, check_output_sorted};
+
+    type Nd = PlNode<usize, ()>;
+    type Tree = PlTree<usize, ()>;
+
+
+    //---- exhaustive ------------------------------------------------------------------------------
+    #[test]
+    fn query_range_exhaustive() {
+        for i in 1..8 {
+            query_range_exhaustive_n(i);
+        }
+    }
+
+    fn query_range_exhaustive_n(n: usize) {
+        test_exhaustive_n(n, &|tree| query_range_exhaustive_with_tree(tree));
+    }
+
+    fn query_range_exhaustive_with_tree(tree: Tree) {
+        let tree = TeardownTreeSet::from_internal(tree);
+        let n = tree.size();
+        let mut sink = CopyingSink::new(Vec::with_capacity(n));
+        for i in 0..n+2 {
+            for j in i..n+2 {
+                let tree_mod = tree.clone();
+                sink.output.truncate(0);
+                tree_mod.query_range(i..j, &mut sink);
+                exhaustive_range_check(n, &(i..j), &mut sink.output, tree.internal());
+            }
+        }
+    }
+
+
+    //---- prebuilt --------------------------------------------------------------------------------
+    fn test_prebuilt(items: &[usize], range: Range<usize>) {
+        let nodes: Vec<Option<Nd>> = mk_prebuilt(items);
+        let tree = PlTree::with_nodes(nodes);
+        let tree = TeardownTreeSet::from_internal(tree);
+        let mut output = Vec::with_capacity(tree.size());
+
+        let mut sink = CopyingSink::new(output);
+        tree.query_range(range.clone(), &mut sink);
+        let search = KeyInterval::from_range(&range);
+        check_output_sorted(&sink.output, &*tree.internal(), &search);
+
+        let mut expected = vec![];
+        TreeRepr::traverse_inorder(&*tree.internal(), 0, &mut (), |this, _, idx| {
+            if this.key(idx).overlaps(&search) {
+                expected.push(this.key(idx).clone());
+            }
+            false
+        });
+
+        assert_eq!(sink.output, expected, "range={:?}, tree={}", &range, &tree);
+    }
+
+    #[test]
+    fn query_range_prebuilt() {
+        test_prebuilt(&[1], 1..1);
+        test_prebuilt(&[1], 0..2);
+    }
+}
+
 
 
 #[cfg(test)]
-mod test_interval {
+mod test_delete_interval {
     use std::ops::{Range};
     use rand::{Rng, XorShiftRng, SeedableRng};
     use std::cmp;
     use std::fmt::Debug;
 
-    use base::{TreeRepr, Traverse, Node, ItemFilter, NoopFilter, parenti, lefti, righti};
+    use base::{Node, ItemFilter, NoopFilter, lefti, righti};
     use base::validation::{check_bst_del_range, check_integrity_del_range, gen_tree_keys};
     use base::util::make_teardown_seq;
+    use applied::AppliedTree;
     use applied::interval::{Interval, IvNode, KeyInterval};
     use applied::interval_tree::{IvTree};
     use external_api::{IntervalTeardownTreeSet, TreeWrapperAccess};
-    use super::check_output_sorted;
+    use super::common::{check_tree};
 
     type Iv = KeyInterval<usize>;
     type Tree = IvTree<Iv, ()>;
@@ -459,7 +437,7 @@ mod test_interval {
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
     {
         test_shape(xs, filter, |tree: &mut IntervalTeardownTreeSet<Iv>, filter, output| {
-            check_delete_overlap(tree, KeyInterval::from_range(&rm), filter, output);
+            delete_and_check(tree, rm.clone(), filter, output);
         });
     }
 
@@ -491,53 +469,29 @@ mod test_interval {
     }
 
 
-    fn check_delete_overlap<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>, mut filter: Flt,
-                                 output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
+    fn delete_and_check<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: Range<usize>, mut filter: Flt,
+                             output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
     {
         let mut tree = orig.clone();
-        tree.filter_overlap(&rm, filter.clone(), output);
-
         {
-            let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
-            check_bst_del_range(&rm, tree, &output, orig, &filter);
-            check_integrity_del_range(&rm.to_range(), tree, output, orig, &filter);
-            check_output_overlaps(&rm, tree, &output, orig, &filter);
-            check_tree_doesnt_overlap(&rm, tree, &mut filter);
+            tree.filter_overlap(&rm.clone().into(), filter.clone(), output);
+            let (mut orig, mut tree) = (orig.internal_mut(), tree.internal_mut());
 
-            assert!(output.len() + tree.size() == orig.size());
-
+            check_tree(&mut *orig, &mut tree, &rm, &mut filter, output);
             if tree.size() > 0 {
-                check_maxb(orig, tree, 0);
+                check_maxb(&orig, &tree, 0);
             }
-
-            check_output_sorted(&output, orig, &rm.to_range());
         }
 
         tree
     }
 
-    fn check_output_overlaps<Flt>(search: &Iv, tree: &Tree, output: &Vec<Iv>, tree_orig: &Tree, filter: &Flt)
-        where Flt: ItemFilter<KeyInterval<usize>>+Debug
-    {
-        for (_, iv) in output.iter().enumerate() {
-            assert!(search.overlaps(iv), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
-        }
-    }
-
-    fn check_tree_doesnt_overlap<Flt>(search: &Iv, tree: &mut Tree, flt: &mut Flt)
-        where Flt: ItemFilter<KeyInterval<usize>>
-    {
-        TreeRepr::traverse_inorder(tree, 0, &mut (), |this, _, idx| {
-            assert!(!this.key(idx).overlaps(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
-            false
-        });
-    }
 
     fn test_random_shape_overlap(xs: Vec<Range<usize>>, rm: Range<usize>, rng: &mut XorShiftRng) -> bool {
         let rm = normalize_range(rm);
         let mut output = Vec::with_capacity(xs.len());
-        test_random_shape(xs, rng, |tree| { check_delete_overlap(tree, rm.clone().into(), NoopFilter, &mut output); } )
+        test_random_shape(xs, rng, |tree| { delete_and_check(tree, rm.clone().into(), NoopFilter, &mut output); } )
     }
 
     //---- quickcheck single -----------------------------------------------------------------------
@@ -591,7 +545,7 @@ mod test_interval {
         let deleted = tree.delete(&rm);
 
         {
-            let (tree, orig): (&mut Tree, &mut Tree) = (tree.internal(), orig.internal());
+            let (tree, orig): (&Tree, &Tree) = (tree.internal(), orig.internal());
             check_bst_del_range(&rm, tree, &(), orig, &());
             check_integrity_del_range(&rm.to_range(), tree, &(), orig, &());
             assert!(deleted == orig.contains(&rm));
@@ -670,20 +624,8 @@ mod test_interval {
 
     fn gen_tree(items: Vec<Iv>, rng: &mut XorShiftRng) -> Tree {
         let items: Vec<Option<Iv>> = gen_tree_keys(items, rng);
-        let mut nodes = items.into_iter()
-            .map(|opt| opt.map(|k| IvNode::new(k.clone(), ())))
-            .collect::<Vec<_>>();
-        for i in (1..nodes.len()).rev() {
-            let maxb = if let Some(ref node) = nodes[i] {
-                node.maxb as usize
-            } else {
-                continue
-            };
-
-            let parent = nodes[parenti(i)].as_mut().unwrap();
-            parent.maxb = cmp::max(&parent.maxb, &maxb).clone();
-        }
-        Tree::with_nodes(nodes)
+        let items: Vec<Option<(Iv, ())>> = items.into_iter().map(|opt| opt.map(|iv| (iv, ()))).collect();
+        unsafe { Tree::with_shape(items) }
     }
 
 
@@ -715,8 +657,7 @@ mod test_interval {
 
         for range in ranges.into_iter() {
             output.truncate(0);
-            let rm = KeyInterval::from_range(&range);
-            orig = check_delete_overlap(&mut orig, rm, NoopFilter, &mut output);
+            orig = delete_and_check(&mut orig, range, NoopFilter, &mut output);
         }
         assert!(orig.size() == 0);
     }
@@ -793,8 +734,7 @@ mod test_interval {
 
         for range in ranges.into_iter() {
             output.truncate(0);
-            let rm = KeyInterval::from_range(&range);
-            orig = check_delete_overlap(&mut orig, rm, SetRefFilter::new(&flt_tree), &mut output);
+            orig = delete_and_check(&mut orig, range, SetRefFilter::new(&flt_tree), &mut output);
         }
     }
 
@@ -843,19 +783,155 @@ mod test_interval {
 
 
 
-use base::{Node, TreeDeref, TreeRepr};
-use std::fmt::Debug;
-
 #[cfg(test)]
-fn conv_from_tuple_vec<K>(items: &mut Vec<(K, ())>) -> &mut Vec<K> {
-    use std::mem;
-    unsafe { mem::transmute(items) }
-}
+mod common {
+    use base::validation::{check_bst_del_range, check_integrity_del_range};
+    use base::{Node, TreeRepr, TreeDeref, Traverse, ItemFilter, lefti, righti};
+    use applied::AppliedTree;
+    use applied::interval::{Interval, KeyInterval};
+    use applied::plain_tree::{PlNode};
 
-fn check_output_sorted<N: Node, Rm>(output: &Vec<N::K>, orig: &mut TreeDeref<N, Target=TreeRepr<N>>, rm: &Rm)
-    where N::K: Debug, N: Debug, Rm: Debug
-{
-    for i in 1..output.len() {
-        assert!(output[i-1] <= output[i], "output={:?}, rm={:?}, orig={:?}, {}", output, rm, orig.deref(), orig.deref());
+    use std::fmt::{Debug, Display};
+    use std::ops::{Range};
+    use std::cmp;
+
+    //---- exhaustive testing ----------------------------------------------------------------------
+    #[derive(Debug)]
+    struct TreeRangeInfo {
+        range: Range<usize>,
+        root_idx: usize
+    }
+
+    pub fn test_exhaustive_items<N: Node, Tree: AppliedTree<N>, F>(items: &mut Vec<Option<(N::K, N::V)>>, check: &F)
+        where N::K: Clone, N::V: Clone,
+              F: Fn(Tree) -> ()
+    {
+        let n = items.len();
+        let mut stack = vec![TreeRangeInfo { range: (0..n), root_idx: 0 }];
+        let mut shape = vec![None; 1 << n];
+        test_exhaustive_rec::<_, Tree, _>(items, &mut shape, &mut stack, check)
+    }
+
+    fn test_exhaustive_rec<N: Node, Tree: AppliedTree<N>, F>(items: &mut Vec<Option<(N::K, N::V)>>, shape: &mut Vec<Option<(N::K, N::V)>>,
+                                                             stack: &mut Vec<TreeRangeInfo>, check: &F)
+        where N::K: Clone, N::V: Clone,
+              F: Fn(Tree) -> ()
+    {
+        if stack.is_empty() {
+            let tree = unsafe { Tree::with_shape(shape.clone()) };
+            check(tree);
+        } else {
+            let info = stack.pop().unwrap();
+            let (lefti, righti) = (lefti(info.root_idx), righti(info.root_idx));
+            for i in info.range.clone() {
+                assert!(shape[info.root_idx].is_none() && items[i].is_some());
+                shape[info.root_idx] = items[i].take();
+
+                let mut pushed = 0;
+                if info.range.start < i {
+                    let range1 = info.range.start .. i;
+                    stack.push(TreeRangeInfo { range: range1, root_idx: lefti });
+                    pushed += 1;
+                }
+
+                if i+1 < info.range.end {
+                    let range2 = i+1 .. info.range.end;
+                    stack.push(TreeRangeInfo { range: range2, root_idx: righti });
+                    pushed += 1;
+                }
+
+                test_exhaustive_rec(items, shape, stack, check);
+
+                items[i] = shape[info.root_idx].take();
+                for _ in 0..pushed {
+                    stack.pop();
+                }
+            }
+
+            stack.push(info);
+        }
+    }
+
+
+    //---- misc ------------------------------------------------------------------------------------
+    pub fn mk_prebuilt(items: &[usize]) -> Vec<Option<PlNode<usize, ()>>> {
+        let nodes: Vec<_> = items.iter().map(|&x| if x==0 {
+            None
+        } else {
+            Some(Node::new(x, ()))
+        }).collect();
+
+        nodes
+    }
+
+    pub fn conv_from_tuple_vec<K>(items: &mut Vec<(K, ())>) -> &mut Vec<K> {
+        use std::mem;
+        unsafe { mem::transmute(items) }
+    }
+
+    pub fn exhaustive_range_check<N: Node, Tree: TreeDeref<N>>(n: usize, range: &Range<usize>, output: &mut Vec<usize>, tree_orig: &Tree)
+        where N: Debug
+    {
+        let expected: Vec<_> =
+            if range.start == range.end && range.start<=n && 1<=range.start {
+                vec![range.start]
+            } else {
+                let expected_range = cmp::max(1, range.start) .. cmp::min(n+1, range.end);
+                expected_range.collect()
+            };
+
+        assert_eq!(output, &expected, "range={:?}, tree_orig={}", range, **tree_orig);
+    }
+
+    pub fn check_output_sorted<N: Node, Item, Rm>(output: &Vec<Item>, orig: &TreeRepr<N>, rm: &Rm)
+        where N::K: Debug, N: Debug, Rm: Debug, Item: Ord+Debug
+    {
+        for i in 1..output.len() {
+            assert!(output[i - 1] <= output[i], "output={:?}, rm={:?}, orig={:?}, {}", output, rm, orig, orig);
+        }
+    }
+
+
+
+    pub fn check_tree<K: Interval<K=usize>, N: Node<K=K>, Item, Flt>(orig: &TreeRepr<N>, tree: &mut TreeRepr<N>,
+                                                                     search: &Range<usize>, filter: &mut Flt, output: &Vec<Item>)
+          where Item: Interval<K=usize>+Debug,
+                Flt: ItemFilter<K>+Debug,
+                N: Debug, K: Debug
+    {
+        use applied::interval::KeyInterval;
+        let search = KeyInterval::from(search.clone());
+        check_bst_del_range(&search, tree, output, orig, filter);
+        check_integrity_del_range(&search, tree, output, orig, filter);
+        check_output_overlaps(&search, tree, output, orig, filter);
+        check_tree_doesnt_overlap(&search, tree, filter);
+
+        assert!(output.len() + tree.size() == orig.size());
+
+        check_output_sorted(output, orig, &search);
+    }
+
+
+    fn check_tree_doesnt_overlap<K, N, Search, Flt>(search: &Search, tree: &mut TreeRepr<N>, flt: &mut Flt)
+        where K: Interval<K=usize>+Debug,
+              N: Node<K=K>+Debug,
+              Search: Interval<K=usize>+Debug,
+              Flt: ItemFilter<K>
+    {
+        TreeRepr::traverse_inorder(tree, 0, &mut (), |this, _, idx| {
+            assert!(!this.key(idx).overlaps(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
+            false
+        });
+    }
+
+
+    fn check_output_overlaps<Tree, Item, Flt>(search: &KeyInterval<usize>, tree: &Tree, output: &Vec<Item>, tree_orig: &Tree, filter: &Flt)
+          where Item: Interval<K=usize>+Debug,
+                Flt: Debug,
+                Tree: Debug+Display
+    {
+        for (_, x) in output.iter().enumerate() {
+            assert!(search.overlaps(x), "search={:?}, output={:?}, tree={:?}, flt={:?}, orig={:?}, {}", search, output, tree, filter, tree_orig, tree_orig);
+        }
     }
 }

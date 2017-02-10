@@ -11,7 +11,7 @@ pub trait Interval: Sized+Ord+Clone {
     fn a(&self) -> &Self::K;
     fn b(&self) -> &Self::K;
 
-    fn overlaps(&self, other: &Self) -> bool {
+    fn overlaps<Other: Interval<K=Self::K>>(&self, other: &Other) -> bool {
         self.a() < other.b() && other.a() < self.b()
             || self.a() == other.a() // interpret empty intervals as points
     }
@@ -20,6 +20,15 @@ pub trait Interval: Sized+Ord+Clone {
         self.a().clone() .. self.b().clone()
     }
 }
+
+
+impl Interval for usize {
+    type K = usize;
+
+    fn a(&self) -> &Self::K { self }
+    fn b(&self) -> &Self::K { self }
+}
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyInterval<K: Ord+Clone> {

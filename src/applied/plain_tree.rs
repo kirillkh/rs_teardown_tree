@@ -1,5 +1,7 @@
+use applied::AppliedTree;
 use base::{Key, Node, TreeRepr, Traverse, TeardownTreeRefill, Sink, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti, consume_unchecked};
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
+
 use std::ops::Range;
 use std::ops::{Deref, DerefMut};
 use std::fmt::{Debug, Display, Formatter};
@@ -15,6 +17,22 @@ pub struct PlTree<K: Key, V> {
 pub struct PlNode<K: Key, V> {
     pub entry: Entry<K, V>,
 }
+
+
+impl<K: Key, V> AppliedTree<PlNode<K, V>> for PlTree<K, V> {
+    fn with_repr(repr: TreeRepr<PlNode<K, V>>) -> Self {
+        PlTree { repr: UnsafeCell::new(repr) }
+    }
+
+    unsafe fn with_shape(items: Vec<Option<(K, V)>>) -> Self {
+        let nodes = items.into_iter()
+            .map(|opt| opt.map(|(k, v)| PlNode::new(k.clone(), v)))
+            .collect::<Vec<_>>();
+        Self::with_repr(TreeRepr::with_nodes(nodes))
+    }
+}
+
+
 
 
 impl<K: Key, V> Deref for PlNode<K, V> {
@@ -121,11 +139,14 @@ impl<K: Key, V> PlTree<K, V> {
         let mut from = self.index_of(&range.start);
         if self.is_nil(from) {
             from = self.succ(from);
+            if self.is_nil(from) {
+                return;
+            }
         }
 
         TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
             let node = this.node(idx);
-            if node.key < range.end {
+            if node.key < range.end || node.key==range.end && range.start==range.end {
                 sink.consume(node);
                 false
             } else {

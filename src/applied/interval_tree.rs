@@ -1,6 +1,8 @@
+use applied::AppliedTree;
 use applied::interval::{Interval, IvNode};
 use base::{TreeRepr, TeardownTreeRefill, Traverse, Sink, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
+
 use std::ops::{Deref, DerefMut};
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
@@ -12,23 +14,17 @@ pub struct IvTree<Iv: Interval, V> {
 }
 
 impl<Iv: Interval, V> IvTree<Iv, V> {
-    /// Constructs a new IvTree
-    pub fn new(items: Vec<(Iv, V)>) -> IvTree<Iv, V> {
-        Self::with_repr(TreeRepr::new(items))
-    }
+    // assumes a contiguous layout of nodes (no holes)
+    fn init_maxb(&mut self) {
+        // initialize maxb values
+        for i in (1..self.size()).rev() {
+            let parent = self.node_mut_unsafe(parenti(i));
+            let node = self.node(i);
 
-    pub fn with_repr(repr: TreeRepr<IvNode<Iv, V>>) -> IvTree<Iv, V> {
-        IvTree { repr: UnsafeCell::new(repr) }
-    }
-
-    /// Constructs a new IvTree
-    /// Note: the argument must be sorted!
-    pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IvTree<Iv, V> {
-        Self::with_repr(TreeRepr::with_sorted(sorted))
-    }
-
-    pub fn with_nodes(nodes: Vec<Option<IvNode<Iv, V>>>) -> IvTree<Iv, V> {
-        Self::with_repr(TreeRepr::with_nodes(nodes))
+            if node.maxb > parent.maxb {
+                parent.maxb = node.maxb.clone()
+            }
+        }
     }
 
     /// Deletes the item with the given key from the tree and returns it (or None).
@@ -117,6 +113,52 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         unsafe { &mut *self.repr.get() }
     }
 }
+
+
+impl<Iv: Interval, V> AppliedTree<IvNode<Iv, V>> for IvTree<Iv, V> {
+    /// Constructs a new AppliedTree
+    fn new(items: Vec<(Iv, V)>) -> Self {
+        let mut tree = Self::with_repr(TreeRepr::new(items));
+        tree.init_maxb();
+        tree
+    }
+
+    /// Constructs a new IvTree
+    /// Note: the argument must be sorted!
+    fn with_sorted(sorted: Vec<(Iv, V)>) -> Self {
+        let mut tree = Self::with_repr(TreeRepr::with_sorted(sorted));
+        tree.init_maxb();
+        tree
+    }
+
+    fn with_repr(repr: TreeRepr<IvNode<Iv, V>>) -> IvTree<Iv, V> {
+        IvTree { repr: UnsafeCell::new(repr) }
+    }
+
+    unsafe fn with_shape(shape: Vec<Option<(Iv, V)>>) -> IvTree<Iv, V> {
+        let nodes = shape.into_iter()
+            .map(|opt| opt.map(|(k, v)| IvNode::new(k.clone(), v)))
+            .collect::<Vec<_>>();
+        let mut tree = Self::with_nodes(nodes);
+
+        // initialize maxb values
+        for i in (1..tree.data.len()).rev() {
+            if !tree.is_nil(i) {
+                let parent = tree.node_mut_unsafe(parenti(i));
+                let node = tree.node(i);
+
+                if node.maxb > parent.maxb {
+                    parent.maxb = node.maxb.clone()
+                }
+            }
+        }
+
+        tree
+    }
+
+
+}
+
 
 
 impl<Iv: Interval, V> Deref for IvTree<Iv, V> {

@@ -107,7 +107,7 @@ impl<'a, K: Key +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
     #[inline(always)]
     fn decide(&self, key: &K) -> Self::Decision {
         let left = self.from() <= key;
-        let right = key < self.to();
+        let right = key < self.to() || (self.from()==key && self.from()==self.to());
 
         RangeDecision { left: left, right: right }
     }

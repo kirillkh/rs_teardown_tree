@@ -55,7 +55,7 @@ impl<N: Node> TreeRepr<N> {
         TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache }
     }
 
-    /// Constructs a new TeardownTree<T> based on raw nodes vec.
+    /// Constructs a new TreeRepr<T> based on raw nodes vec.
     pub fn with_nodes(mut nodes: Vec<Option<N>>) -> TreeRepr<N> {
         let size = nodes.iter().filter(|x| x.is_some()).count();
         let height = Self::calc_height(&nodes, 0);
@@ -169,13 +169,13 @@ impl<N: Node> TreeRepr<N> {
         if self.has_right(idx) {
             righti(idx)
         } else {
-            let left = left_enclosing(idx);
+            let left = left_enclosing(idx+1);
             return if left == 0 { self.data.len() }
-                   else         { parenti(left) };
+                   else         { parenti(left-1) };
         }
     }
 
-    /// Returns either the current index of an element equal to `search` if it is contained in the tree;
+    /// Returns either the index of the first element equal to `search` if it is contained in the tree;
     /// or the index where it can be inserted if it is not.
     pub fn index_of(&self, search: &N::K) -> usize {
         if self.data.is_empty() {
