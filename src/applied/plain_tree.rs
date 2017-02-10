@@ -146,11 +146,11 @@ impl<K: Key, V> PlTree<K, V> {
 
         TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
             let node = this.node(idx);
-            if node.key < range.end || node.key==range.end && range.start==range.end {
+            if range.end <= node.key && node.key != range.start {
+                true
+            } else {
                 sink.consume(node);
                 false
-            } else {
-                true
             }
         })
     }

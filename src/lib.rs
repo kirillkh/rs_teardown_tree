@@ -17,14 +17,14 @@ mod external_api;
 mod rust_bench;
 
 pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
-pub use self::base::{Traverse, ItemFilter, NoopFilter};
+pub use self::base::{Traverse, ItemFilter, NoopFilter, CloningSink, CopyingSink};
 pub use self::base::util;
 
 
 
 #[cfg(test)]
 mod test_delete_plain {
-    use base::{Node, ItemFilter, NoopFilter};
+    use base::{ItemFilter, NoopFilter};
     use base::util::make_teardown_seq;
     use base::validation::{check_bst_del_range, check_integrity_del_range};
     use applied::plain_tree::{PlTree, PlNode};
@@ -331,14 +331,12 @@ mod test_delete_plain {
 
 #[cfg(test)]
 mod test_query_plain {
-    use std::cmp;
-    use std::fmt::Debug;
     use std::ops::Range;
 
     use applied::interval::{KeyInterval, Interval};
     use applied::plain_tree::{PlTree, PlNode};
     use external_api::{TeardownTreeSet, TreeWrapperAccess};
-    use base::{TreeRepr, Traverse, Entry, ItemFilter, CopyingSink, NoopFilter, Key, Sink};
+    use base::{CopyingSink, TreeRepr, Traverse};
     use super::test_delete_plain::test_exhaustive_n;
     use super::common::{exhaustive_range_check, mk_prebuilt, check_output_sorted};
 
@@ -378,7 +376,7 @@ mod test_query_plain {
         let nodes: Vec<Option<Nd>> = mk_prebuilt(items);
         let tree = PlTree::with_nodes(nodes);
         let tree = TeardownTreeSet::from_internal(tree);
-        let mut output = Vec::with_capacity(tree.size());
+        let output = Vec::with_capacity(tree.size());
 
         let mut sink = CopyingSink::new(output);
         tree.query_range(range.clone(), &mut sink);
