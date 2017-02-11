@@ -186,11 +186,18 @@ impl<N: Node> TreeRepr<N> {
         }
 
         let mut idx = 0;
-        if !self.mask[idx] {
-            return idx;
-        }
+        debug_assert!(self.mask[idx]);
+
 
         loop {
+            // TODO: this is faster for some benchmarks (10M items/1000 bulks), but slower for very
+            // small ones. might want to introduce a heuristic based on n
+//            idx = match query.partial_cmp(self.key(idx)).unwrap() {
+//                Ordering::Equal   => return idx,
+//                Ordering::Less    => lefti(idx),
+//                Ordering::Greater => righti(idx),
+//            };
+
             let k = self.key(idx);
             idx =
                 if query == k { return idx; }
