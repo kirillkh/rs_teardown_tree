@@ -45,32 +45,32 @@ impl TraversalDecision for RangeDecision {
 
 
 
-pub struct RangeRefDriver<'a, K: Key +'a, V: 'a> {
-    range: Range<&'a K>,
+pub struct RangeRefDriver<'a, K: Key +'a, Q: PartialOrd<K>+'a, V: 'a> {
+    range: Range<&'a Q>,
     output: &'a mut Vec<(K, V)>
 }
 
-impl<'a, K: Key +'a, V> RangeRefDriver<'a, K, V> {
-    pub fn new(range: Range<&'a K>, output: &'a mut Vec<(K, V)>) -> RangeRefDriver<'a, K, V> {
+impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeRefDriver<'a, K, Q, V> {
+    pub fn new(range: Range<&'a Q>, output: &'a mut Vec<(K, V)>) -> RangeRefDriver<'a, K, Q, V> {
         RangeRefDriver { range:range, output:output }
     }
 
-    pub fn from(&self) -> &'a K {
+    pub fn from(&self) -> &'a Q {
         self.range.start
     }
 
-    pub fn to(&self) -> &'a K {
+    pub fn to(&self) -> &'a Q {
         self.range.end
     }
 }
 
-impl<'a, K: Key +'a, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, V> {
+impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, Q, V> {
     type Decision = RangeDecision;
 
     #[inline(always)]
     fn decide(&self, x: &K) -> Self::Decision {
         let left = self.from() <= x;
-        let right = x < self.to();
+        let right = self.to() > x;
 
         RangeDecision { left: left, right: right }
     }
@@ -82,32 +82,32 @@ impl<'a, K: Key +'a, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, V> {
 }
 
 
-pub struct RangeDriver<'a, K: Key +'a, V: 'a> {
-    range: Range<K>,
+pub struct RangeDriver<'a, K: Key +'a, Q: PartialOrd<K>, V: 'a> {
+    range: Range<Q>,
     output: &'a mut Vec<(K, V)>
 }
 
-impl<'a, K: Key +'a, V> RangeDriver<'a, K, V> {
-    pub fn new(range: Range<K>, output: &'a mut Vec<(K, V)>) -> RangeDriver<K, V> {
+impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeDriver<'a, K, Q, V> {
+    pub fn new(range: Range<Q>, output: &'a mut Vec<(K, V)>) -> RangeDriver<K, Q, V> {
         RangeDriver { range:range, output: output }
     }
 
-    pub fn from(&self) -> &K {
+    pub fn from(&self) -> &Q {
         &self.range.start
     }
 
-    pub fn to(&self) -> &K {
+    pub fn to(&self) -> &Q {
         &self.range.end
     }
 }
 
-impl<'a, K: Key +'a, V> TraversalDriver<K, V> for RangeDriver<'a, K, V> {
+impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeDriver<'a, K, Q, V> {
     type Decision = RangeDecision;
 
     #[inline(always)]
     fn decide(&self, key: &K) -> Self::Decision {
         let left = self.from() <= key;
-        let right = key < self.to() || key == self.from();
+        let right = self.to() > key || self.from() == key;
 
         RangeDecision { left: left, right: right }
     }

@@ -1,6 +1,6 @@
 use applied::AppliedTree;
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, TeardownTreeRefill, Traverse, Sink, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
+use base::{TreeRepr, TeardownTreeRefill, Sink, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 use base::drivers::{consume_unchecked};
 
 use std::ops::{Deref, DerefMut};
@@ -29,61 +29,71 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
 
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
-    pub fn delete(&mut self, search: &Iv) -> Option<V> {
-        self.work(NoopFilter, |tree| tree.delete(search))
-    }
-
-    #[inline]
-    pub fn delete_overlap(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
-        self.filter_overlap(search, NoopFilter, output)
-    }
-
-    #[inline]
-    pub fn filter_overlap<Flt>(&mut self, search: &Iv, filter: Flt, output: &mut Vec<(Iv, V)>)
-        where Flt: ItemFilter<Iv>
+    pub fn delete<Q>(&mut self, query: &Q) -> Option<V>
+        where Q: PartialOrd<Iv>
     {
-        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_overlap(search, output))
+        self.work(NoopFilter, |tree| tree.delete(query))
+    }
+
+    #[inline]
+    pub fn delete_overlap<Q>(&mut self, query: &Q, output: &mut Vec<(Iv, V)>)
+        where Q: Interval<K=Iv::K>
+    {
+        self.filter_overlap(query, NoopFilter, output)
+    }
+
+    #[inline]
+    pub fn filter_overlap<Q, Flt>(&mut self, query: &Q, filter: Flt, output: &mut Vec<(Iv, V)>)
+        where Q: Interval<K=Iv::K>,
+              Flt: ItemFilter<Iv>
+    {
+        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_overlap(query, output))
     }
 
 
-    pub fn query_overlap<'a, S: Sink<&'a Entry<Iv, V>>>(&'a self, search: &Iv, sink: &mut S) {
-        let from = self.lower_bound(search);
-
-        TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
-            let node = this.node(idx);
-            if node.key.b() <= search.a() && node.key.a() != search.a() {
-                true
-            } else if search.b() <= node.key.a() && node.key.a() != search.a() {
-                assert!(false);
-                true
-            } else {
-                assert!(search.overlaps(&node.key));
-                sink.consume(node);
-                false
-            }
-        })
-    }
-
-    /// returns index of the first item in the tree that may overlap `search`
-    fn lower_bound(&self, search: &Iv) -> usize {
-        let mut parent = 0;
-        let mut next = 0;
-        while !self.is_nil(next) {
-            if &self.node(next).maxb <= search.a() {
-                // whole subtree outside the range
-                if next == parent {
-                    return self.size();
-                } else {
-                    return parent;
-                }
-            }
-
-            parent = next;
-            next = lefti(parent);
+    pub fn query_overlap_rec<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: &mut S)
+        where Q: Interval<K=Iv::K>,
+              S: Sink<&'a Entry<Iv, V>>
+    {
+        if self.is_nil(idx) {
+            return;
         }
 
-        parent
+        let node = self.node(idx);
+        let k: &Iv = &node.entry.key;
+
+        if &node.maxb < query.a() {
+            // whole subtree outside the range
+        } else if query.b() <= k.a() && k.a() != query.a() {
+            // root and right are outside the range
+            self.query_overlap_rec(lefti(idx), query, sink);
+        } else {
+            self.query_overlap_rec(lefti(idx), query, sink);
+            if query.overlaps(k) { sink.consume(node) }
+            self.query_overlap_rec(righti(idx), query, sink);
+        }
     }
+
+//    /// returns index of the first item in the tree that may overlap `query`
+//    fn lower_bound<Q: Interval<K=Iv::K>>(&self, query: &Q) -> usize {
+//        let mut parent = 0;
+//        let mut next = 0;
+//        while !self.is_nil(next) {
+//            if &self.node(next).maxb <= query.a() {
+//                // whole subtree outside the range
+//                if next == parent {
+//                    return self.size();
+//                } else {
+//                    return parent;
+//                }
+//            }
+//
+//            parent = next;
+//            next = lefti(parent);
+//        }
+//
+//        parent
+//    }
 
     #[inline]
     fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<Iv>,
@@ -209,8 +219,10 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
-    pub fn delete(&mut self, search: &Iv) -> Option<V> {
-        let idx = self.index_of(search);
+    pub fn delete<Q>(&mut self, query: &Q) -> Option<V>
+        where Q: PartialOrd<Iv>
+    {
+        let idx = self.index_of(query);
         if self.is_nil(idx) {
             None
         } else {
@@ -221,11 +233,13 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     }
 
     #[inline]
-    pub fn filter_overlap(&mut self, search: &Iv, output: &mut Vec<(Iv, V)>) {
+    pub fn filter_overlap<Q>(&mut self, query: &Q, output: &mut Vec<(Iv, V)>)
+        where Q: Interval<K=Iv::K>
+    {
         if self.size() != 0 {
             output.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
-                this.filter_overlap_ivl_rec(search, 0, false, output)
+                this.filter_overlap_ivl_rec(query, 0, false, output)
             )
         }
     }
@@ -441,11 +455,13 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
 
     #[inline(never)]
-    fn filter_overlap_ivl_rec(&mut self, search: &Iv, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>) {
+    fn filter_overlap_ivl_rec<Q>(&mut self, query: &Q, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>)
+        where Q: Interval<K=Iv::K>
+    {
         let node = self.node_mut_unsafe(idx);
         let k: &Iv = &node.entry.key;
 
-        if &node.maxb < search.a() {
+        if &node.maxb < query.a() {
             // whole subtree outside the range
             if self.slots_min().has_open() {
                 self.fill_slots_min(idx);
@@ -453,9 +469,9 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             if self.slots_max().has_open() && !self.is_nil(idx) {
                 self.fill_slots_max(idx);
             }
-        } else if search.b() <= k.a() && k.a() != search.a() {
+        } else if query.b() <= k.a() && k.a() != query.a() {
             // root and right are outside the range
-            self.descend_filter_overlap_ivl_left(search, idx, false, min_included, output);
+            self.descend_filter_overlap_ivl_left(query, idx, false, min_included, output);
 
             let removed = if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
@@ -470,7 +486,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             }
         } else {
             // consume root if necessary
-            let consumed = if search.overlaps(k)
+            let consumed = if query.overlaps(k)
                 { self.filter_take(idx) }
             else
                 { None };
@@ -481,13 +497,13 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
                 if min_included {
                     removed = self.descend_consume_left(idx, true, output);
                 } else {
-                    removed = self.descend_filter_overlap_ivl_left(search, idx, true, false, output);
+                    removed = self.descend_filter_overlap_ivl_left(query, idx, true, false, output);
                 }
                 node.maxb = consumed.maxb.clone();
 
                 consume_unchecked(output, consumed.into_entry());
             } else {
-                self.descend_filter_overlap_ivl_left(search, idx, false, min_included, output);
+                self.descend_filter_overlap_ivl_left(query, idx, false, min_included, output);
                 if self.slots_min().has_open() {
                     removed = true;
                     self.fill_slot_min(idx);
@@ -497,16 +513,16 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             }
 
             // right subtree
-            let right_min_included = min_included || search.a() <= k.a();
+            let right_min_included = min_included || query.a() <= k.a();
             if right_min_included {
-                let right_max_included = &node.maxb < search.b();
+                let right_max_included = &node.maxb < query.b();
                 if right_max_included {
                     removed = self.descend_consume_right(idx, removed, output);
                 } else {
-                    removed = self.descend_filter_overlap_ivl_right(search, idx, removed, true, output);
+                    removed = self.descend_filter_overlap_ivl_right(query, idx, removed, true, output);
                 }
             } else {
-                removed = self.descend_filter_overlap_ivl_right(search, idx, removed, false, output);
+                removed = self.descend_filter_overlap_ivl_right(query, idx, removed, false, output);
             }
 
             if !removed && self.slots_max().has_open() {
@@ -523,17 +539,21 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_overlap_ivl_left(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
+    fn descend_filter_overlap_ivl_left<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool
+        where Q: Interval<K=Iv::K>
+    {
         // this pinning business is asymmetric (we don't do it in descend_delete_overlap_ivl_right) because of the program flow: we enter the left subtree first
         self.descend_left_fresh_slots(idx, with_slot,
-                                      |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(search, child_idx, min_included, output))
+                                      |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, output))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_overlap_ivl_right(&mut self, search: &Iv, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool {
+    fn descend_filter_overlap_ivl_right<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool
+        where Q: Interval<K=Iv::K>
+    {
         self.descend_right(idx, with_slot,
-                           |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(search, child_idx, min_included, output))
+                           |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, output))
     }
 }
 

@@ -1,6 +1,5 @@
 use base::{Node, Entry, lefti, righti, parenti, consume_unchecked, SlotStack};
 use base::bulk_delete::DeleteRangeCache;
-use std::cmp::{Ordering};
 use std::fmt::{Debug, Formatter};
 use std::fmt;
 use std::mem;
@@ -93,8 +92,10 @@ impl<N: Node> TreeRepr<N> {
 
 
     /// Finds the item with the given key and returns it (or None).
-    pub fn lookup<'a>(&'a self, search: &'a N::K) -> Option<&'a N::V> where N: 'a {
-        let idx = self.index_of(search);
+    pub fn lookup<'a, Q>(&'a self, query: &'a Q) -> Option<&'a N::V>
+        where N: 'a, Q: PartialOrd<N::K>
+    {
+        let idx = self.index_of(query);
         if self.is_nil(idx) {
             None
         } else {
@@ -102,8 +103,8 @@ impl<N: Node> TreeRepr<N> {
         }
     }
 
-    pub fn contains(&self, search: &N::K) -> bool {
-        self.lookup(search).is_some()
+    pub fn contains<Q: PartialOrd<N::K>>(&self, query: &Q) -> bool {
+        self.lookup(query).is_some()
     }
 
     pub fn size(&self) -> usize {
@@ -175,9 +176,11 @@ impl<N: Node> TreeRepr<N> {
         }
     }
 
-    /// Returns either the index of the first element equal to `search` if it is contained in the tree;
+    /// Returns either the index of the first element equal to `query` if it is contained in the tree;
     /// or the index where it can be inserted if it is not.
-    pub fn index_of(&self, search: &N::K) -> usize {
+    pub fn index_of<Q>(&self, query: &Q) -> usize
+        where Q: PartialOrd<N::K>
+    {
         if self.data.is_empty() {
             return 0;
         }
@@ -188,11 +191,11 @@ impl<N: Node> TreeRepr<N> {
         }
 
         loop {
-            idx = match search.cmp(self.key(idx)) {
-                Ordering::Equal   => return idx,
-                Ordering::Less    => lefti(idx),
-                Ordering::Greater => righti(idx),
-            };
+            let k = self.key(idx);
+            idx =
+                if query == k { return idx; }
+                else if query < k { lefti(idx) }
+                else { righti(idx) };
 
             if self.is_nil(idx) {
                 return idx;

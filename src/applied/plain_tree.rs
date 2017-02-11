@@ -91,21 +91,25 @@ impl<K: Key, V> PlTree<K, V> {
 
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
-    pub fn delete(&mut self, search: &K) -> Option<V> {
-        self.work(NoopFilter, |tree| tree.delete(search))
+    pub fn delete<Q>(&mut self, query: &Q) -> Option<V>
+        where Q: PartialOrd<K>
+    {
+        self.work(NoopFilter, |tree| tree.delete(query))
     }
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output
     /// Vec. The items are returned in order.
     #[inline]
-    pub fn delete_range(&mut self, range: Range<K>, output: &mut Vec<(K, V)>) {
+    pub fn delete_range<Q>(&mut self, range: Range<Q>, output: &mut Vec<(K, V)>)
+        where Q: PartialOrd<K>
+    {
         output.reserve(self.size());
         self.filter_with_driver(&mut RangeDriver::new(range, output), NoopFilter)
     }
 
     /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
     /// true and stores them in the output Vec. The items are returned in order.
-    pub fn filter_range<Flt>(&mut self, range: Range<K>, filter: Flt, output: &mut Vec<(K, V)>)
+    pub fn filter_range<Q: PartialOrd<K>, Flt>(&mut self, range: Range<Q>, filter: Flt, output: &mut Vec<(K, V)>)
         where Flt: ItemFilter<K>
     {
         output.reserve(self.size());
@@ -114,14 +118,14 @@ impl<K: Key, V> PlTree<K, V> {
 
     /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
     #[inline]
-    pub fn delete_range_ref(&mut self, range: Range<&K>, output: &mut Vec<(K, V)>) {
+    pub fn delete_range_ref<Q: PartialOrd<K>>(&mut self, range: Range<&Q>, output: &mut Vec<(K, V)>) {
         output.reserve(self.size());
         self.filter_with_driver(&mut RangeRefDriver::new(range, output), NoopFilter)
     }
 
     /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
     /// true and stores them in the output Vec. The items are returned in order.
-    pub fn filter_range_ref<Flt>(&mut self, range: Range<&K>, filter: Flt, output: &mut Vec<(K, V)>)
+    pub fn filter_range_ref<Q: PartialOrd<K>, Flt>(&mut self, range: Range<&Q>, filter: Flt, output: &mut Vec<(K, V)>)
         where Flt: ItemFilter<K>
     {
         output.reserve(self.size());
@@ -135,8 +139,10 @@ impl<K: Key, V> PlTree<K, V> {
         self.work(filter, |worker: &mut PlWorker<K,V,Flt>| worker.filter_with_driver(driver))
     }
 
-    pub fn query_range<'a, S: Sink<&'a Entry<K, V>>>(&'a self, range: Range<K>, sink: &mut S) {
-        let mut from = self.index_of(&range.start);
+    pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: &mut S)
+        where Q: PartialOrd<K>, S: Sink<&'a Entry<K, V>>
+    {
+        let mut from = self.index_of(&query.start);
         if self.is_nil(from) {
             from = self.succ(from);
             if self.is_nil(from) {
@@ -146,7 +152,7 @@ impl<K: Key, V> PlTree<K, V> {
 
         TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
             let node = this.node(idx);
-            if range.end <= node.key && node.key != range.start {
+            if query.end <= node.key && query.start != node.key {
                 true
             } else {
                 sink.consume(node);
@@ -256,8 +262,8 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
-    pub fn delete(&mut self, search: &K) -> Option<V> {
-        let idx = self.index_of(search);
+    pub fn delete<Q: PartialOrd<K>>(&mut self, query: &Q) -> Option<V> {
+        let idx = self.index_of(query);
         if self.is_nil(idx) {
             None
         } else {
@@ -316,14 +322,18 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
     /// Delete based on driver decisions.
     /// The items are returned in order.
     #[inline]
-    fn filter_with_driver<D: TraversalDriver<K, V>>(&mut self, drv: &mut D) {
+    fn filter_with_driver<D>(&mut self, drv: &mut D)
+        where D: TraversalDriver<K, V>
+    {
         self.delete_range_loop(drv, 0);
         debug_assert!(self.slots_min().is_empty(), "slots_min={:?}", self.slots_min());
         debug_assert!(self.slots_max().is_empty());
     }
 
     #[inline]
-    fn delete_range_loop<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, mut idx: usize) {
+    fn delete_range_loop<D>(&mut self, drv: &mut D, mut idx: usize)
+        where D: TraversalDriver<K, V>
+    {
         loop {
             if self.is_nil(idx) {
                 return;
@@ -352,7 +362,9 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
     }
 
     #[inline(never)]
-    fn delete_range_min<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
+    fn delete_range_min<D>(&mut self, drv: &mut D, idx: usize)
+        where D: TraversalDriver<K, V>
+    {
         let key = self.key_unsafe(idx);
         let decision = drv.decide(key);
         debug_assert!(decision.left());
@@ -391,7 +403,9 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
     }
 
     #[inline(never)]
-    fn delete_range_max<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize) {
+    fn delete_range_max<D>(&mut self, drv: &mut D, idx: usize)
+        where D: TraversalDriver<K, V>
+    {
         let key = self.key_unsafe(idx);
         let decision = drv.decide(key);
         debug_assert!(decision.right(), "idx={}", idx);
@@ -428,14 +442,18 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_min_left<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_min_left<D>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool
+        where D: TraversalDriver<K, V>
+    {
         self.descend_left(idx, with_slot,
                           |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_max_left<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_max_left<D>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool
+        where D: TraversalDriver<K, V>
+    {
         if Flt::is_noop() {
             self.descend_left(idx, with_slot,
                               |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
@@ -448,14 +466,18 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_min_right<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_min_right<D>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool
+        where D: TraversalDriver<K, V>
+    {
         self.descend_right(idx, with_slot,
                            |this: &mut Self, child_idx| this.delete_range_min(drv, child_idx))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_delete_max_right<D: TraversalDriver<K, V>>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool {
+    fn descend_delete_max_right<D>(&mut self, drv: &mut D, idx: usize, with_slot: bool) -> bool
+        where D: TraversalDriver<K, V>
+    {
         self.descend_right(idx, with_slot,
                            |this: &mut Self, child_idx| this.delete_range_max(drv, child_idx))
     }

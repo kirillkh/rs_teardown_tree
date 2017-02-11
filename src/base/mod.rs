@@ -64,24 +64,24 @@ impl<T> Sink<T> for Vec<T> {
 
 
 #[derive(new)]
-pub struct CopyingSink<T: Key+Copy> {
+pub struct CopyingVecSink<T: Key+Copy> {
     pub output: Vec<T>
 }
 
-impl<'a, T: Key+Copy+'a> Sink<&'a T> for CopyingSink<T> {
-    fn consume(&mut self, x: &'a T) {
+impl<'a, T: Key+Copy+'a> Sink<&'a T> for CopyingVecSink<T> {
+    #[inline] fn consume(&mut self, x: &'a T) {
         self.output.push(*x);
     }
 }
 
 
 #[derive(new)]
-pub struct CloningSink<T: Key> {
+pub struct CloningVecSink<T: Key> {
     pub output: Vec<T>
 }
 
-impl<'a, T: Key+'a> Sink<&'a T> for CloningSink<T> {
-    fn consume(&mut self, x: &'a T) {
+impl<'a, T: Key+'a> Sink<&'a T> for CloningVecSink<T> {
+    #[inline] fn consume(&mut self, x: &'a T) {
         self.output.push(x.clone());
     }
 }
