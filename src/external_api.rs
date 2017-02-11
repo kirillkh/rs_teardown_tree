@@ -30,26 +30,38 @@ mod plain {
     impl<K: Ord+Clone, V> TeardownTreeMap<K, V> {
         /// Creates a new `TeardownTreeMap` with the given set of items. The items can be given in
         /// any order. Duplicate keys are allowed and supported.
-        #[inline] pub fn new(items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
+        #[inline]
+        pub fn new(items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             TeardownTreeMap { internal: PlTree::new(items) }
         }
 
         /// Creates a new `TeardownTreeMap` with the given set of items. Duplicate keys are allowed
         /// and supported.
         /// **Note**: the items are assumed to be sorted!
-        #[inline] pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
+        #[inline]
+        pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             TeardownTreeMap { internal: PlTree::with_sorted(sorted) }
         }
 
+        /// Finds the item with the given key and returns it (or None).
+        #[inline]
+        pub fn find<'a, Q>(&'a self, query: &'a Q) -> Option<&'a V>
+            where Q: PartialOrd<K>
+        {
+            self.internal.find(query)
+        }
+
         /// Returns true if the map contains the given key.
-        #[inline] pub fn contains_key<Q>(&self, query: &Q) -> bool
+        #[inline]
+        pub fn contains_key<Q>(&self, query: &Q) -> bool
             where Q: PartialOrd<K>
         {
             self.internal.contains(query)
         }
 
         /// Executes a range query.
-        #[inline] pub fn query_range<'a, Q, S>(&'a self, range: Range<Q>, sink: &mut S)
+        #[inline]
+        pub fn query_range<'a, Q, S>(&'a self, range: Range<Q>, sink: &mut S)
             where Q: PartialOrd<K>,
                   S: Sink<&'a Entry<K, V>>
         {
@@ -57,7 +69,8 @@ mod plain {
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
-        #[inline] pub fn delete<Q>(&mut self, query: &Q) -> Option<V>
+        #[inline]
+        pub fn delete<Q>(&mut self, query: &Q) -> Option<V>
             where Q: PartialOrd<K>
         {
             self.internal.delete(query)
@@ -65,7 +78,8 @@ mod plain {
 
         /// Deletes all items inside the half-open `range` from the tree and stores them in the output
         /// Vec. The items are returned in order.
-        #[inline] pub fn delete_range<Q>(&mut self, range: Range<Q>, output: &mut Vec<(K, V)>)
+        #[inline]
+        pub fn delete_range<Q>(&mut self, range: Range<Q>, output: &mut Vec<(K, V)>)
             where Q: PartialOrd<K>
         {
             self.internal.delete_range(range, output)
@@ -73,14 +87,16 @@ mod plain {
 
         /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
         /// true and stores them in the output Vec. The items are returned in order.
-        #[inline] pub fn filter_range<Q, Flt>(&mut self, range: Range<Q>, filter: Flt, output: &mut Vec<(K, V)>)
+        #[inline]
+        pub fn filter_range<Q, Flt>(&mut self, range: Range<Q>, filter: Flt, output: &mut Vec<(K, V)>)
             where Q: PartialOrd<K>, Flt: ItemFilter<K>
         {
             self.internal.filter_range(range, filter, output)
         }
 
         /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
-        #[inline] pub fn delete_range_ref<Q>(&mut self, range: Range<&Q>, output: &mut Vec<(K, V)>)
+        #[inline]
+        pub fn delete_range_ref<Q>(&mut self, range: Range<&Q>, output: &mut Vec<(K, V)>)
             where Q: PartialOrd<K>
         {
             self.internal.delete_range_ref(range, output)
@@ -88,7 +104,8 @@ mod plain {
 
         /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
         /// true and stores them in the output Vec. The items are returned in order.
-        #[inline] pub fn filter_range_ref<Q, Flt>(&mut self, range: Range<&Q>, filter: Flt, output: &mut Vec<(K, V)>)
+        #[inline]
+        pub fn filter_range_ref<Q, Flt>(&mut self, range: Range<&Q>, filter: Flt, output: &mut Vec<(K, V)>)
             where Q: PartialOrd<K>,
                   Flt: ItemFilter<K>
         {
@@ -319,6 +336,14 @@ mod interval {
         #[inline]
         pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
             IntervalTeardownTreeMap { internal: IvTree::with_sorted(sorted) }
+        }
+
+        /// Finds the item with the given key and returns it (or None).
+        #[inline]
+        pub fn find<'a, Q>(&'a self, query: &'a Q) -> Option<&'a V>
+            where Q: Interval<K=Iv::K> + PartialOrd<Iv> // TODO: requiring PartialOrd is redundant, we could get rid of it using a wrapper
+        {
+            self.internal.find(query)
         }
 
         /// Returns true if the map contains the given key.

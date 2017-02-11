@@ -335,16 +335,16 @@ mod test_query_plain {
 
     use applied::interval::{KeyInterval, Interval};
     use applied::plain_tree::{PlTree, PlNode};
-    use external_api::{TeardownTreeSet, TreeWrapperAccess};
+    use external_api::{TeardownTreeSet, TeardownTreeMap, TreeWrapperAccess};
     use base::{CopyingVecSink, TreeRepr, Traverse};
     use super::test_delete_plain::test_exhaustive_n;
-    use super::common::{exhaustive_range_check, mk_prebuilt, check_output_sorted};
+    use super::common::{exhaustive_range_check, mk_prebuilt, check_output_sorted, test_exhaustive_items};
 
     type Nd = PlNode<usize, ()>;
     type Tree = PlTree<usize, ()>;
 
 
-    //---- exhaustive ------------------------------------------------------------------------------
+    //---- exhaustive query_range ------------------------------------------------------------------
     #[test]
     fn query_range_exhaustive() {
         for i in 1..8 {
@@ -362,11 +362,41 @@ mod test_query_plain {
         let mut sink = CopyingVecSink::new(Vec::with_capacity(n));
         for i in 0..n+2 {
             for j in i..n+2 {
-                let tree_mod = tree.clone();
                 sink.output.truncate(0);
-                tree_mod.query_range(i..j, &mut sink);
+                tree.query_range(i..j, &mut sink);
                 exhaustive_range_check(n, &(i..j), &mut sink.output, tree.internal());
             }
+        }
+    }
+
+
+    //---- exhaustive find -------------------------------------------------------------------------
+    #[test]
+    fn find_exhaustive() {
+        for i in 1..10 {
+            find_exhaustive_n(i);
+        }
+    }
+
+    fn find_exhaustive_n(n: usize) {
+        let elems: Vec<_> = (1..n + 1).collect();
+        println!("exhaustive n={}: elems={:?} ------------------------", n, &elems);
+
+        let mut items: Vec<_> = elems.into_iter().map(|x| Some((x, x))).collect();
+        test_exhaustive_items::<_, PlTree<usize, usize>, _>(&mut items, &|tree| find_exhaustive_with_tree(tree));
+
+    }
+
+    fn find_exhaustive_with_tree(tree: PlTree<usize, usize>) {
+        let tree = TeardownTreeMap::from_internal(tree);
+        let n = tree.size();
+
+        assert_eq!(tree.find(&0), None);
+        for i in 1..n+1 {
+            assert_eq!(tree.find(&i), Some(&i));
+        }
+        for i in n+1..2*n+2 {
+            assert_eq!(tree.find(&i), None);
         }
     }
 

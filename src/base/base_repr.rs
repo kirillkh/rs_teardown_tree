@@ -92,7 +92,7 @@ impl<N: Node> TreeRepr<N> {
 
 
     /// Finds the item with the given key and returns it (or None).
-    pub fn lookup<'a, Q>(&'a self, query: &'a Q) -> Option<&'a N::V>
+    pub fn find<'a, Q>(&'a self, query: &'a Q) -> Option<&'a N::V>
         where N: 'a, Q: PartialOrd<N::K>
     {
         let idx = self.index_of(query);
@@ -104,7 +104,7 @@ impl<N: Node> TreeRepr<N> {
     }
 
     pub fn contains<Q: PartialOrd<N::K>>(&self, query: &Q) -> bool {
-        self.lookup(query).is_some()
+        self.find(query).is_some()
     }
 
     pub fn size(&self) -> usize {
