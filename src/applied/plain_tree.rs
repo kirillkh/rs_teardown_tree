@@ -1,5 +1,5 @@
 use applied::AppliedTree;
-use base::{Key, Node, TreeRepr, Traverse, TeardownTreeRefill, Sink, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti, consume_unchecked};
+use base::{Key, Node, TreeRepr, Traverse, TeardownTreeRefill, Sink, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti};
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 
 use std::ops::Range;
@@ -60,6 +60,10 @@ impl<K: Key, V> Node for PlNode<K, V> {
     #[inline] fn into_entry(self) -> Entry<K, V> {
         self.entry
     }
+
+    #[inline] fn into_tuple(self) -> (K, V) {
+        self.entry.into_tuple()
+    }
 }
 
 impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
@@ -97,39 +101,41 @@ impl<K: Key, V> PlTree<K, V> {
         self.work(NoopFilter, |tree| tree.delete(query))
     }
 
-    /// Deletes all items inside the half-open `range` from the tree and stores them in the output
-    /// Vec. The items are returned in order.
+    /// Deletes all items inside the half-open `range` from the tree and passes them to the `sink`.
+    /// The items are returned in order.
     #[inline]
-    pub fn delete_range<Q>(&mut self, range: Range<Q>, output: &mut Vec<(K, V)>)
-        where Q: PartialOrd<K>
+    pub fn delete_range<Q, S>(&mut self, range: Range<Q>, sink: &mut S)
+        where Q: PartialOrd<K>, S: Sink<(K, V)>
     {
-        output.reserve(self.size());
-        self.filter_with_driver(&mut RangeDriver::new(range, output), NoopFilter)
+//        output.reserve(self.size());
+        self.filter_with_driver(&mut RangeDriver::new(range, sink), NoopFilter)
     }
 
     /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
-    /// true and stores them in the output Vec. The items are returned in order.
-    pub fn filter_range<Q: PartialOrd<K>, Flt>(&mut self, range: Range<Q>, filter: Flt, output: &mut Vec<(K, V)>)
-        where Flt: ItemFilter<K>
+    /// true and passes them to the `sink`. The items are returned in order.
+    pub fn filter_range<Q: PartialOrd<K>, Flt, S>(&mut self, range: Range<Q>, filter: Flt, sink: &mut S)
+        where Flt: ItemFilter<K>, S: Sink<(K, V)>
     {
-        output.reserve(self.size());
-        self.filter_with_driver(&mut RangeDriver::new(range, output), filter)
+//        output.reserve(self.size());
+        self.filter_with_driver(&mut RangeDriver::new(range, sink), filter)
     }
 
-    /// Deletes all items inside the half-open `range` from the tree and stores them in the output Vec.
+    /// Deletes all items inside the half-open `range` from the tree and passes them to the `sink`.
     #[inline]
-    pub fn delete_range_ref<Q: PartialOrd<K>>(&mut self, range: Range<&Q>, output: &mut Vec<(K, V)>) {
-        output.reserve(self.size());
-        self.filter_with_driver(&mut RangeRefDriver::new(range, output), NoopFilter)
+    pub fn delete_range_ref<Q, S>(&mut self, range: Range<&Q>, sink: &mut S)
+        where Q: PartialOrd<K>, S: Sink<(K, V)>
+    {
+//        output.reserve(self.size());
+        self.filter_with_driver(&mut RangeRefDriver::new(range, sink), NoopFilter)
     }
 
     /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
-    /// true and stores them in the output Vec. The items are returned in order.
-    pub fn filter_range_ref<Q: PartialOrd<K>, Flt>(&mut self, range: Range<&Q>, filter: Flt, output: &mut Vec<(K, V)>)
-        where Flt: ItemFilter<K>
+    /// true and passes them to the `sink`. The items are returned in order.
+    pub fn filter_range_ref<Q, Flt, S>(&mut self, range: Range<&Q>, filter: Flt, sink: &mut S)
+        where Q: PartialOrd<K>, Flt: ItemFilter<K>, S: Sink<(K, V)>
     {
-        output.reserve(self.size());
-        self.filter_with_driver(&mut RangeRefDriver::new(range, output), filter)
+//        sink.reserve(self.size());
+        self.filter_with_driver(&mut RangeRefDriver::new(range, sink), filter)
     }
 
     #[inline]
@@ -163,8 +169,9 @@ impl<K: Key, V> PlTree<K, V> {
 
 
     #[inline]
-    fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<K>,
-                                                                    F: FnMut(&mut PlWorker<K,V,Flt>) -> R
+    fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R
+        where Flt: ItemFilter<K>,
+              F: FnMut(&mut PlWorker<K,V,Flt>) -> R
     {
         // TODO: this can be sped up in several ways, e.g. having TreeRepr::filter of &Flt type, then we don't have to copy repr
         let repr: TreeRepr<PlNode<K, V>> = unsafe {
@@ -214,11 +221,13 @@ impl<K: Key, V: Clone> Clone for PlTree<K, V> {
 
 
 
-pub struct NoUpdate<K: Key, Flt: ItemFilter<K>> {
+pub struct NoUpdate<K, Flt> {
     _ph: PhantomData<(K, Flt)>
 }
 
-impl<K: Key, V, Flt: ItemFilter<K>> ItemVisitor<PlNode<K, V>> for NoUpdate<K, Flt> {
+impl<K, V, Flt> ItemVisitor<PlNode<K, V>> for NoUpdate<K, Flt>
+    where K: Key, Flt: ItemFilter<K>
+{
     type Tree = PlWorker<K,V, Flt>;
 
     #[inline(always)]
@@ -247,12 +256,16 @@ impl<K: Key, V> DerefMut for PlTree<K, V> {
 
 
 
-pub struct PlWorker<K: Key, V, Flt> where Flt: ItemFilter<K> {
+pub struct PlWorker<K, V, Flt>
+    where K: Key, Flt: ItemFilter<K>
+{
     repr: TreeRepr<PlNode<K, V>>,
     filter: Flt
 }
 
-impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
+impl<K, V, Flt> PlWorker<K, V, Flt>
+    where K: Key, Flt: ItemFilter<K>
+{
     /// Constructs a new FilterTree
     #[inline]
     pub fn new(repr: TreeRepr<PlNode<K, V>>, filter: Flt) -> Self {
@@ -348,7 +361,8 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
                 removed = self.descend_delete_max_left(drv, idx, removed);
                 if let Some(item) = item {
-                    consume_unchecked(drv.output(), item.into_entry());
+//                    consume_unchecked(drv.sink(), item.into_entry());
+                    drv.consume(item.into_tuple());
                 }
                 self.descend_delete_min_right(drv, idx, removed);
                 return;
@@ -373,9 +387,10 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
             // the root and the whole left subtree are inside the range
             let item = self.filter_take(idx);
             let mut removed = item.is_some();
-            removed = self.descend_consume_left(idx, removed, drv.output());
+            removed = self.descend_consume_left(idx, removed, drv);
             if let Some(item) = item {
-                consume_unchecked(drv.output(), item.into_entry());
+//                consume_unchecked(drv.sink(), item.into_entry());
+                drv.consume(item.into_tuple())
             }
 
             if !Flt::is_noop() {
@@ -415,9 +430,10 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
             let item = self.filter_take(idx);
             let mut removed = self.descend_delete_max_left(drv, idx, item.is_some());
             if let Some(item) = item {
-                consume_unchecked(drv.output(), item.into_entry());
+//                consume_unchecked(drv.sink(), item.into_entry());
+                drv.consume(item.into_tuple())
             }
-            removed = self.descend_consume_right(idx, removed, drv.output());
+            removed = self.descend_consume_right(idx, removed, drv);
 
             if !Flt::is_noop() {
                 if !removed && self.slots_max().has_open() {
@@ -487,7 +503,9 @@ impl<K: Key, V, Flt> PlWorker<K, V, Flt> where Flt: ItemFilter<K> {
 
 
 
-impl<K: Key, V, Flt: ItemFilter<K>> Deref for PlWorker<K, V, Flt> {
+impl<K, V, Flt> Deref for PlWorker<K, V, Flt>
+    where K: Key, Flt: ItemFilter<K>
+{
     type Target = TreeRepr<PlNode<K, V>>;
 
     fn deref(&self) -> &Self::Target {
@@ -495,13 +513,17 @@ impl<K: Key, V, Flt: ItemFilter<K>> Deref for PlWorker<K, V, Flt> {
     }
 }
 
-impl<K: Key, V, Flt: ItemFilter<K>> DerefMut for PlWorker<K, V, Flt> {
+impl<K, V, Flt> DerefMut for PlWorker<K, V, Flt>
+    where K: Key, Flt: ItemFilter<K>
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
     }
 }
 
-impl<K: Key, V, Flt: ItemFilter<K>> BulkDeleteCommon<PlNode<K, V>> for PlWorker<K, V, Flt> {
+impl<K, V, Flt> BulkDeleteCommon<PlNode<K, V>> for PlWorker<K, V, Flt>
+    where K: Key, Flt: ItemFilter<K>
+{
     type Visitor = NoUpdate<K, Flt>;
     type Filter = Flt;
 
@@ -511,7 +533,9 @@ impl<K: Key, V, Flt: ItemFilter<K>> BulkDeleteCommon<PlNode<K, V>> for PlWorker<
 }
 
 
-impl<K: Key, V, Flt: ItemFilter<K>> TeardownTreeRefill for PlWorker<K, V, Flt> where K: Copy, V: Copy {
+impl<K, V, Flt> TeardownTreeRefill for PlWorker<K, V, Flt>
+    where K: Key+Copy, V: Copy, Flt: ItemFilter<K>
+{
     #[inline] fn refill(&mut self, master: &PlWorker<K, V, Flt>) {
         self.repr.refill(&master.repr);
     }

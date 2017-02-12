@@ -1,15 +1,12 @@
 use std::ptr;
 use std::ops::Range;
-use base::{Key, Entry};
+use base::{Key, Entry, Sink};
 
-pub trait TraversalDriver<K: Key, V> {
+pub trait TraversalDriver<K: Key, V>: Sink<(K, V)> {
     type Decision: TraversalDecision;
 
     #[inline(always)]
     fn decide(&self, key: &K) -> Self::Decision;
-
-    #[inline(always)]
-    fn output(&mut self) -> &mut Vec<(K, V)>;
 }
 
 
@@ -18,7 +15,6 @@ pub trait TraversalDecision {
     #[inline] fn right(&self) -> bool;
     #[inline] fn consume(&self) -> bool;
 }
-
 
 
 
@@ -47,12 +43,12 @@ impl TraversalDecision for RangeDecision {
 
 pub struct RangeRefDriver<'a, K: Key +'a, Q: PartialOrd<K>+'a, V: 'a> {
     range: Range<&'a Q>,
-    output: &'a mut Vec<(K, V)>
+    sink: &'a mut Sink<(K, V)>
 }
 
 impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeRefDriver<'a, K, Q, V> {
-    pub fn new(range: Range<&'a Q>, output: &'a mut Vec<(K, V)>) -> RangeRefDriver<'a, K, Q, V> {
-        RangeRefDriver { range:range, output:output }
+    pub fn new(range: Range<&'a Q>, sink: &'a mut Sink<(K, V)>) -> RangeRefDriver<'a, K, Q, V> {
+        RangeRefDriver { range:range, sink:sink }
     }
 
     pub fn from(&self) -> &'a Q {
@@ -74,22 +70,24 @@ impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeRefDriv
 
         RangeDecision { left: left, right: right }
     }
+}
 
+impl<'a, K: Key +'a, Q: PartialOrd<K>, V> Sink<(K, V)> for RangeRefDriver<'a, K, Q, V> {
     #[inline(always)]
-    fn output(&mut self) -> &mut Vec<(K, V)> {
-        &mut self.output
+    fn consume(&mut self, item: (K, V)) {
+        self.sink.consume(item)
     }
 }
 
 
 pub struct RangeDriver<'a, K: Key +'a, Q: PartialOrd<K>, V: 'a> {
     range: Range<Q>,
-    output: &'a mut Vec<(K, V)>
+    sink: &'a mut Sink<(K, V)>
 }
 
 impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeDriver<'a, K, Q, V> {
-    pub fn new(range: Range<Q>, output: &'a mut Vec<(K, V)>) -> RangeDriver<K, Q, V> {
-        RangeDriver { range:range, output: output }
+    pub fn new(range: Range<Q>, sink: &'a mut Sink<(K, V)>) -> RangeDriver<K, Q, V> {
+        RangeDriver { range:range, sink: sink }
     }
 
     pub fn from(&self) -> &Q {
@@ -111,38 +109,40 @@ impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeDriver<
 
         RangeDecision { left: left, right: right }
     }
+}
 
+impl<'a, K: Key +'a, Q: PartialOrd<K>, V> Sink<(K, V)> for RangeDriver<'a, K, Q, V> {
     #[inline(always)]
-    fn output(&mut self) -> &mut Vec<(K, V)> {
-        &mut self.output
+    fn consume(&mut self, item: (K, V)) {
+        self.sink.consume(item)
     }
 }
 
-
-#[inline(always)]
-pub fn consume_unchecked<K: Key, V>(output: &mut Vec<(K, V)>, item: Entry<K, V>) {
-    unsafe {
-        let len = output.len();
-        debug_assert!(len < output.capacity());
-        output.set_len(len + 1);
-        let p = output.get_unchecked_mut(len);
-
-        let entry: (K, V) = item.into();
-        ptr::write(p, entry);
-    }
-}
-
-
-#[inline(always)]
-pub fn consume_ptr<K: Key, V>(output: &mut Vec<(K, V)>, src: *const Entry<K, V>) {
-    unsafe {
-        let len = output.len();
-        debug_assert!(len < output.capacity());
-        output.set_len(len + 1);
-        let p = output.get_unchecked_mut(len);
-
-        // TODO: optimizer fails here, might want to change to "let tuple: (K,V) = mem::transmute(item)" (but that is not guaranteed to work)
-        let Entry {key, val} = ptr::read(src);
-        ptr::write(p, (key, val));
-    }
-}
+//
+//#[inline(always)]
+//pub fn consume_unchecked<K: Key, V>(output: &mut Vec<(K, V)>, item: Entry<K, V>) {
+//    unsafe {
+//        let len = output.len();
+//        debug_assert!(len < output.capacity());
+//        output.set_len(len + 1);
+//        let p = output.get_unchecked_mut(len);
+//
+//        let entry: (K, V) = item.into();
+//        ptr::write(p, entry);
+//    }
+//}
+//
+//
+//#[inline(always)]
+//pub fn consume_ptr<K: Key, V>(output: &mut Vec<(K, V)>, src: *const Entry<K, V>) {
+//    unsafe {
+//        let len = output.len();
+//        debug_assert!(len < output.capacity());
+//        output.set_len(len + 1);
+//        let p = output.get_unchecked_mut(len);
+//
+//        // TODO: optimizer fails here, might want to change to "let tuple: (K,V) = mem::transmute(item)" (but that is not guaranteed to work)
+//        let entry = ptr::read(src);
+//        ptr::write(p, entry.into());
+//    }
+//}

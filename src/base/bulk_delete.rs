@@ -1,6 +1,5 @@
-use base::{Node, TreeRepr, TreeDerefMut, TraverseMut, lefti, righti};
+use base::{Node, TreeRepr, TreeDerefMut, TraverseMut, Sink, lefti, righti};
 use base::{SlotStack, ItemFilter};
-use base::drivers::consume_unchecked;
 
 
 pub struct DeleteRangeCache {
@@ -43,26 +42,32 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
 
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline(always)]
-    fn consume_subtree(&mut self, idx: usize, output: &mut Vec<(N::K, N::V)>) {
+    fn consume_subtree<S>(&mut self, idx: usize, sink: &mut S)
+        where S: Sink<(N::K, N::V)>
+    {
         if Self::Filter::is_noop() {
-            self.consume_subtree_unfiltered(idx, output);
+            self.consume_subtree_unfiltered(idx, sink);
         } else {
-            self.consume_subtree_filtered(idx, output);
+            self.consume_subtree_filtered(idx, sink);
         }
     }
 
     #[inline]
-    fn consume_subtree_unfiltered(&mut self, root: usize, output: &mut Vec<(N::K, N::V)>) {
-        TreeRepr::traverse_inorder_mut(self, root, output, |this, output, idx| {
+    fn consume_subtree_unfiltered<S>(&mut self, root: usize, sink: &mut S)
+        where S: Sink<(N::K, N::V)>
+    {
+        TreeRepr::traverse_inorder_mut(self, root, sink, |this, sink, idx| {
             unsafe {
-                this.move_to(idx, output);
+                this.move_to(idx, sink);
             }
             false
         });
     }
 
     #[inline(never)]
-    fn consume_subtree_filtered(&mut self, idx: usize, output: &mut Vec<(N::K, N::V)>) {
+    fn consume_subtree_filtered<S>(&mut self, idx: usize, sink: &mut S)
+        where S: Sink<(N::K, N::V)>
+    {
         if self.is_nil(idx) {
             return;
         }
@@ -76,10 +81,11 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         let mut removed = consumed.is_some();
 
         // left subtree
-        removed = self.descend_consume_left(idx, removed, output);
+        removed = self.descend_consume_left(idx, removed, sink);
 
         if consumed.is_some() {
-            consume_unchecked(output, consumed.unwrap().into_entry());
+//            consume_unchecked(sink, consumed.unwrap().into_entry());
+            sink.consume(consumed.unwrap().into_tuple())
         }
 
         if !removed && self.slots_min().has_open() {
@@ -88,7 +94,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         }
 
         // right subtree
-        removed = self.descend_consume_right(idx, removed, output);
+        removed = self.descend_consume_right(idx, removed, sink);
 
         if !removed && self.slots_max().has_open() {
             removed = true;
@@ -273,24 +279,28 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
 
 
     #[inline(always)]
-    fn descend_consume_left(&mut self, idx: usize, with_slot: bool, output: &mut Vec<(N::K, N::V)>) -> bool {
+    fn descend_consume_left<S>(&mut self, idx: usize, with_slot: bool, sink: &mut S) -> bool
+        where S: Sink<(N::K, N::V)>
+    {
         if Self::Filter::is_noop() {
-            self.consume_subtree_unfiltered(lefti(idx), output);
+            self.consume_subtree_unfiltered(lefti(idx), sink);
             with_slot
         } else {
             self.descend_left_fresh_slots(idx, with_slot,
-                                          |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output))
+                                          |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, sink))
         }
     }
 
     #[inline(always)]
-    fn descend_consume_right(&mut self, idx: usize, with_slot: bool, output: &mut Vec<(N::K, N::V)>) -> bool {
+    fn descend_consume_right<S>(&mut self, idx: usize, with_slot: bool, sink: &mut S) -> bool
+        where S: Sink<(N::K, N::V)>
+    {
         if Self::Filter::is_noop() {
-            self.consume_subtree_unfiltered(righti(idx), output);
+            self.consume_subtree_unfiltered(righti(idx), sink);
             with_slot
         } else {
             self.descend_right(idx, with_slot,
-                               |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, output))
+                               |this: &mut Self, child_idx| this.consume_subtree_filtered(child_idx, sink))
         }
     }
 }

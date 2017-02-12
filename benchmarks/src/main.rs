@@ -188,6 +188,7 @@ mod bench_delete_range {
     use treap::TreapMap;
     use teardown_tree::{IntervalTeardownTreeSet, KeyInterval, TeardownTreeRefill, TeardownTreeSet, NoopFilter};
     use teardown_tree::util::make_teardown_seq;
+    use teardown_tree::sink::UncheckedVecRefSink;
     use super::nanos;
 
     pub type Tree = TeardownTreeSet<usize>;
@@ -388,6 +389,7 @@ mod bench_delete_range {
         type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+//            let mut sink = UncheckedVecRefSink::new(output);
             self.0.delete_range(range, output);
         }
 

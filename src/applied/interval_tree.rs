@@ -1,7 +1,6 @@
 use applied::AppliedTree;
 use applied::interval::{Interval, IvNode};
 use base::{TreeRepr, TeardownTreeRefill, Sink, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
-use base::drivers::{consume_unchecked};
 
 use std::ops::{Deref, DerefMut};
 use std::fmt::{Debug, Display, Formatter};
@@ -36,18 +35,19 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     }
 
     #[inline]
-    pub fn delete_overlap<Q>(&mut self, query: &Q, output: &mut Vec<(Iv, V)>)
-        where Q: Interval<K=Iv::K>
+    pub fn delete_overlap<Q, S>(&mut self, query: &Q, sink: &mut S)
+        where Q: Interval<K=Iv::K>, S: Sink<(Iv, V)>
     {
-        self.filter_overlap(query, NoopFilter, output)
+        self.filter_overlap(query, NoopFilter, sink)
     }
 
     #[inline]
-    pub fn filter_overlap<Q, Flt>(&mut self, query: &Q, filter: Flt, output: &mut Vec<(Iv, V)>)
+    pub fn filter_overlap<Q, Flt, S>(&mut self, query: &Q, filter: Flt, sink: &mut S)
         where Q: Interval<K=Iv::K>,
-              Flt: ItemFilter<Iv>
+              Flt: ItemFilter<Iv>,
+              S: Sink<(Iv, V)>
     {
-        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_overlap(query, output))
+        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_overlap(query, sink))
     }
 
 
@@ -96,8 +96,9 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
 //    }
 
     #[inline]
-    fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<Iv>,
-                                                                    F: FnMut(&mut IvWorker<Iv,V,Flt>) -> R
+    fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R
+        where Flt: ItemFilter<Iv>,
+              F: FnMut(&mut IvWorker<Iv,V,Flt>) -> R
     {
         let repr: TreeRepr<IvNode<Iv, V>> = unsafe {
             ptr::read(self.repr.get())
@@ -206,12 +207,16 @@ impl<Iv: Interval, V: Clone> Clone for IvTree<Iv, V> {
 
 
 
-pub struct IvWorker<Iv: Interval, V, Flt> where Flt: ItemFilter<Iv> {
+pub struct IvWorker<Iv, V, Flt>
+    where Iv: Interval, Flt: ItemFilter<Iv>
+{
     repr: TreeRepr<IvNode<Iv, V>>,
-    filter: Flt
+    filter: Flt,
 }
 
-impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
+impl<Iv, V, Flt> IvWorker<Iv, V, Flt>
+    where Iv: Interval, Flt: ItemFilter<Iv>
+{
     /// Constructs a new FilterTree
     pub fn new(repr: TreeRepr<IvNode<Iv, V>>, filter: Flt) -> Self {
         IvWorker { repr:repr, filter:filter }
@@ -233,13 +238,13 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
     }
 
     #[inline]
-    pub fn filter_overlap<Q>(&mut self, query: &Q, output: &mut Vec<(Iv, V)>)
-        where Q: Interval<K=Iv::K>
+    pub fn filter_overlap<Q, S>(&mut self, query: &Q, sink: &mut S)
+        where Q: Interval<K=Iv::K>, S: Sink<(Iv, V)>
     {
         if self.size() != 0 {
-            output.reserve(self.size());
+//            sink.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
-                this.filter_overlap_ivl_rec(query, 0, false, output)
+                this.filter_overlap_ivl_rec(query, 0, false, sink)
             )
         }
     }
@@ -455,8 +460,8 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
 
     #[inline(never)]
-    fn filter_overlap_ivl_rec<Q>(&mut self, query: &Q, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>)
-        where Q: Interval<K=Iv::K>
+    fn filter_overlap_ivl_rec<Q, S>(&mut self, query: &Q, idx: usize, min_included: bool, sink: &mut S)
+        where Q: Interval<K=Iv::K>, S: Sink<(Iv, V)>
     {
         let node = self.node_mut_unsafe(idx);
         let k: &Iv = &node.entry.key;
@@ -471,7 +476,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             }
         } else if query.b() <= k.a() && k.a() != query.a() {
             // root and right are outside the range
-            self.descend_filter_overlap_ivl_left(query, idx, false, min_included, output);
+            self.descend_filter_overlap_ivl_left(query, idx, false, min_included, sink);
 
             let removed = if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
@@ -495,15 +500,16 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             let mut removed: bool;
             if let Some(consumed) = consumed {
                 if min_included {
-                    removed = self.descend_consume_left(idx, true, output);
+                    removed = self.descend_consume_left(idx, true, sink);
                 } else {
-                    removed = self.descend_filter_overlap_ivl_left(query, idx, true, false, output);
+                    removed = self.descend_filter_overlap_ivl_left(query, idx, true, false, sink);
                 }
                 node.maxb = consumed.maxb.clone();
 
-                consume_unchecked(output, consumed.into_entry());
+//                consume_unchecked(sink, consumed.into_entry());
+                sink.consume(consumed.into_tuple())
             } else {
-                self.descend_filter_overlap_ivl_left(query, idx, false, min_included, output);
+                self.descend_filter_overlap_ivl_left(query, idx, false, min_included, sink);
                 if self.slots_min().has_open() {
                     removed = true;
                     self.fill_slot_min(idx);
@@ -517,12 +523,12 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             if right_min_included {
                 let right_max_included = &node.maxb < query.b();
                 if right_max_included {
-                    removed = self.descend_consume_right(idx, removed, output);
+                    removed = self.descend_consume_right(idx, removed, sink);
                 } else {
-                    removed = self.descend_filter_overlap_ivl_right(query, idx, removed, true, output);
+                    removed = self.descend_filter_overlap_ivl_right(query, idx, removed, true, sink);
                 }
             } else {
-                removed = self.descend_filter_overlap_ivl_right(query, idx, removed, false, output);
+                removed = self.descend_filter_overlap_ivl_right(query, idx, removed, false, sink);
             }
 
             if !removed && self.slots_max().has_open() {
@@ -539,27 +545,29 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_overlap_ivl_left<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool
-        where Q: Interval<K=Iv::K>
+    fn descend_filter_overlap_ivl_left<Q, S>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool
+        where Q: Interval<K=Iv::K>, S: Sink<(Iv, V)>
     {
         // this pinning business is asymmetric (we don't do it in descend_delete_overlap_ivl_right) because of the program flow: we enter the left subtree first
         self.descend_left_fresh_slots(idx, with_slot,
-                                      |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, output))
+                                      |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, sink))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_overlap_ivl_right<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool
-        where Q: Interval<K=Iv::K>
+    fn descend_filter_overlap_ivl_right<Q, S>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, sink: &mut S) -> bool
+        where Q: Interval<K=Iv::K>, S: Sink<(Iv, V)>
     {
         self.descend_right(idx, with_slot,
-                           |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, output))
+                           |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, sink))
     }
 }
 
 
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Deref for IvWorker<Iv, V, Flt> {
+impl<Iv, V, Flt> Deref for IvWorker<Iv, V, Flt>
+    where Iv: Interval, Flt: ItemFilter<Iv>
+{
     type Target = TreeRepr<IvNode<Iv, V>>;
 
     fn deref(&self) -> &Self::Target {
@@ -567,13 +575,17 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Deref for IvWorker<Iv, V, Flt> {
     }
 }
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> DerefMut for IvWorker<Iv, V, Flt> {
+impl<Iv, V, Flt> DerefMut for IvWorker<Iv, V, Flt>
+    where Iv: Interval, Flt: ItemFilter<Iv>
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
     }
 }
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> BulkDeleteCommon<IvNode<Iv, V>> for IvWorker<Iv, V, Flt> {
+impl<Iv, V, Flt> BulkDeleteCommon<IvNode<Iv, V>> for IvWorker<Iv, V, Flt>
+    where Iv: Interval, Flt: ItemFilter<Iv>
+{
     type Visitor = UpdateMax<Iv, Flt>;
     type Filter = Flt;
 
@@ -583,7 +595,9 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> BulkDeleteCommon<IvNode<Iv, V>> for I
 }
 
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> TeardownTreeRefill for IvWorker<Iv, V, Flt> where Iv: Copy, V: Copy {
+impl<Iv, V, Flt> TeardownTreeRefill for IvWorker<Iv, V, Flt>
+    where Iv: Interval+Copy, V: Copy, Flt: ItemFilter<Iv>
+{
     fn refill(&mut self, master: &IvWorker<Iv, V, Flt>) {
         self.repr.refill(&master.repr);
     }
@@ -591,11 +605,14 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> TeardownTreeRefill for IvWorker<Iv, V
 
 
 
-pub struct UpdateMax<Iv: Interval, Flt: ItemFilter<Iv>> {
+//pub struct UpdateMax<Iv: Interval, Flt: ItemFilter<Iv>, S> {
+pub struct UpdateMax<Iv, Flt> {
     _ph: PhantomData<(Iv, Flt)>
 }
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> ItemVisitor<IvNode<Iv, V>> for UpdateMax<Iv, Flt> {
+impl<Iv, V, Flt> ItemVisitor<IvNode<Iv, V>> for UpdateMax<Iv, Flt>
+    where Iv: Interval, Flt: ItemFilter<Iv>
+{
     type Tree = IvWorker<Iv, V, Flt>;
 
     #[inline]
