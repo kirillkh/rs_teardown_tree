@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut, Range};
 use std::fmt;
 
-use base::{Node, KeyVal};
+use base::{Node, Entry};
 
 
 pub trait Interval: Sized+Ord+Clone {
@@ -11,7 +11,7 @@ pub trait Interval: Sized+Ord+Clone {
     fn a(&self) -> &Self::K;
     fn b(&self) -> &Self::K;
 
-    fn intersects(&self, other: &Self) -> bool {
+    fn overlaps<Other: Interval<K=Self::K>>(&self, other: &Other) -> bool {
         self.a() < other.b() && other.a() < self.b()
             || self.a() == other.a() // interpret empty intervals as points
     }
@@ -20,6 +20,15 @@ pub trait Interval: Sized+Ord+Clone {
         self.a().clone() .. self.b().clone()
     }
 }
+
+
+impl Interval for usize {
+    type K = usize;
+
+    fn a(&self) -> &Self::K { self }
+    fn b(&self) -> &Self::K { self }
+}
+
 
 #[derive(Debug, Clone, Copy)]
 pub struct KeyInterval<K: Ord+Clone> {
@@ -49,24 +58,31 @@ impl<K: Ord+Clone> Interval for KeyInterval<K> {
     }
 }
 
+impl<K: Ord+Clone> From<Range<K>> for KeyInterval<K> {
+    fn from(range: Range<K>) -> Self {
+        Self::from_range(&range)
+    }
+}
+
+
 
 #[derive(Clone)]
 pub struct IvNode<Iv: Interval, V> {
-    pub kv: KeyVal<Iv, V>,
+    pub entry: Entry<Iv, V>,
     pub maxb: Iv::K
 }
 
 impl<Iv: Interval, V> Deref for IvNode<Iv, V> {
-    type Target = KeyVal<Iv, V>;
+    type Target = Entry<Iv, V>;
 
     fn deref(&self) -> &Self::Target {
-        &self.kv
+        &self.entry
     }
 }
 
 impl<Iv: Interval, V> DerefMut for IvNode<Iv, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.kv
+        &mut self.entry
     }
 }
 
@@ -77,11 +93,17 @@ impl<Iv: Interval, V> Node for IvNode<Iv, V> {
 
     fn new(key: Iv, val: V) -> Self {
         let maxb = key.b().clone();
-        IvNode { kv: KeyVal::new(key, val), maxb:maxb }
+        IvNode { entry: Entry::new(key, val), maxb:maxb }
     }
 
-    fn into_kv(self) -> KeyVal<Iv, V> {
-        self.kv
+    #[inline(always)]
+    fn into_entry(self) -> Entry<Iv, V> {
+        self.entry
+    }
+
+    #[inline(always)]
+    fn into_tuple(self) -> (Iv, V) {
+        self.entry.into_tuple()
     }
 }
 

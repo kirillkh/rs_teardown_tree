@@ -6,7 +6,7 @@ extern crate splay;
 extern crate cpuprofiler;
 
 
-use bench_delete_range::{TreapMaster, TreeBulk, TeardownTreeSingle, BTreeSetMaster, SplayMaster, IntervalTreeBulk};
+use bench_delete_range::{TreapMaster, TreeBulk, TeardownTreeSingle, BTreeSetMaster, SplayMaster, IntervalTreeBulk, FilteredIntervalTreeBulk};
 use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
 
 use std::time::Duration;
@@ -27,8 +27,16 @@ fn nanos(d: Duration) -> u64 {
 
 fn main() {
 //    set_affinity();
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 1000,   400);
+    bench_refill_teardown_cycle::<TreeBulk>(100, 100,    45000000);
     return;
+
+    bench_refill_teardown_cycle::<TreeBulk>(10, 10,   40000000);
+    bench_refill_teardown_cycle::<TreeBulk>(100, 10,   3100000);
+    bench_refill_teardown_cycle::<TreeBulk>(1000, 10,   300000);
+    bench_refill_teardown_cycle::<TreeBulk>(10000, 10,   10000);
+    bench_refill_teardown_cycle::<TreeBulk>(100000, 10,   1200);
+    bench_refill_teardown_cycle::<TreeBulk>(1000000, 10,    70);
+    bench_refill_teardown_cycle::<TreeBulk>(10000000, 10,    7);
 
     bench_refill_teardown_cycle::<TreeBulk>(100, 100,    4500000);
     bench_refill_teardown_cycle::<TreeBulk>(1000, 100,    700000);
@@ -180,11 +188,12 @@ mod bench_delete_range {
     use std::iter::FromIterator;
     use std::fmt::{Formatter, Debug, Display, Result};
     use rand::{XorShiftRng, SeedableRng, Rng};
+    use splay::SplaySet;
 
     use treap::TreapMap;
-    use teardown_tree::{TeardownTreeRefill};
-    use teardown_tree::TeardownTreeSet;
+    use teardown_tree::{IntervalTeardownTreeSet, KeyInterval, TeardownTreeRefill, TeardownTreeSet, NoopFilter};
     use teardown_tree::util::make_teardown_seq;
+    use teardown_tree::sink::UncheckedVecRefSink;
     use super::nanos;
     use cpuprofiler::PROFILER;
 
@@ -388,6 +397,7 @@ mod bench_delete_range {
         type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+//            let mut sink = UncheckedVecRefSink::new(output);
             self.0.delete_range(range, output);
         }
 
@@ -620,8 +630,6 @@ mod bench_delete_range {
 
 
     //---- benchmarking SplayTree split/join ---------------------------------------------------------------
-    use splay::SplaySet;
-
     pub struct SplayMaster(SplaySet<usize>);
 
     pub struct SplayCopy(SplaySet<usize>);
@@ -690,8 +698,6 @@ mod bench_delete_range {
     }
 
 
-    use teardown_tree::{IntervalTeardownTreeSet, KeyInterval};
-
     /// for benchmarking IntervalTeardownTree delete_range()
     #[derive(Clone, Debug)]
     pub struct IntervalTreeBulk(IntervalTeardownTreeSet<KeyInterval<usize>>);
@@ -726,7 +732,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.delete_intersecting(&KeyInterval::new(range.start, range.end), output);
+            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -744,6 +750,63 @@ mod bench_delete_range {
 
 
     impl Display for IntervalTreeBulk {
+        fn fmt(&self, fmt: &mut Formatter) -> Result {
+            Display::fmt(&self.0, fmt)
+        }
+    }
+
+    /// for benchmarking IntervalTeardownTree::filter_range()
+    #[derive(Clone, Debug)]
+    pub struct FilteredIntervalTreeBulk(IntervalTeardownTreeSet<KeyInterval<usize>>);
+
+    impl TeardownTreeMaster for FilteredIntervalTreeBulk {
+        type Cpy = FilteredIntervalTreeBulk;
+
+        fn build(elems: Vec<usize>) -> Self {
+            let elems = elems.into_iter().map(|x| KeyInterval::new(x, x)).collect();
+            FilteredIntervalTreeBulk(IntervalTeardownTreeSet::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn sz(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "IntervalTeardownTree using filter_range()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "IntervalTeardownTree".to_string()
+        }
+    }
+
+    impl TeardownTreeCopy for FilteredIntervalTreeBulk {
+        type Master = FilteredIntervalTreeBulk;
+        type T = KeyInterval<usize>;
+
+        fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
+            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, output);
+        }
+
+        fn rfill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
+
+        fn sz(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+    }
+
+
+    impl Display for FilteredIntervalTreeBulk {
         fn fmt(&self, fmt: &mut Formatter) -> Result {
             Display::fmt(&self.0, fmt)
         }

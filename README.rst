@@ -12,11 +12,11 @@ teardown_tree
 .. |travis| image:: https://travis-ci.org/kirillkh/rs_teardown_tree.svg?branch=master
 .. _travis: https://travis-ci.org/kirillkh/rs_teardown_tree
 
-A BST (binary search tree) written in Rust that supports efficient **teardown** scenarios, i.e. the typical usage
+A BST (binary search tree) written in Rust that supports efficient query and **teardown** scenarios, i.e. the typical usage
 pattern is to build a master copy of the tree, then
 
 1. **clone** the master copy to a new tree
-2. tear the tree down with a series of **delete-range** operations (and do something with the retrieved items)
+2. tear the tree down with a series of **delete-range** operations (and do something with the retrieved items), interspersed with range queries
 3. rinse, repeat
 
 Two variations are currently implemented: **TeardownTree** and **IntervalTeardownTree** (an |IntervalTree|_).
@@ -53,7 +53,7 @@ As a library
 | Add to your Cargo.toml:
 |
 |     ``[dependencies]``
-|     ``teardown_tree = "0.5.2"``
+|     ``teardown_tree = "0.5.0"``
 
 | And to your crate's root:
 |
