@@ -1,6 +1,7 @@
-use std::ptr;
 use std::ops::Range;
-use base::{Key, Entry, Sink};
+use std::marker::PhantomData;
+
+use base::{Key, Sink};
 
 pub trait TraversalDriver<K: Key, V>: Sink<(K, V)> {
     type Decision: TraversalDecision;
@@ -41,14 +42,19 @@ impl TraversalDecision for RangeDecision {
 
 
 
-pub struct RangeRefDriver<'a, K: Key +'a, Q: PartialOrd<K>+'a, V: 'a> {
+pub struct RangeRefDriver<'a, K, Q, V, S>
+    where K: Key +'a, Q: PartialOrd<K>+'a, V: 'a, S: Sink<(K, V)>
+{
     range: Range<&'a Q>,
-    sink: &'a mut Sink<(K, V)>
+    sink: S,
+    _ph: PhantomData<(K, V)>
 }
 
-impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeRefDriver<'a, K, Q, V> {
-    pub fn new(range: Range<&'a Q>, sink: &'a mut Sink<(K, V)>) -> RangeRefDriver<'a, K, Q, V> {
-        RangeRefDriver { range:range, sink:sink }
+impl<'a, K, Q, V, S> RangeRefDriver<'a, K, Q, V, S>
+    where K: Key +'a, Q: PartialOrd<K>+'a, V: 'a, S: Sink<(K, V)>
+{
+    pub fn new(range: Range<&'a Q>, sink: S) -> Self {
+        RangeRefDriver { range:range, sink:sink, _ph: PhantomData }
     }
 
     pub fn from(&self) -> &'a Q {
@@ -60,7 +66,9 @@ impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeRefDriver<'a, K, Q, V> {
     }
 }
 
-impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeRefDriver<'a, K, Q, V> {
+impl<'a, K, Q, V, S> TraversalDriver<K, V> for RangeRefDriver<'a, K, Q, V, S>
+    where K: Key +'a, Q: PartialOrd<K>+'a, V: 'a, S: Sink<(K, V)>
+{
     type Decision = RangeDecision;
 
     #[inline(always)]
@@ -72,7 +80,9 @@ impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeRefDriv
     }
 }
 
-impl<'a, K: Key +'a, Q: PartialOrd<K>, V> Sink<(K, V)> for RangeRefDriver<'a, K, Q, V> {
+impl<'a, K, Q, V, S> Sink<(K, V)> for RangeRefDriver<'a, K, Q, V, S>
+    where K: Key +'a, Q: PartialOrd<K>+'a, V: 'a, S: Sink<(K, V)>
+{
     #[inline(always)]
     fn consume(&mut self, item: (K, V)) {
         self.sink.consume(item)
@@ -80,14 +90,19 @@ impl<'a, K: Key +'a, Q: PartialOrd<K>, V> Sink<(K, V)> for RangeRefDriver<'a, K,
 }
 
 
-pub struct RangeDriver<'a, K: Key +'a, Q: PartialOrd<K>, V: 'a> {
+pub struct RangeDriver<K, Q, V, S>
+    where K: Key, Q: PartialOrd<K>, S: Sink<(K, V)>
+{
     range: Range<Q>,
-    sink: &'a mut Sink<(K, V)>
+    sink: S,
+    _ph: PhantomData<(K, V)>
 }
 
-impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeDriver<'a, K, Q, V> {
-    pub fn new(range: Range<Q>, sink: &'a mut Sink<(K, V)>) -> RangeDriver<K, Q, V> {
-        RangeDriver { range:range, sink: sink }
+impl<K, Q, V, S> RangeDriver<K, Q, V, S>
+    where K: Key, Q: PartialOrd<K>, S: Sink<(K, V)>
+{
+    pub fn new(range: Range<Q>, sink: S) -> RangeDriver<K, Q, V, S> {
+        RangeDriver { range:range, sink: sink, _ph: PhantomData }
     }
 
     pub fn from(&self) -> &Q {
@@ -99,7 +114,9 @@ impl<'a, K: Key +'a, Q: PartialOrd<K>, V> RangeDriver<'a, K, Q, V> {
     }
 }
 
-impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeDriver<'a, K, Q, V> {
+impl<K, Q, V, S> TraversalDriver<K, V> for RangeDriver<K, Q, V, S>
+    where K: Key, Q: PartialOrd<K>, S: Sink<(K, V)>
+{
     type Decision = RangeDecision;
 
     #[inline(always)]
@@ -111,38 +128,11 @@ impl<'a, K: Key +'a, Q: PartialOrd<K>, V> TraversalDriver<K, V> for RangeDriver<
     }
 }
 
-impl<'a, K: Key +'a, Q: PartialOrd<K>, V> Sink<(K, V)> for RangeDriver<'a, K, Q, V> {
+impl<K, Q, V, S> Sink<(K, V)> for RangeDriver<K, Q, V, S>
+    where K: Key, Q: PartialOrd<K>, S: Sink<(K, V)>
+{
     #[inline(always)]
     fn consume(&mut self, item: (K, V)) {
         self.sink.consume(item)
     }
 }
-
-//
-//#[inline(always)]
-//pub fn consume_unchecked<K: Key, V>(output: &mut Vec<(K, V)>, item: Entry<K, V>) {
-//    unsafe {
-//        let len = output.len();
-//        debug_assert!(len < output.capacity());
-//        output.set_len(len + 1);
-//        let p = output.get_unchecked_mut(len);
-//
-//        let entry: (K, V) = item.into();
-//        ptr::write(p, entry);
-//    }
-//}
-//
-//
-//#[inline(always)]
-//pub fn consume_ptr<K: Key, V>(output: &mut Vec<(K, V)>, src: *const Entry<K, V>) {
-//    unsafe {
-//        let len = output.len();
-//        debug_assert!(len < output.capacity());
-//        output.set_len(len + 1);
-//        let p = output.get_unchecked_mut(len);
-//
-//        // TODO: optimizer fails here, might want to change to "let tuple: (K,V) = mem::transmute(item)" (but that is not guaranteed to work)
-//        let entry = ptr::read(src);
-//        ptr::write(p, entry.into());
-//    }
-//}

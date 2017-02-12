@@ -4,17 +4,17 @@ use std::ptr;
 use std::marker::PhantomData;
 
 
-//impl<T> Sink<T> for Vec<T> {
-//    #[inline(always)] fn consume(&mut self, x: T) {
-//        self.push(x);
-//    }
-//}
+impl<T> Sink<T> for Vec<T> {
+    #[inline(always)] fn consume(&mut self, x: T) {
+        self.push(x);
+    }
+}
 
 
 
 #[derive(new)]
 pub struct UncheckedVecSink<T> {
-    pub output: Vec<T>
+    output: Vec<T>
 }
 
 impl<T> Sink<T> for UncheckedVecSink<T> {

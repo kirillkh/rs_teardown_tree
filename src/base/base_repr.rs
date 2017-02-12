@@ -370,7 +370,6 @@ impl<N: Node> TreeRepr<N> {
         let p: *const N = self.data.get_unchecked(idx);
 
         let node = ptr::read(&*p);
-//        consume_unchecked(sink, node.into_entry());
         sink.consume(node.into_tuple());
     }
 

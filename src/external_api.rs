@@ -17,7 +17,6 @@ mod plain {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
     use std::ops::Range;
-    use std::mem;
 
     #[cfg(test)] use base::{TreeRepr, Key};
     #[cfg(test)] use applied::plain_tree::PlNode;
@@ -30,14 +29,13 @@ mod plain {
 
     impl<K: Ord+Clone, V> TeardownTreeMap<K, V> {
         /// Creates a new `TeardownTreeMap` with the given set of items. The items can be given in
-        /// any order. Duplicate keys are allowed and supported.
+        /// any order. Duplicate keys are supported.
         #[inline]
         pub fn new(items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
             TeardownTreeMap { internal: PlTree::new(items) }
         }
 
-        /// Creates a new `TeardownTreeMap` with the given set of items. Duplicate keys are allowed
-        /// and supported.
+        /// Creates a new `TeardownTreeMap` with the given set of items. Duplicate keys are supported.
         /// **Note**: the items are assumed to be sorted!
         #[inline]
         pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
@@ -77,36 +75,36 @@ mod plain {
             self.internal.delete(query)
         }
 
-        /// Deletes all items inside the half-open `range` from the tree and passes them to the `sink`.
+        /// Deletes all items inside `range` from the tree and feeds them into `sink`.
         /// The items are returned in order.
         #[inline]
-        pub fn delete_range<Q, S>(&mut self, range: Range<Q>, sink: &mut S)
+        pub fn delete_range<Q, S>(&mut self, range: Range<Q>, sink: S)
             where Q: PartialOrd<K>, S: Sink<(K, V)>
         {
             self.internal.delete_range(range, sink)
         }
 
-        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
-        /// true and passes them to the `sink`. The items are returned in order.
+        /// Deletes all items inside `range` that match `filter` from the tree and feeds them into
+        /// `sink`. The items are returned in order.
         #[inline]
-        pub fn filter_range<Q, Flt, S>(&mut self, range: Range<Q>, filter: Flt, sink: &mut S)
+        pub fn filter_range<Q, Flt, S>(&mut self, range: Range<Q>, filter: Flt, sink: S)
             where Q: PartialOrd<K>, Flt: ItemFilter<K>, S: Sink<(K, V)>
         {
             self.internal.filter_range(range, filter, sink)
         }
 
-        /// Deletes all items inside the half-open `range` from the tree and passes them to the `sink`.
+        /// Deletes all items inside `range` from the tree and feeds them into `sink`.
         #[inline]
-        pub fn delete_range_ref<Q, S>(&mut self, range: Range<&Q>, sink: &mut S)
+        pub fn delete_range_ref<Q, S>(&mut self, range: Range<&Q>, sink: S)
             where Q: PartialOrd<K>, S: Sink<(K, V)>
         {
             self.internal.delete_range_ref(range, sink)
         }
 
-        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
-        /// true and passes them to the `sink`. The items are returned in order.
+        /// Deletes all items inside `range` that match `filter` from the tree and feeds them into
+        /// `sink`. The items are returned in order.
         #[inline]
-        pub fn filter_range_ref<Q, Flt, S>(&mut self, range: Range<&Q>, filter: Flt, sink: &mut S)
+        pub fn filter_range_ref<Q, Flt, S>(&mut self, range: Range<&Q>, filter: Flt, sink: S)
             where Q: PartialOrd<K>,
                   Flt: ItemFilter<K>,
                   S: Sink<(K, V)>
@@ -175,18 +173,16 @@ mod plain {
         map: TeardownTreeMap<T, ()>
     }
 
-    use ::sink::UncheckedVecSink;
     impl<T: Ord+Clone> TeardownTreeSet<T> {
         /// Creates a new `TeardownTreeSet` with the given set of items. The items can be given in any
-        /// order. Duplicates are allowed and supported.
+        /// order. Duplicates are supported.
         #[inline]
         pub fn new(items: Vec<T>) -> TeardownTreeSet<T> {
             let map_items = super::conv_to_tuple_vec(items);
             TeardownTreeSet { map: TeardownTreeMap::new(map_items) }
         }
 
-        /// Creates a new `TeardownTreeSet` with the given set of items. Duplicates are allowed and
-        /// supported.
+        /// Creates a new `TeardownTreeSet` with the given set of items. Duplicates are supported.
         /// **Note**: the items are assumed to be sorted!
         #[inline]
         pub fn with_sorted(sorted: Vec<T>) -> TeardownTreeSet<T> {
@@ -200,7 +196,7 @@ mod plain {
             self.map.contains_key(query)
         }
 
-        /// Executes a range query.
+        /// Executes a range query and feeds references to the matching items into `sink`.
         #[inline]
         pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: &mut S)
             where Q: PartialOrd<T>,
@@ -215,60 +211,47 @@ mod plain {
             self.map.delete(query).is_some()
         }
 
-        /// Deletes all items inside the half-open `range` from the tree and passes them to the `sink`.
+        /// Deletes all items inside `range` from the tree and feeds them into `sink`.
         /// The items are returned in order.
         #[inline]
-//        pub fn delete_range<Q, S>(&mut self, query: Range<Q>, sink: &mut S)
-//            where Q: PartialOrd<T>, S: Sink<T>
-        pub fn delete_range<Q>(&mut self, query: Range<Q>, sink: &mut UncheckedVecSink<T>)
-            where Q: PartialOrd<T>
+        pub fn delete_range<Q, S>(&mut self, query: Range<Q>, sink: S)
+            where Q: PartialOrd<T>, S: Sink<T>
         {
-//            let map_output = unsafe { mem::transmute(sink) };
-//            let mut map_sink = SinkAdapter::new(sink);
-//            self.map.delete_range(query, &mut map_sink)
-
-//            use ::sink::UncheckedVecRefSink;
-//            let mut map_sink: &mut UncheckedVecRefSink<(T, ())> = unsafe { mem::transmute(sink) };
-
-
-            let mut map_sink: &mut UncheckedVecSink<(T, ())> = unsafe { mem::transmute(sink) };
+            let map_sink = SinkAdapter::new(sink);
             self.map.delete_range(query, map_sink)
         }
 
-        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
-        /// true and passes them to the `sink`. The items are returned in order.
+        /// Deletes all items inside `range` that match `filter` from the tree and feeds them into
+        /// `sink`. The items are returned in order.
         #[inline]
-        pub fn filter_range<Q, Flt, S>(&mut self, range: Range<Q>, filter: Flt, sink: &mut S)
+        pub fn filter_range<Q, Flt, S>(&mut self, range: Range<Q>, filter: Flt, sink: S)
             where Q: PartialOrd<T>,
                   Flt: ItemFilter<T>,
                   S: Sink<T>
         {
-//            let map_output = unsafe { mem::transmute(sink) };
-            let mut map_sink = SinkAdapter::new(sink);
-            self.map.filter_range(range, filter, &mut map_sink)
+            let map_sink = SinkAdapter::new(sink);
+            self.map.filter_range(range, filter, map_sink)
         }
 
-        /// Deletes all items inside the half-open `range` from the tree and passes them to the `sink`.
+        /// Deletes all items inside `range` from the tree and feeds them into `sink`.
         #[inline]
-        pub fn delete_range_ref<Q, S>(&mut self, range: Range<&Q>, sink: &mut S)
+        pub fn delete_range_ref<Q, S>(&mut self, range: Range<&Q>, sink: S)
             where Q: PartialOrd<T>, S: Sink<T>
         {
-//            let map_output = unsafe { mem::transmute(sink) };
-            let mut map_sink = SinkAdapter::new(sink);
-            self.map.delete_range_ref(range, &mut map_sink)
+            let map_sink = SinkAdapter::new(sink);
+            self.map.delete_range_ref(range, map_sink)
         }
 
-        /// Deletes all items inside the half-open `range` from the tree for which filter.accept() returns
-        /// true and passes them to the `sink`. The items are returned in order.
+        /// Deletes all items inside `range` that match `filter` from the tree and feeds them into
+        /// `sink`. The items are returned in order.
         #[inline]
-        pub fn filter_range_ref<Q, Flt, S>(&mut self, range: Range<&Q>, filter: Flt, sink: &mut S)
+        pub fn filter_range_ref<Q, Flt, S>(&mut self, range: Range<&Q>, filter: Flt, sink: S)
             where Q: PartialOrd<T>,
                   Flt: ItemFilter<T>,
                   S: Sink<T>
         {
-//            let map_output = unsafe { mem::transmute(sink) };
-            let mut map_sink = SinkAdapter::new(sink);
-            self.map.filter_range_ref(range, filter, &mut map_sink)
+            let map_sink = SinkAdapter::new(sink);
+            self.map.filter_range_ref(range, filter, map_sink)
         }
 
         /// Returns the number of items in this tree.
@@ -323,7 +306,6 @@ mod plain {
 
 
 mod interval {
-    use std::mem;
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
@@ -345,7 +327,7 @@ mod interval {
 
     impl<Iv: Interval, V> IntervalTeardownTreeMap<Iv, V> {
         /// Creates a new `IntervalTeardownTreeMap` with the given set of intervals. The items can be
-        /// given in any order. Duplicates are allowed and supported.
+        /// given in any order. Duplicates are supported.
         #[inline]
         pub fn new(mut items: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
             items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -353,7 +335,7 @@ mod interval {
         }
 
         /// Creates a new `IntervalTeardownTreeMap` with the given set of intervals. Duplicates are
-        /// allowed and supported.
+        /// supported.
         /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         #[inline]
         pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
@@ -393,26 +375,24 @@ mod interval {
             self.internal.delete(query)
         }
 
-        /// Deletes all intervals that overlap with the `query` interval from the tree and passes them
-        /// to the `sink`. The items are returned in order.
+        /// Deletes all intervals that overlap with `query` from the tree and feeds them into `sink`.
+        /// The items are returned in order.
         #[inline]
-        pub fn delete_overlap<Q, S>(&mut self, query: &Q, sink: &mut S)
+        pub fn delete_overlap<Q, S>(&mut self, query: &Q, sink: S)
             where Q: Interval<K=Iv::K>, S: Sink<(Iv, V)>
         {
             self.internal.delete_overlap(query, sink)
         }
 
-        /// Deletes all intervals that overlap with the `query` interval and match the filter from
-        /// the tree and passes them to the `sink`. The items are returned in order.
+        /// Deletes all intervals that overlap with `query` and match the filter from the tree and
+        /// feeds them into `sink`. The items are returned in order.
         #[inline]
-        pub fn filter_overlap<Q, Flt, S>(&mut self, query: &Q, f: Flt, sink: &mut S)
+        pub fn filter_overlap<Q, Flt, S>(&mut self, query: &Q, f: Flt, sink: S)
             where Q: Interval<K=Iv::K>,
                   Flt: ItemFilter<Iv>,
                   S: Sink<(Iv, V)>
         {
-//            let map_output = unsafe { mem::transmute(sink) };
-//            let mut map_sink = SinkAdapter::new(sink);
-            self.internal.filter_overlap(query, f, sink)
+            self.internal.filter_overlap(query, sink, f)
         }
 
         /// Returns the number of items in this tree.
@@ -469,15 +449,15 @@ mod interval {
 
     impl<Iv: Interval> IntervalTeardownTreeSet<Iv> {
         /// Creates a new `IntervalTeardownTreeSet` with the given set of intervals. The items can be
-        /// given in any order. Duplicates are allowed and supported.
+        /// given in any order. Duplicates are supported.
         #[inline]
         pub fn new(items: Vec<Iv>) -> IntervalTeardownTreeSet<Iv> {
             let map_items = super::conv_to_tuple_vec(items);
             IntervalTeardownTreeSet { map: IntervalTeardownTreeMap::new(map_items) }
         }
 
-        /// Creates a new `IntervalTeardownTreeSet` with the given set of items. Duplicates are allowed
-        /// and supported.
+        /// Creates a new `IntervalTeardownTreeSet` with the given set of intervals. Duplicates are
+        /// supported.
         /// **Note**: the items are assumed to be sorted!
         #[inline]
         pub fn with_sorted(sorted: Vec<Iv>) -> IntervalTeardownTreeSet<Iv> {
@@ -511,28 +491,26 @@ mod interval {
             self.map.delete(query).is_some()
         }
 
-        /// Deletes all intervals that overlap with the `query` interval from the tree and and passes
-        /// them to the `sink`. The items are returned in order.
+        /// Deletes all intervals that overlap with `query` from the tree and and feeds them into
+        /// `sink`. The items are returned in order.
         #[inline]
-        pub fn delete_overlap<Q, S>(&mut self, query: &Q, sink: &mut S)
+        pub fn delete_overlap<Q, S>(&mut self, query: &Q, sink: S)
             where Q: Interval<K=Iv::K>, S: Sink<Iv>
         {
-//            let map_output = unsafe { mem::transmute(sink) };
-            let mut map_sink = SinkAdapter::new(sink);
-            self.map.delete_overlap(query, &mut map_sink)
+            let map_sink = SinkAdapter::new(sink);
+            self.map.delete_overlap(query, map_sink)
         }
 
-        /// Deletes all intervals that overlap with the `query` interval and match the filter from
-        /// the tree and passes them to the `sink`. The items are returned in order.
+        /// Deletes all intervals that overlap with `query` and match the filter from the tree and
+        /// feeds them into `sink`. The items are returned in order.
         #[inline]
-        pub fn filter_overlap<Q, Flt, S>(&mut self, query: &Q, f: Flt, sink: &mut S)
+        pub fn filter_overlap<Q, Flt, S>(&mut self, query: &Q, f: Flt, sink: S)
             where Q: Interval<K=Iv::K>,
                   Flt: ItemFilter<Iv>,
                   S: Sink<Iv>
         {
-//            let map_output = unsafe { mem::transmute(sink) };
-            let mut map_sink = SinkAdapter::new(sink);
-            self.map.filter_overlap(query, f, &mut map_sink)
+            let map_sink = SinkAdapter::new(sink);
+            self.map.filter_overlap(query, f, map_sink)
         }
 
 
@@ -610,21 +588,20 @@ fn conv_to_tuple_vec<K>(items: Vec<K>) -> Vec<(K, ())> {
 
 
 
-struct SinkAdapter<'b, T, S: Sink<T>+'b> {
-    sink: &'b mut S,
+struct SinkAdapter<T, S: Sink<T>> {
+    sink: S,
     _ph: PhantomData<T>
 }
 
-impl<'b, T, S: Sink<T>+'b> SinkAdapter<'b, T, S> {
+impl<T, S: Sink<T>> SinkAdapter<T, S> {
     #[inline]
-    fn new(sink: &'b mut S) -> Self {
+    fn new(sink: S) -> Self {
         SinkAdapter { sink: sink, _ph: PhantomData }
     }
 }
 
-impl<'b, T, S: Sink<T>+'b> Sink<(T, ())> for SinkAdapter<'b, T, S> {
-    #[inline]
-//    fn consume(&mut self, entry: (T, ())) {
+impl<T, S: Sink<T>> Sink<(T, ())> for SinkAdapter<T, S> {
+    #[inline(always)]
     fn consume(&mut self, entry: (T, ())) {
         self.sink.consume(entry.0)
     }

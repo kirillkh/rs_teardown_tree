@@ -19,7 +19,7 @@ use std::ptr;
 
 
 pub trait Sink<T> {
-    #[inline(always)] fn consume(&mut self, x: T);
+    fn consume(&mut self, x: T);
 }
 
 

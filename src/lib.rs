@@ -25,6 +25,7 @@ pub use self::base::util;
 
 #[cfg(test)]
 mod test_delete_plain {
+    use base::sink::UncheckedVecRefSink;
     use base::{ItemFilter, NoopFilter};
     use base::util::make_teardown_seq;
     use base::validation::{check_bst_del_range, check_integrity_del_range};
@@ -99,7 +100,7 @@ mod test_delete_plain {
         where Flt: ItemFilter<usize>+Clone+Debug
     {
         let mut tree = orig.clone();
-        tree.filter_range(search.clone(), filter.clone(), output);
+        tree.filter_range(search.clone(), filter.clone(), UncheckedVecRefSink::new(output));
         check_tree(orig.internal(), tree.internal_mut(), &search, filter, output);
         tree
     }
@@ -204,7 +205,7 @@ mod test_delete_plain {
                 let mut tree_mod = tree.clone();
 //                println!("tree={:?}, from={}, to={}, {}", &tree, i, j, &tree);
                 output.truncate(0);
-                tree_mod.delete_range(i..j, &mut output);
+                tree_mod.delete_range(i..j, UncheckedVecRefSink::new(&mut output));
                 let output = conv_from_tuple_vec(&mut output);
                 exhaustive_check(n, i..j, output, tree_mod, &tree, &NoopFilter);
             }
@@ -442,6 +443,7 @@ mod test_delete_interval {
     use std::cmp;
     use std::fmt::Debug;
 
+    use base::sink::UncheckedVecRefSink;
     use base::{Node, ItemFilter, NoopFilter, lefti, righti};
     use base::validation::{check_bst_del_range, check_integrity_del_range, gen_tree_keys};
     use base::util::make_teardown_seq;
@@ -506,7 +508,7 @@ mod test_delete_interval {
         let mut tree = orig.clone();
         {
             let query = KeyInterval::from_range(&rm);
-            tree.filter_overlap(&query, filter.clone(), output);
+            tree.filter_overlap(&query, filter.clone(), UncheckedVecRefSink::new(output));
             let (mut orig, mut tree) = (orig.internal_mut(), tree.internal_mut());
 
             check_tree(&mut *orig, &mut tree, &rm, &mut filter, output);
