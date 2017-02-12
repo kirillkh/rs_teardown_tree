@@ -175,6 +175,7 @@ mod plain {
         map: TeardownTreeMap<T, ()>
     }
 
+    use ::sink::UncheckedVecSink;
     impl<T: Ord+Clone> TeardownTreeSet<T> {
         /// Creates a new `TeardownTreeSet` with the given set of items. The items can be given in any
         /// order. Duplicates are allowed and supported.
@@ -217,8 +218,10 @@ mod plain {
         /// Deletes all items inside the half-open `range` from the tree and passes them to the `sink`.
         /// The items are returned in order.
         #[inline]
-        pub fn delete_range<Q, S>(&mut self, query: Range<Q>, sink: &mut S)
-            where Q: PartialOrd<T>, S: Sink<T>
+//        pub fn delete_range<Q, S>(&mut self, query: Range<Q>, sink: &mut S)
+//            where Q: PartialOrd<T>, S: Sink<T>
+        pub fn delete_range<Q>(&mut self, query: Range<Q>, sink: &mut UncheckedVecSink<T>)
+            where Q: PartialOrd<T>
         {
 //            let map_output = unsafe { mem::transmute(sink) };
 //            let mut map_sink = SinkAdapter::new(sink);
@@ -227,7 +230,7 @@ mod plain {
 //            use ::sink::UncheckedVecRefSink;
 //            let mut map_sink: &mut UncheckedVecRefSink<(T, ())> = unsafe { mem::transmute(sink) };
 
-            use ::sink::UncheckedVecSink;
+
             let mut map_sink: &mut UncheckedVecSink<(T, ())> = unsafe { mem::transmute(sink) };
             self.map.delete_range(query, map_sink)
         }

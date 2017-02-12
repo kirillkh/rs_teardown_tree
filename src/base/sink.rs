@@ -4,11 +4,11 @@ use std::ptr;
 use std::marker::PhantomData;
 
 
-impl<T> Sink<T> for Vec<T> {
-    #[inline] fn consume(&mut self, x: T) {
-        self.push(x);
-    }
-}
+//impl<T> Sink<T> for Vec<T> {
+//    #[inline(always)] fn consume(&mut self, x: T) {
+//        self.push(x);
+//    }
+//}
 
 
 
@@ -54,7 +54,7 @@ impl<T, S> RefCopyingSink<T, S>
 impl<'a, T, S> Sink<&'a T> for RefCopyingSink<T, S>
     where T: Copy+'a, S: Sink<T>
 {
-    #[inline] fn consume(&mut self, x: &'a T) {
+    #[inline(always)] fn consume(&mut self, x: &'a T) {
         self.sink.consume(*x);
     }
 }
@@ -77,7 +77,7 @@ impl<T, S> RefCloningSink<T, S>
 impl<'a, T, S> Sink<&'a T> for RefCloningSink<T, S>
     where T: Clone+'a, S: Sink<T>
 {
-    #[inline] fn consume(&mut self, x: &'a T) {
+    #[inline(always)] fn consume(&mut self, x: &'a T) {
         self.sink.consume(x.clone());
     }
 }

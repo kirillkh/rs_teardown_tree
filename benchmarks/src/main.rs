@@ -188,7 +188,7 @@ mod bench_delete_range {
     use treap::TreapMap;
     use teardown_tree::{IntervalTeardownTreeSet, KeyInterval, TeardownTreeRefill, TeardownTreeSet, NoopFilter};
     use teardown_tree::util::make_teardown_seq;
-    use teardown_tree::sink::UncheckedVecRefSink;
+    use teardown_tree::sink::{UncheckedVecRefSink, UncheckedVecSink};
     use super::nanos;
 
     pub type Tree = TeardownTreeSet<usize>;
@@ -230,43 +230,43 @@ mod bench_delete_range {
     }
 
     pub fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
-        let mut rng = XorShiftRng::from_seed([1,2,3,4]);
-        let mut elapsed_nanos = 0;
-
-        let elems: Vec<_> = (1..n+1).collect();
-
-        let tree = TeardownTreeBulk(Tree::new(elems));
-        let mut copy = tree.clone();
-        let mut output = Vec::with_capacity(tree.0.size());
-
-        for _ in 0..iters {
-            let keys = {
-                let mut pool: Vec<_> = (1..n+1).collect();
-                let mut keys = vec![];
-
-                for i in 0..rm_items {
-                    let r = rng.gen_range(0, n-i);
-                    let next = pool.swap_remove(r);
-                    keys.push(next);
-                }
-
-                keys
-            };
-
-            copy.rfill(&tree);
-
-
-            let start = time::SystemTime::now();
-            for i in 0..rm_items {
-                output.truncate(0);
-                let x = copy.0.delete_range(keys[i]..keys[i]+1, &mut output);
-                black_box(x);
-            }
-            let elapsed = start.elapsed().unwrap();
-            elapsed_nanos += nanos(elapsed);
-        }
-
-        println!("average time to delete {} random elements from TeardownTree using delete_range(), {} elements: {}ns, total: {}ms", rm_items, n, elapsed_nanos/iters, elapsed_nanos/1000000)
+//        let mut rng = XorShiftRng::from_seed([1,2,3,4]);
+////        let mut elapsed_nanos = 0;
+////
+////        let elems: Vec<_> = (1..n+1).collect();
+////
+////        let tree = TeardownTreeBulk(Tree::new(elems));
+////        let mut copy = tree.clone();
+////        let mut output = Vec::with_capacity(tree.0.size());
+////
+////        for _ in 0..iters {
+////            let keys = {
+////                let mut pool: Vec<_> = (1..n+1).collect();
+////                let mut keys = vec![];
+////
+////                for i in 0..rm_items {
+////                    let r = rng.gen_range(0, n-i);
+////                    let next = pool.swap_remove(r);
+////                    keys.push(next);
+////                }
+////
+////                keys
+////            };
+////
+////            copy.rfill(&tree);
+////
+////
+////            let start = time::SystemTime::now();
+////            for i in 0..rm_items {
+////                output.truncate(0);
+//////                let x = copy.0.delete_range(keys[i]..keys[i]+1, &mut output);
+//////                black_box(x);
+////            }
+////            let elapsed = start.elapsed().unwrap();
+////            elapsed_nanos += nanos(elapsed);
+////        }
+//
+////        println!("average time to delete {} random elements from TeardownTree using delete_range(), {} elements: {}ns, total: {}ms", rm_items, n, elapsed_nanos/iters, elapsed_nanos/1000000)
     }
 
 
@@ -390,7 +390,14 @@ mod bench_delete_range {
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
 //            let mut sink = UncheckedVecRefSink::new(output);
-            self.0.delete_range(range, output);
+
+//            self.0.delete_range(range, output);
+
+//            let mut sink = UncheckedVecSink::new(output);
+            unsafe {
+                let sink: &mut UncheckedVecSink<usize> = ::std::mem::transmute(output);
+                self.0.delete_range(range, sink);
+            }
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -724,7 +731,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), output);
+//            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -781,7 +788,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, output);
+//            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, output);
         }
 
         fn rfill(&mut self, master: &Self::Master) {
