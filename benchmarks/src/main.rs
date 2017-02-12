@@ -188,6 +188,7 @@ mod bench_delete_range {
     use treap::TreapMap;
     use teardown_tree::{IntervalTeardownTreeSet, KeyInterval, TeardownTreeRefill, TeardownTreeSet, NoopFilter};
     use teardown_tree::util::make_teardown_seq;
+    use teardown_tree::sink::{UncheckedVecRefSink};
     use super::nanos;
 
     pub type Tree = TeardownTreeSet<usize>;
@@ -258,7 +259,7 @@ mod bench_delete_range {
             let start = time::SystemTime::now();
             for i in 0..rm_items {
                 output.truncate(0);
-                let x = copy.0.delete_range(keys[i]..keys[i]+1, &mut output);
+                let x = copy.0.delete_range(keys[i]..keys[i]+1, UncheckedVecRefSink::new(&mut output));
                 black_box(x);
             }
             let elapsed = start.elapsed().unwrap();
@@ -388,7 +389,7 @@ mod bench_delete_range {
         type T = usize;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
-            self.0.delete_range(range, output);
+            self.0.delete_range(range, UncheckedVecRefSink::new(output));
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -722,7 +723,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), output);
+            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), UncheckedVecRefSink::new(output));
         }
 
         fn rfill(&mut self, master: &Self::Master) {
@@ -779,7 +780,7 @@ mod bench_delete_range {
         type T = KeyInterval<usize>;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, output);
+            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, UncheckedVecRefSink::new(output));
         }
 
         fn rfill(&mut self, master: &Self::Master) {

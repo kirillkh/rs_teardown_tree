@@ -17,13 +17,15 @@ mod external_api;
 mod rust_bench;
 
 pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
-pub use self::base::{Traverse, ItemFilter, NoopFilter, CloningVecSink, CopyingVecSink};
+pub use self::base::{Traverse, ItemFilter, NoopFilter, Sink};
+pub use self::base::sink;
 pub use self::base::util;
 
 
 
 #[cfg(test)]
 mod test_delete_plain {
+    use base::sink::UncheckedVecRefSink;
     use base::{ItemFilter, NoopFilter};
     use base::util::make_teardown_seq;
     use base::validation::{check_bst_del_range, check_integrity_del_range};
@@ -98,7 +100,7 @@ mod test_delete_plain {
         where Flt: ItemFilter<usize>+Clone+Debug
     {
         let mut tree = orig.clone();
-        tree.filter_range(search.clone(), filter.clone(), output);
+        tree.filter_range(search.clone(), filter.clone(), UncheckedVecRefSink::new(output));
         check_tree(orig.internal(), tree.internal_mut(), &search, filter, output);
         tree
     }
@@ -203,7 +205,7 @@ mod test_delete_plain {
                 let mut tree_mod = tree.clone();
 //                println!("tree={:?}, from={}, to={}, {}", &tree, i, j, &tree);
                 output.truncate(0);
-                tree_mod.delete_range(i..j, &mut output);
+                tree_mod.delete_range(i..j, UncheckedVecRefSink::new(&mut output));
                 let output = conv_from_tuple_vec(&mut output);
                 exhaustive_check(n, i..j, output, tree_mod, &tree, &NoopFilter);
             }
@@ -336,7 +338,8 @@ mod test_query_plain {
     use applied::interval::{KeyInterval, Interval};
     use applied::plain_tree::{PlTree, PlNode};
     use external_api::{TeardownTreeSet, TeardownTreeMap, TreeWrapperAccess};
-    use base::{CopyingVecSink, TreeRepr, Traverse};
+    use base::{TreeRepr, Traverse};
+    use base::sink::{RefCopyingSink};
     use super::test_delete_plain::test_exhaustive_n;
     use super::common::{exhaustive_range_check, mk_prebuilt, check_output_sorted, test_exhaustive_items};
 
@@ -359,12 +362,12 @@ mod test_query_plain {
     fn query_range_exhaustive_with_tree(tree: Tree) {
         let tree = TeardownTreeSet::from_internal(tree);
         let n = tree.size();
-        let mut sink = CopyingVecSink::new(Vec::with_capacity(n));
+        let mut sink = RefCopyingSink::new(Vec::with_capacity(n));
         for i in 0..n+2 {
             for j in i..n+2 {
-                sink.output.truncate(0);
+                sink.sink.truncate(0);
                 tree.query_range(i..j, &mut sink);
-                exhaustive_range_check(n, &(i..j), &mut sink.output, tree.internal());
+                exhaustive_range_check(n, &(i..j), &mut sink.sink, tree.internal());
             }
         }
     }
@@ -408,10 +411,10 @@ mod test_query_plain {
         let tree = TeardownTreeSet::from_internal(tree);
         let output = Vec::with_capacity(tree.size());
 
-        let mut sink = CopyingVecSink::new(output);
+        let mut sink = RefCopyingSink::new(output);
         tree.query_range(range.clone(), &mut sink);
         let search = KeyInterval::from_range(&range);
-        check_output_sorted(&sink.output, &*tree.internal(), &search);
+        check_output_sorted(&sink.sink, &*tree.internal(), &search);
 
         let mut expected = vec![];
         TreeRepr::traverse_inorder(&*tree.internal(), 0, &mut (), |this, _, idx| {
@@ -421,7 +424,7 @@ mod test_query_plain {
             false
         });
 
-        assert_eq!(sink.output, expected, "range={:?}, tree={}", &range, &tree);
+        assert_eq!(sink.sink, expected, "range={:?}, tree={}", &range, &tree);
     }
 
     #[test]
@@ -440,6 +443,7 @@ mod test_delete_interval {
     use std::cmp;
     use std::fmt::Debug;
 
+    use base::sink::UncheckedVecRefSink;
     use base::{Node, ItemFilter, NoopFilter, lefti, righti};
     use base::validation::{check_bst_del_range, check_integrity_del_range, gen_tree_keys};
     use base::util::make_teardown_seq;
@@ -504,7 +508,7 @@ mod test_delete_interval {
         let mut tree = orig.clone();
         {
             let query = KeyInterval::from_range(&rm);
-            tree.filter_overlap(&query, filter.clone(), output);
+            tree.filter_overlap(&query, filter.clone(), UncheckedVecRefSink::new(output));
             let (mut orig, mut tree) = (orig.internal_mut(), tree.internal_mut());
 
             check_tree(&mut *orig, &mut tree, &rm, &mut filter, output);
@@ -817,7 +821,7 @@ mod test_query_interval {
     use applied::interval::{KeyInterval};
     use applied::interval_tree::{IvTree};
     use external_api::{IntervalTeardownTreeSet, TreeWrapperAccess};
-    use base::{CopyingVecSink};
+    use base::sink::{RefCopyingSink};
     use super::common::{exhaustive_range_check, test_exhaustive_items};
 
     type Tree = IvTree<usize, ()>;
@@ -838,13 +842,13 @@ mod test_query_interval {
     fn query_overlap_exhaustive_with_tree(tree: Tree) {
         let tree = IntervalTeardownTreeSet::from_internal(tree);
         let n = tree.size();
-        let mut sink = CopyingVecSink::new(Vec::with_capacity(n));
+        let mut sink = RefCopyingSink::new(Vec::with_capacity(n));
         for i in 0..n+2 {
             for j in i..n+2 {
                 let tree_mod: IntervalTeardownTreeSet<_> = tree.clone();
-                sink.output.truncate(0);
+                sink.sink.truncate(0);
                 tree_mod.query_overlap(&KeyInterval::new(i,j), &mut sink);
-                exhaustive_range_check(n, &(i..j), &mut sink.output, tree.internal());
+                exhaustive_range_check(n, &(i..j), &mut sink.sink, tree.internal());
             }
         }
     }

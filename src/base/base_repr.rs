@@ -1,4 +1,4 @@
-use base::{Node, Entry, lefti, righti, parenti, consume_unchecked, SlotStack};
+use base::{Node, Entry, Sink, lefti, righti, parenti, SlotStack};
 use base::bulk_delete::DeleteRangeCache;
 use std::fmt::{Debug, Formatter};
 use std::fmt;
@@ -361,14 +361,16 @@ impl<N: Node> TreeRepr<N> {
     }
 
     #[inline(always)]
-    pub unsafe fn move_to(&mut self, idx: usize, output: &mut Vec<(N::K, N::V)>) {
+    pub unsafe fn move_to<S>(&mut self, idx: usize, sink: &mut S)
+        where S: Sink<(N::K, N::V)>
+    {
         debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
         *self.mask.get_unchecked_mut(idx) = false;
         self.size -= 1;
         let p: *const N = self.data.get_unchecked(idx);
 
         let node = ptr::read(&*p);
-        consume_unchecked(output, node.into_entry());
+        sink.consume(node.into_tuple());
     }
 
     #[inline(always)]

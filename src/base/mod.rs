@@ -3,8 +3,10 @@ mod bulk_delete;
 mod unsafe_stack;
 mod base_repr;
 mod node;
+
 pub mod util;
 pub mod drivers;
+pub mod sink;
 
 pub use self::slot_stack::*;
 pub use self::bulk_delete::*;
@@ -14,6 +16,11 @@ pub use self::base_repr::*;
 pub use self::node::*;
 
 use std::ptr;
+
+
+pub trait Sink<T> {
+    fn consume(&mut self, x: T);
+}
 
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
@@ -49,43 +56,6 @@ impl<N: Node> TeardownTreeRefill for TreeRepr<N> where N::K: Copy, N::V: Copy {
 //            }
 //    }
 //}
-
-
-pub trait Sink<T> {
-    #[inline] fn consume(&mut self, x: T);
-}
-
-
-impl<T> Sink<T> for Vec<T> {
-    #[inline] fn consume(&mut self, x: T) {
-        self.push(x);
-    }
-}
-
-
-#[derive(new)]
-pub struct CopyingVecSink<T: Key+Copy> {
-    pub output: Vec<T>
-}
-
-impl<'a, T: Key+Copy+'a> Sink<&'a T> for CopyingVecSink<T> {
-    #[inline] fn consume(&mut self, x: &'a T) {
-        self.output.push(*x);
-    }
-}
-
-
-#[derive(new)]
-pub struct CloningVecSink<T: Key> {
-    pub output: Vec<T>
-}
-
-impl<'a, T: Key+'a> Sink<&'a T> for CloningVecSink<T> {
-    #[inline] fn consume(&mut self, x: &'a T) {
-        self.output.push(x.clone());
-    }
-}
-
 
 
 

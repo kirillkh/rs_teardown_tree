@@ -1,7 +1,6 @@
 use applied::AppliedTree;
 use applied::interval::{Interval, IvNode};
-use base::{TreeRepr, TeardownTreeRefill, Sink, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
-use base::drivers::{consume_unchecked};
+use base::{TreeRepr, Sink, NoopFilter, Node, Entry, BulkDeleteCommon, ItemVisitor, ItemFilter, lefti, righti, parenti};
 
 use std::ops::{Deref, DerefMut};
 use std::fmt::{Debug, Display, Formatter};
@@ -13,6 +12,7 @@ pub struct IvTree<Iv: Interval, V> {
     pub repr: UnsafeCell<TreeRepr<IvNode<Iv, V>>>,
 }
 
+//---- constructors and helpers --------------------------------------------------------------------
 impl<Iv: Interval, V> IvTree<Iv, V> {
     // assumes a contiguous layout of nodes (no holes)
     fn init_maxb(&mut self) {
@@ -27,30 +27,136 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         }
     }
 
+    fn repr(&self) -> &TreeRepr<IvNode<Iv, V>> {
+        unsafe { &*self.repr.get() }
+    }
+
+    fn repr_mut(&mut self) -> &mut TreeRepr<IvNode<Iv, V>> {
+        unsafe { &mut *self.repr.get() }
+    }
+
+
+    #[inline]
+    fn update_maxb(&mut self, idx: usize) {
+        let node = self.node_mut_unsafe(idx);
+
+        let left_self_maxb =
+        if self.has_left(idx) {
+            cmp::max(&self.left(idx).maxb, node.key.b())
+        } else {
+            node.key.b()
+        }.clone();
+        node.maxb =
+            if self.has_right(idx) {
+                cmp::max(self.right(idx).maxb.clone(), left_self_maxb)
+            } else {
+                left_self_maxb
+            };
+    }
+
+    #[inline]
+    fn update_ancestors_after_delete(&mut self, mut idx: usize, idx_to: usize, removed_b: &Iv::K) {
+        while idx != idx_to {
+            idx = parenti(idx);
+            if removed_b == &self.node(idx).maxb {
+                self.update_maxb(idx);
+            } else {
+                break;
+            }
+        }
+    }
+}
+
+//---- single-item queries -------------------------------------------------------------------------
+impl<Iv: Interval, V> IvTree<Iv, V> {
     /// Deletes the item with the given key from the tree and returns it (or None).
     #[inline]
     pub fn delete<Q>(&mut self, query: &Q) -> Option<V>
         where Q: PartialOrd<Iv>
     {
-        self.work(NoopFilter, |tree| tree.delete(query))
+        let idx = self.index_of(query);
+        if self.is_nil(idx) {
+            None
+        } else {
+            let entry = self.delete_idx(idx);
+            self.update_ancestors_after_delete(idx, 0, &entry.key.b());
+            Some(entry.val)
+        }
     }
 
     #[inline]
-    pub fn delete_overlap<Q>(&mut self, query: &Q, output: &mut Vec<(Iv, V)>)
-        where Q: Interval<K=Iv::K>
+    fn delete_idx(&mut self, idx: usize) -> Entry<Iv, V> {
+        debug_assert!(!self.is_nil(idx));
+
+        let repl_entry = if self.has_left(idx) {
+            self.delete_max(lefti(idx))
+        } else if self.has_right(idx) {
+            self.delete_min(righti(idx))
+        } else {
+            let IvNode{entry, ..} = self.take(idx);
+            return entry;
+        };
+
+        let entry = mem::replace(&mut self.node_mut(idx).entry, repl_entry);
+        self.update_maxb(idx);
+        entry
+    }
+
+    #[inline]
+    fn delete_max(&mut self, idx: usize) -> Entry<Iv, V> {
+        let max_idx = self.find_max(idx);
+        let entry = if self.has_left(max_idx) {
+            let repl_entry = self.delete_max(lefti(max_idx));
+            let entry = mem::replace(&mut self.node_mut(max_idx).entry, repl_entry);
+            self.update_maxb(max_idx);
+            entry
+        } else {
+            let IvNode{entry, ..} = self.take(max_idx);
+            entry
+        };
+
+        self.update_ancestors_after_delete(max_idx, idx, &entry.key.b());
+        entry
+    }
+
+    #[inline]
+    fn delete_min(&mut self, idx: usize) -> Entry<Iv, V> {
+        let min_idx = self.find_min(idx);
+        let entry = if self.has_right(min_idx) {
+            let repl_entry = self.delete_min(righti(min_idx));
+            let entry = mem::replace(&mut self.node_mut(min_idx).entry, repl_entry);
+            self.update_maxb(min_idx);
+            entry
+        } else {
+            let IvNode{entry, ..} = self.take(min_idx);
+            entry
+        };
+
+        self.update_ancestors_after_delete(min_idx, idx, &entry.key.b());
+        entry
+    }
+}
+
+//---- range queries -------------------------------------------------------------------------------
+impl<Iv: Interval, V> IvTree<Iv, V> {
+    #[inline]
+    pub fn delete_overlap<Q, S>(&mut self, query: &Q, sink: S)
+        where Q: Interval<K=Iv::K>, S: Sink<(Iv, V)>
     {
-        self.filter_overlap(query, NoopFilter, output)
+        self.filter_overlap(query, sink, NoopFilter)
     }
 
     #[inline]
-    pub fn filter_overlap<Q, Flt>(&mut self, query: &Q, filter: Flt, output: &mut Vec<(Iv, V)>)
+    pub fn filter_overlap<Q, Flt, S>(&mut self, query: &Q, sink: S, filter: Flt)
         where Q: Interval<K=Iv::K>,
-              Flt: ItemFilter<Iv>
+              Flt: ItemFilter<Iv>,
+              S: Sink<(Iv, V)>
     {
-        self.work(filter, |worker: &mut IvWorker<Iv,V,Flt>| worker.filter_overlap(query, output))
+        self.work(sink, filter, |worker: &mut IvWorker<Iv,V,S,Flt>| worker.filter_overlap(query))
     }
 
 
+    // TODO: implement via Worker, so that we don't have to pay the price for dereferencing sink
     pub fn query_overlap_rec<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: &mut S)
         where Q: Interval<K=Iv::K>,
               S: Sink<&'a Entry<Iv, V>>
@@ -96,14 +202,16 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
 //    }
 
     #[inline]
-    fn work<Flt, F, R>(&mut self, filter: Flt, mut f: F) -> R where Flt: ItemFilter<Iv>,
-                                                                    F: FnMut(&mut IvWorker<Iv,V,Flt>) -> R
+    fn work<S, Flt, F, R>(&mut self, sink: S, filter: Flt, mut f: F) -> R
+        where S: Sink<(Iv, V)>,
+              Flt: ItemFilter<Iv>,
+              F: FnMut(&mut IvWorker<Iv,V,S,Flt>) -> R
     {
         let repr: TreeRepr<IvNode<Iv, V>> = unsafe {
             ptr::read(self.repr.get())
         };
 
-        let mut worker = IvWorker::new(repr, filter);
+        let mut worker = IvWorker::new(repr, sink, filter);
         let result = f(&mut worker);
 
         unsafe {
@@ -112,15 +220,6 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         }
 
         result
-    }
-
-
-    fn repr(&self) -> &TreeRepr<IvNode<Iv, V>> {
-        unsafe { &*self.repr.get() }
-    }
-
-    fn repr_mut(&mut self) -> &mut TreeRepr<IvNode<Iv, V>> {
-        unsafe { &mut *self.repr.get() }
     }
 }
 
@@ -206,73 +305,26 @@ impl<Iv: Interval, V: Clone> Clone for IvTree<Iv, V> {
 
 
 
-pub struct IvWorker<Iv: Interval, V, Flt> where Flt: ItemFilter<Iv> {
+#[derive(new)]
+pub struct IvWorker<Iv, V, S, Flt>
+    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+{
     repr: TreeRepr<IvNode<Iv, V>>,
-    filter: Flt
+    sink: S,
+    filter: Flt,
 }
 
-impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
-    /// Constructs a new FilterTree
-    pub fn new(repr: TreeRepr<IvNode<Iv, V>>, filter: Flt) -> Self {
-        IvWorker { repr:repr, filter:filter }
-    }
-
-    /// Deletes the item with the given key from the tree and returns it (or None).
+impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
+    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+{
     #[inline]
-    pub fn delete<Q>(&mut self, query: &Q) -> Option<V>
-        where Q: PartialOrd<Iv>
-    {
-        let idx = self.index_of(query);
-        if self.is_nil(idx) {
-            None
-        } else {
-            let entry = self.delete_idx(idx);
-            self.update_ancestors_after_delete(idx, 0, &entry.key.b());
-            Some(entry.val)
-        }
-    }
-
-    #[inline]
-    pub fn filter_overlap<Q>(&mut self, query: &Q, output: &mut Vec<(Iv, V)>)
+    pub fn filter_overlap<Q>(&mut self, query: &Q)
         where Q: Interval<K=Iv::K>
     {
         if self.size() != 0 {
-            output.reserve(self.size());
             UpdateMax::visit(self, 0, move |this, _|
-                this.filter_overlap_ivl_rec(query, 0, false, output)
+                this.filter_overlap_ivl_rec(query, 0, false)
             )
-        }
-    }
-
-
-
-    #[inline]
-    fn update_maxb(&mut self, idx: usize) {
-        let node = self.node_mut_unsafe(idx);
-
-        let left_self_maxb =
-            if self.has_left(idx) {
-                cmp::max(&self.left(idx).maxb, node.key.b())
-            } else {
-                node.key.b()
-            }.clone();
-        node.maxb =
-            if self.has_right(idx) {
-                cmp::max(self.right(idx).maxb.clone(), left_self_maxb)
-            } else {
-                left_self_maxb
-            };
-    }
-
-    #[inline]
-    fn update_ancestors_after_delete(&mut self, mut idx: usize, idx_to: usize, removed_b: &Iv::K) {
-        while idx != idx_to {
-            idx = parenti(idx);
-            if removed_b == &self.node(idx).maxb {
-                self.update_maxb(idx);
-            } else {
-                break;
-            }
         }
     }
 
@@ -400,62 +452,8 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 //        replacement_entry
 //    }
 
-    #[inline]
-    fn delete_idx(&mut self, idx: usize) -> Entry<Iv, V> {
-        debug_assert!(!self.is_nil(idx));
-
-        let repl_entry = if self.has_left(idx) {
-            self.delete_max(lefti(idx))
-        } else if self.has_right(idx) {
-            self.delete_min(righti(idx))
-        } else {
-            let IvNode{entry, ..} = self.take(idx);
-            return entry;
-        };
-
-        let entry = mem::replace(&mut self.node_mut(idx).entry, repl_entry);
-        self.update_maxb(idx);
-        entry
-    }
-
-    #[inline]
-    fn delete_max(&mut self, idx: usize) -> Entry<Iv, V> {
-        let max_idx = self.find_max(idx);
-        let entry = if self.has_left(max_idx) {
-            let repl_entry = self.delete_max(lefti(max_idx));
-            let entry = mem::replace(&mut self.node_mut(max_idx).entry, repl_entry);
-            self.update_maxb(max_idx);
-            entry
-        } else {
-            let IvNode{entry, ..} = self.take(max_idx);
-            entry
-        };
-
-        self.update_ancestors_after_delete(max_idx, idx, &entry.key.b());
-        entry
-    }
-
-    #[inline]
-    fn delete_min(&mut self, idx: usize) -> Entry<Iv, V> {
-        let min_idx = self.find_min(idx);
-        let entry = if self.has_right(min_idx) {
-            let repl_entry = self.delete_min(righti(min_idx));
-            let entry = mem::replace(&mut self.node_mut(min_idx).entry, repl_entry);
-            self.update_maxb(min_idx);
-            entry
-        } else {
-            let IvNode{entry, ..} = self.take(min_idx);
-            entry
-        };
-
-        self.update_ancestors_after_delete(min_idx, idx, &entry.key.b());
-        entry
-    }
-
-
-
     #[inline(never)]
-    fn filter_overlap_ivl_rec<Q>(&mut self, query: &Q, idx: usize, min_included: bool, output: &mut Vec<(Iv, V)>)
+    fn filter_overlap_ivl_rec<Q>(&mut self, query: &Q, idx: usize, min_included: bool)
         where Q: Interval<K=Iv::K>
     {
         let node = self.node_mut_unsafe(idx);
@@ -471,7 +469,7 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             }
         } else if query.b() <= k.a() && k.a() != query.a() {
             // root and right are outside the range
-            self.descend_filter_overlap_ivl_left(query, idx, false, min_included, output);
+            self.descend_filter_overlap_ivl_left(query, idx, false, min_included);
 
             let removed = if self.slots_min().has_open() {
                 self.fill_slot_min(idx);
@@ -495,15 +493,15 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             let mut removed: bool;
             if let Some(consumed) = consumed {
                 if min_included {
-                    removed = self.descend_consume_left(idx, true, output);
+                    removed = self.descend_consume_left(idx, true);
                 } else {
-                    removed = self.descend_filter_overlap_ivl_left(query, idx, true, false, output);
+                    removed = self.descend_filter_overlap_ivl_left(query, idx, true, false);
                 }
                 node.maxb = consumed.maxb.clone();
 
-                consume_unchecked(output, consumed.into_entry());
+                self.sink.consume(consumed.into_tuple())
             } else {
-                self.descend_filter_overlap_ivl_left(query, idx, false, min_included, output);
+                self.descend_filter_overlap_ivl_left(query, idx, false, min_included);
                 if self.slots_min().has_open() {
                     removed = true;
                     self.fill_slot_min(idx);
@@ -517,12 +515,12 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
             if right_min_included {
                 let right_max_included = &node.maxb < query.b();
                 if right_max_included {
-                    removed = self.descend_consume_right(idx, removed, output);
+                    removed = self.descend_consume_right(idx, removed);
                 } else {
-                    removed = self.descend_filter_overlap_ivl_right(query, idx, removed, true, output);
+                    removed = self.descend_filter_overlap_ivl_right(query, idx, removed, true);
                 }
             } else {
-                removed = self.descend_filter_overlap_ivl_right(query, idx, removed, false, output);
+                removed = self.descend_filter_overlap_ivl_right(query, idx, removed, false);
             }
 
             if !removed && self.slots_max().has_open() {
@@ -539,27 +537,29 @@ impl<Iv: Interval, V, Flt> IvWorker<Iv, V, Flt> where Flt: ItemFilter<Iv> {
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_overlap_ivl_left<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool
+    fn descend_filter_overlap_ivl_left<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool) -> bool
         where Q: Interval<K=Iv::K>
     {
         // this pinning business is asymmetric (we don't do it in descend_delete_overlap_ivl_right) because of the program flow: we enter the left subtree first
         self.descend_left_fresh_slots(idx, with_slot,
-                                      |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, output))
+                                      |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included))
     }
 
     /// Returns true if the item is removed after recursive call, false otherwise.
     #[inline(always)]
-    fn descend_filter_overlap_ivl_right<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool, output: &mut Vec<(Iv, V)>) -> bool
+    fn descend_filter_overlap_ivl_right<Q>(&mut self, query: &Q, idx: usize, with_slot: bool, min_included: bool) -> bool
         where Q: Interval<K=Iv::K>
     {
         self.descend_right(idx, with_slot,
-                           |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included, output))
+                           |this: &mut Self, child_idx| this.filter_overlap_ivl_rec(query, child_idx, min_included))
     }
 }
 
 
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Deref for IvWorker<Iv, V, Flt> {
+impl<Iv, V, S, Flt> Deref for IvWorker<Iv, V, S, Flt>
+    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+{
     type Target = TreeRepr<IvNode<Iv, V>>;
 
     fn deref(&self) -> &Self::Target {
@@ -567,36 +567,40 @@ impl<Iv: Interval, V, Flt: ItemFilter<Iv>> Deref for IvWorker<Iv, V, Flt> {
     }
 }
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> DerefMut for IvWorker<Iv, V, Flt> {
+impl<Iv, V, S, Flt> DerefMut for IvWorker<Iv, V, S, Flt>
+    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
     }
 }
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> BulkDeleteCommon<IvNode<Iv, V>> for IvWorker<Iv, V, Flt> {
-    type Visitor = UpdateMax<Iv, Flt>;
+impl<Iv, V, S, Flt> BulkDeleteCommon<IvNode<Iv, V>> for IvWorker<Iv, V, S, Flt>
+    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+{
+    type Visitor = UpdateMax<Iv, S, Flt>;
+    type Sink = S;
     type Filter = Flt;
 
     fn filter_mut(&mut self) -> &mut Self::Filter {
         &mut self.filter
     }
-}
 
-
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> TeardownTreeRefill for IvWorker<Iv, V, Flt> where Iv: Copy, V: Copy {
-    fn refill(&mut self, master: &IvWorker<Iv, V, Flt>) {
-        self.repr.refill(&master.repr);
+    fn sink_mut(&mut self) -> &mut Self::Sink {
+        &mut self.sink
     }
 }
 
 
 
-pub struct UpdateMax<Iv: Interval, Flt: ItemFilter<Iv>> {
-    _ph: PhantomData<(Iv, Flt)>
+pub struct UpdateMax<Iv, S, Flt> {
+    _ph: PhantomData<(Iv, S, Flt)>
 }
 
-impl<Iv: Interval, V, Flt: ItemFilter<Iv>> ItemVisitor<IvNode<Iv, V>> for UpdateMax<Iv, Flt> {
-    type Tree = IvWorker<Iv, V, Flt>;
+impl<Iv, V, S, Flt> ItemVisitor<IvNode<Iv, V>> for UpdateMax<Iv, S, Flt>
+    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+{
+    type Tree = IvWorker<Iv, V, S, Flt>;
 
     #[inline]
     fn visit<F>(tree: &mut Self::Tree, idx: usize, mut f: F)

@@ -96,8 +96,14 @@ impl<Iv: Interval, V> Node for IvNode<Iv, V> {
         IvNode { entry: Entry::new(key, val), maxb:maxb }
     }
 
+    #[inline(always)]
     fn into_entry(self) -> Entry<Iv, V> {
         self.entry
+    }
+
+    #[inline(always)]
+    fn into_tuple(self) -> (Iv, V) {
+        self.entry.into_tuple()
     }
 }
 

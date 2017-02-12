@@ -13,6 +13,11 @@ impl<K, V> Entry<K, V> {
     pub fn new(key: K, val: V) -> Self {
         Entry { key: key, val: val }
     }
+
+    #[inline(always)]
+    pub fn into_tuple(self) -> (K, V) {
+        self.into()
+    }
 }
 
 
@@ -40,7 +45,7 @@ impl<K: Ord+Clone, V> Ord for Entry<K, V> {
 
 
 impl<K, V> Into<(K,V)> for Entry<K, V> {
-    #[inline] fn into(self) -> (K,V) {
+    #[inline(always)] fn into(self) -> (K,V) {
         (self.key, self.val)
     }
 }
@@ -55,4 +60,5 @@ pub trait Node: Deref<Target= Entry<<Self as Node>::K,
 
     #[inline] fn new(key: Self::K, val: Self::V) -> Self;
     #[inline] fn into_entry(self) -> Entry<Self::K, Self::V>;
+    #[inline] fn into_tuple(self) -> (Self::K, Self::V);
 }
