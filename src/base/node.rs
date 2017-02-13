@@ -18,6 +18,10 @@ impl<K, V> Entry<K, V> {
         self.into()
     }
 
+    pub fn as_tuple(&self) -> &(K, V) {
+        &self.item
+    }
+
     #[inline(always)] pub fn key(&self) -> &K { &self.item.0 }
     #[inline(always)] pub fn key_mut(&mut self) -> &mut K { &mut self.item.0 }
 

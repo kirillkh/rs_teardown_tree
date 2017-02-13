@@ -5,12 +5,12 @@ pub use applied::interval::{Interval, KeyInterval};
 
 pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
 pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
-pub use base::{TeardownTreeRefill, Sink, Entry}; // TODO: exposing Entry is probably not a good idea
+pub use base::{TeardownTreeRefill, Sink};
 pub use base::sink;
 
 
 mod plain {
-    use base::{TeardownTreeRefill, Sink, Entry, ItemFilter};
+    use base::{TeardownTreeRefill, Sink, ItemFilter};
     use applied::plain_tree::{PlTree};
     use super::{SinkAdapter, RefSinkAdapter};
 
@@ -62,7 +62,7 @@ mod plain {
         #[inline]
         pub fn query_range<'a, Q, S>(&'a self, range: Range<Q>, sink: S)
             where Q: PartialOrd<K>,
-                  S: Sink<&'a Entry<K, V>>
+                  S: Sink<&'a (K, V)>
         {
             self.internal.query_range(range, sink)
         }
@@ -309,7 +309,7 @@ mod interval {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
-    use base::{TeardownTreeRefill, ItemFilter, Entry, Sink};
+    use base::{TeardownTreeRefill, ItemFilter, Sink};
     use super::{SinkAdapter, RefSinkAdapter};
 
     use applied::AppliedTree;
@@ -362,7 +362,7 @@ mod interval {
         #[inline]
         pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: S)
             where Q: Interval<K=Iv::K>,
-                  S: Sink<&'a Entry<Iv, V>>
+                  S: Sink<&'a (Iv, V)>
         {
             self.internal.query_overlap(0, query, sink)
         }
@@ -621,10 +621,10 @@ impl<'a, T: 'a, S: Sink<&'a T>> RefSinkAdapter<'a, T, S> {
     }
 }
 
-impl<'a, T: 'a, S: Sink<&'a T>> Sink<&'a Entry<T, ()>> for RefSinkAdapter<'a, T, S> {
+impl<'a, T: 'a, S: Sink<&'a T>> Sink<&'a (T, ())> for RefSinkAdapter<'a, T, S> {
     #[inline]
-    fn consume(&mut self, entry: &'a Entry<T, ()>) {
-        self.sink.consume(entry.key())
+    fn consume(&mut self, entry: &'a (T, ())) {
+        self.sink.consume(&entry.0)
     }
 }
 

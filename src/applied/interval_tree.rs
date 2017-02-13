@@ -158,7 +158,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
 
     pub fn query_overlap<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: S)
         where Q: Interval<K=Iv::K>,
-              S: Sink<&'a Entry<Iv, V>>
+              S: Sink<&'a (Iv, V)>
     {
         self.work(sink, NoopFilter, |worker: &mut IvWorker<Iv,V,S,_>| worker.query_overlap_rec(idx, query))
     }
@@ -297,9 +297,9 @@ pub struct IvWorker<Iv, V, S, Flt>
 }
 
 
-
+// query_overlap worker
 impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
-    where Iv: Interval, S: Sink<&'a Entry<Iv, V>>, Flt: ItemFilter<Iv>
+    where Iv: Interval, S: Sink<&'a (Iv, V)>, Flt: ItemFilter<Iv>
 {
     fn query_overlap_rec<Q>(&mut self, idx: usize, query: &Q)
         where Q: Interval<K=Iv::K>
@@ -308,8 +308,8 @@ impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
             return;
         }
 
-        // This is safe: it is guaranteed that the container (Sink) does not outlive content (node entry)
-        // by IvTree::query_overlap()'s requirement that S: Sink<&'a Entry<Iv, V>>.
+        // This is safe: it is guaranteed that the container (Sink) does not outlive content (node)
+        // by IvTree::query_overlap()'s requirement that S: Sink<&'a (Iv, V)>.
         let node = self.node_unsafe(idx);
         let k: &Iv = node.entry.key();
 
@@ -320,7 +320,7 @@ impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
             self.query_overlap_rec(lefti(idx), query);
         } else {
             self.query_overlap_rec(lefti(idx), query);
-            if query.overlaps(k) { self.sink.consume(node) }
+            if query.overlaps(k) { self.sink.consume(node.as_tuple()) }
             self.query_overlap_rec(righti(idx), query);
         }
     }
@@ -328,7 +328,7 @@ impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
 }
 
 
-
+// filter_overlap worker
 impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
     where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
 {

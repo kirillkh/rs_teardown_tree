@@ -210,7 +210,7 @@ impl<K: Key, V> PlTree<K, V> {
     }
 
     pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, mut sink: S)
-        where Q: PartialOrd<K>, S: Sink<&'a Entry<K, V>>
+        where Q: PartialOrd<K>, S: Sink<&'a (K, V)>
     {
         let mut from = self.index_of(&query.start);
         if self.is_nil(from) {
@@ -225,7 +225,7 @@ impl<K: Key, V> PlTree<K, V> {
             if &query.end <= node.key() && &query.start != node.key() {
                 true
             } else {
-                sink.consume(node);
+                sink.consume(node.as_tuple());
                 false
             }
         })
