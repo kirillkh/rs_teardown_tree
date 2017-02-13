@@ -53,7 +53,7 @@ As a library
 | Add to your Cargo.toml:
 |
 |     ``[dependencies]``
-|     ``teardown_tree = "0.6.1"``
+|     ``teardown_tree = "0.6.2"``
 |
 
 | And to your crate's root:
