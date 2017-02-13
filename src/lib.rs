@@ -17,7 +17,7 @@ mod external_api;
 mod rust_bench;
 
 pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval, TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill};
-pub use self::base::{Traverse, ItemFilter, NoopFilter, Sink};
+pub use self::base::{ItemFilter, NoopFilter, Sink};
 pub use self::base::sink;
 pub use self::base::util;
 
