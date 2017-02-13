@@ -313,7 +313,7 @@ impl<K: Key, V> DerefMut for PlTree<K, V> {
 
 #[derive(new)]
 pub struct PlWorker<K, V, D, Flt>
-    where K: Key, D: TraversalDriver<K, V>, Flt: ItemFilter<K>
+    where K: Key
 {
     repr: TreeRepr<PlNode<K, V>>,
     drv: D,

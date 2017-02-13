@@ -156,35 +156,11 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     }
 
 
-    pub fn query_overlap<'a, Q, S>(&'a self, idx: usize, query: &Q, mut sink: S)
+    pub fn query_overlap<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: S)
         where Q: Interval<K=Iv::K>,
               S: Sink<&'a Entry<Iv, V>>
     {
-        self.query_overlap_rec(idx, query, &mut sink);
-    }
-
-    // TODO: implement via Worker, so that we don't have to pay the price for dereferencing sink
-    fn query_overlap_rec<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: &mut S)
-        where Q: Interval<K=Iv::K>,
-              S: Sink<&'a Entry<Iv, V>>
-    {
-        if self.is_nil(idx) {
-            return;
-        }
-
-        let node = self.node(idx);
-        let k: &Iv = &node.entry.key;
-
-        if &node.maxb < query.a() {
-            // whole subtree outside the range
-        } else if query.b() <= k.a() && k.a() != query.a() {
-            // root and right are outside the range
-            self.query_overlap_rec(lefti(idx), query, sink);
-        } else {
-            self.query_overlap_rec(lefti(idx), query, sink);
-            if query.overlaps(k) { sink.consume(node) }
-            self.query_overlap_rec(righti(idx), query, sink);
-        }
+        self.work(sink, NoopFilter, |worker: &mut IvWorker<Iv,V,S,_>| worker.query_overlap_rec(idx, query))
     }
 
 //    /// returns index of the first item in the tree that may overlap `query`
@@ -209,9 +185,8 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
 //    }
 
     #[inline]
-    fn work<S, Flt, F, R>(&mut self, sink: S, filter: Flt, mut f: F) -> R
-        where S: Sink<(Iv, V)>,
-              Flt: ItemFilter<Iv>,
+    fn work<S, Flt, F, R>(&self, sink: S, filter: Flt, mut f: F) -> R
+        where Flt: ItemFilter<Iv>,
               F: FnMut(&mut IvWorker<Iv,V,S,Flt>) -> R
     {
         let repr: TreeRepr<IvNode<Iv, V>> = unsafe {
@@ -314,12 +289,45 @@ impl<Iv: Interval, V: Clone> Clone for IvTree<Iv, V> {
 
 #[derive(new)]
 pub struct IvWorker<Iv, V, S, Flt>
-    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+    where Iv: Interval
 {
     repr: TreeRepr<IvNode<Iv, V>>,
     sink: S,
     filter: Flt,
 }
+
+
+
+impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
+    where Iv: Interval, S: Sink<&'a Entry<Iv, V>>, Flt: ItemFilter<Iv>
+{
+    fn query_overlap_rec<Q>(&mut self, idx: usize, query: &Q)
+        where Q: Interval<K=Iv::K>
+    {
+        if self.is_nil(idx) {
+            return;
+        }
+
+        // This is safe: it is guaranteed that the container (Sink) does not outlive content (node entry)
+        // by IvTree::query_overlap()'s requirement that S: Sink<&'a Entry<Iv, V>>.
+        let node = self.node_unsafe(idx);
+        let k: &Iv = &node.entry.key;
+
+        if &node.maxb < query.a() {
+            // whole subtree outside the range
+        } else if query.b() <= k.a() && k.a() != query.a() {
+            // root and right are outside the range
+            self.query_overlap_rec(lefti(idx), query);
+        } else {
+            self.query_overlap_rec(lefti(idx), query);
+            if query.overlaps(k) { self.sink.consume(node) }
+            self.query_overlap_rec(righti(idx), query);
+        }
+    }
+
+}
+
+
 
 impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
     where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
@@ -565,7 +573,7 @@ impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
 
 
 impl<Iv, V, S, Flt> Deref for IvWorker<Iv, V, S, Flt>
-    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+    where Iv: Interval, Flt: ItemFilter<Iv>
 {
     type Target = TreeRepr<IvNode<Iv, V>>;
 
@@ -575,7 +583,7 @@ impl<Iv, V, S, Flt> Deref for IvWorker<Iv, V, S, Flt>
 }
 
 impl<Iv, V, S, Flt> DerefMut for IvWorker<Iv, V, S, Flt>
-    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+    where Iv: Interval, Flt: ItemFilter<Iv>
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
