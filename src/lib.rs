@@ -376,6 +376,29 @@ mod test_query_plain {
     }
 
 
+    //---- exhaustive iter -------------------------------------------------------------------------
+    #[test]
+    fn iter_exhaustive() {
+        for i in 1..10 {
+            iter_exhaustive_n(i);
+        }
+    }
+
+    fn iter_exhaustive_n(n: usize) {
+        test_exhaustive_n(n, &|tree| query_range_exhaustive_with_tree(tree));
+    }
+
+    fn iter_exhaustive_with_tree(tree: Tree) {
+        let tree = TeardownTreeSet::from_internal(tree);
+        let mut n = 0;
+        for (i, &x) in tree.iter().enumerate() {
+            assert!(i+1 == x, "i={}, x={}", i, x);
+            n += 1;
+        }
+        assert!(n == tree.size());
+    }
+
+
     //---- exhaustive find -------------------------------------------------------------------------
     #[test]
     fn find_exhaustive() {

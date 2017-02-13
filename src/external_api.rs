@@ -11,7 +11,7 @@ pub use base::sink;
 
 mod plain {
     use base::{TeardownTreeRefill, Sink, ItemFilter};
-    use applied::plain_tree::{PlTree};
+    use applied::plain_tree::{PlTree, PlNode};
     use super::{SinkAdapter, RefSinkAdapter};
 
     use std::fmt;
@@ -19,7 +19,6 @@ mod plain {
     use std::ops::Range;
 
     #[cfg(test)] use base::{TreeRepr, Key};
-    #[cfg(test)] use applied::plain_tree::PlNode;
 
 
     #[derive(Clone)]
@@ -119,6 +118,12 @@ mod plain {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.internal.clear(); }
+
+        /// Creates an iterator into the map.
+        #[inline]
+        pub fn iter<'a>(&'a self) -> MapIter<'a, K, V> {
+            MapIter::new(self.internal.iter())
+        }
     }
 
     impl<K: Ord+Clone+Debug, V> Debug for TeardownTreeMap<K, V> {
@@ -261,6 +266,11 @@ mod plain {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.map.clear(); }
+
+        /// Creates an iterator into the set.
+        #[inline] pub fn iter<'a>(&'a self) -> SetIter<'a, T> {
+            SetIter::new(self.map.internal.iter())
+        }
     }
 
     impl<K: Ord+Clone+Copy> TeardownTreeRefill for TeardownTreeSet<K> {
@@ -301,6 +311,34 @@ mod plain {
             Display::fmt(&self.map, fmt)
         }
     }
+
+
+    #[derive(new)]
+    pub struct MapIter<'a, K: Ord+Clone+'a, V: 'a> {
+        internal: ::base::Iter<'a, PlNode<K, V>>
+    }
+
+    impl<'a, K: Ord+Clone+'a, V: 'a> Iterator for MapIter<'a, K, V> {
+        type Item = &'a (K, V);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.internal.next().map(|entry| entry.as_tuple())
+        }
+    }
+
+
+    #[derive(new)]
+    pub struct SetIter<'a, T: Ord+Clone+'a> {
+        internal: ::base::Iter<'a, PlNode<T, ()>>
+    }
+
+    impl<'a, T: Ord+Clone+'a> Iterator for SetIter<'a, T> {
+        type Item = &'a T;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.internal.next().map(|entry| entry.key())
+        }
+    }
 }
 
 
@@ -313,11 +351,10 @@ mod interval {
     use super::{SinkAdapter, RefSinkAdapter};
 
     use applied::AppliedTree;
-    use applied::interval::{Interval};
+    use applied::interval::{Interval, IvNode};
     use applied::interval_tree::{IvTree};
 
     #[cfg(test)] use base::TreeRepr;
-    #[cfg(test)] use applied::interval::IvNode;
 
 
     #[derive(Clone)]
@@ -405,6 +442,12 @@ mod interval {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.internal.clear(); }
+
+        /// Creates an iterator into the map.
+        #[inline]
+        pub fn iter<'a>(&'a self) -> MapIter<'a, Iv, V> {
+            MapIter::new(self.internal.iter())
+        }
     }
 
 
@@ -521,6 +564,12 @@ mod interval {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.map.clear(); }
+
+        /// Creates an iterator into the set.
+        #[inline]
+        pub fn iter<'a>(&'a self) -> SetIter<'a, Iv> {
+            SetIter::new(self.map.internal.iter())
+        }
     }
 
     #[cfg(test)]
@@ -577,6 +626,34 @@ mod interval {
     impl<Iv: Interval> Display for IntervalTeardownTreeSet<Iv> where Iv::K: Debug {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Display::fmt(&self.map, fmt)
+        }
+    }
+
+
+    #[derive(new)]
+    pub struct MapIter<'a, Iv: Interval+'a, V: 'a> {
+        internal: ::base::Iter<'a, IvNode<Iv, V>>
+    }
+
+    impl<'a, Iv: Interval+'a, V: 'a> Iterator for MapIter<'a, Iv, V> {
+        type Item = &'a (Iv, V);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.internal.next().map(|entry| entry.as_tuple())
+        }
+    }
+
+
+    #[derive(new)]
+    pub struct SetIter<'a, Iv: Interval+'a> {
+        internal: ::base::Iter<'a, IvNode<Iv, ()>>
+    }
+
+    impl<'a, Iv: Interval+'a> Iterator for SetIter<'a, Iv> {
+        type Item = &'a Iv;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.internal.next().map(|entry| entry.key())
         }
     }
 }

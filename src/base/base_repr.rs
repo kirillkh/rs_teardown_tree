@@ -434,7 +434,7 @@ impl<N: Node> TreeRepr<N> {
         &mut self.delete_range_cache.slots_max
     }
 
-    fn iter<'a>(&'a self) -> Iter<'a, N> {
+    pub fn iter<'a>(&'a self) -> Iter<'a, N> {
         Iter::new(self)
     }
 }
