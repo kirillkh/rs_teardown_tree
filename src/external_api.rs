@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 
 pub use applied::interval::{Interval, KeyInterval};
 
-pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
-pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
+pub use self::plain::{TeardownTreeMap, TeardownTreeSet, SetIter, MapIter};
+pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, IntervalSetIter, IntervalMapIter};
 pub use base::{TeardownTreeRefill, Sink};
 pub use base::sink;
 
@@ -445,8 +445,8 @@ mod interval {
 
         /// Creates an iterator into the map.
         #[inline]
-        pub fn iter<'a>(&'a self) -> MapIter<'a, Iv, V> {
-            MapIter::new(self.internal.iter())
+        pub fn iter<'a>(&'a self) -> IntervalMapIter<'a, Iv, V> {
+            IntervalMapIter::new(self.internal.iter())
         }
     }
 
@@ -567,8 +567,8 @@ mod interval {
 
         /// Creates an iterator into the set.
         #[inline]
-        pub fn iter<'a>(&'a self) -> SetIter<'a, Iv> {
-            SetIter::new(self.map.internal.iter())
+        pub fn iter<'a>(&'a self) -> IntervalSetIter<'a, Iv> {
+            IntervalSetIter::new(self.map.internal.iter())
         }
     }
 
@@ -631,11 +631,11 @@ mod interval {
 
 
     #[derive(new)]
-    pub struct MapIter<'a, Iv: Interval+'a, V: 'a> {
+    pub struct IntervalMapIter<'a, Iv: Interval+'a, V: 'a> {
         internal: ::base::Iter<'a, IvNode<Iv, V>>
     }
 
-    impl<'a, Iv: Interval+'a, V: 'a> Iterator for MapIter<'a, Iv, V> {
+    impl<'a, Iv: Interval+'a, V: 'a> Iterator for IntervalMapIter<'a, Iv, V> {
         type Item = &'a (Iv, V);
 
         fn next(&mut self) -> Option<Self::Item> {
@@ -645,11 +645,11 @@ mod interval {
 
 
     #[derive(new)]
-    pub struct SetIter<'a, Iv: Interval+'a> {
+    pub struct IntervalSetIter<'a, Iv: Interval+'a> {
         internal: ::base::Iter<'a, IvNode<Iv, ()>>
     }
 
-    impl<'a, Iv: Interval+'a> Iterator for SetIter<'a, Iv> {
+    impl<'a, Iv: Interval+'a> Iterator for IntervalSetIter<'a, Iv> {
         type Item = &'a Iv;
 
         fn next(&mut self) -> Option<Self::Item> {
