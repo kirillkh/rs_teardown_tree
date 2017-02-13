@@ -18,7 +18,7 @@ mod rust_bench;
 
 pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval,
                              TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill,
-                             SetIter, MapIter, IntervalSetIter, IntervalMapIter};
+                             iter};
 pub use self::base::{ItemFilter, NoopFilter, Sink};
 pub use self::base::sink;
 pub use self::base::util;
@@ -387,17 +387,40 @@ mod test_query_plain {
     }
 
     fn iter_exhaustive_n(n: usize) {
-        test_exhaustive_n(n, &|tree| query_range_exhaustive_with_tree(tree));
+        test_exhaustive_n(n, &|tree| iter_exhaustive_with_tree(tree));
     }
 
     fn iter_exhaustive_with_tree(tree: Tree) {
         let tree = TeardownTreeSet::from_internal(tree);
-        let mut n = 0;
+        let mut n = tree.size();
         for (i, &x) in tree.iter().enumerate() {
-            assert!(i+1 == x, "i={}, x={}", i, x);
-            n += 1;
+            assert!(i+1 == x, "i={}, x={}, tree={}", i, x, &tree);
+            n -= 1;
         }
-        assert!(n == tree.size());
+        assert!(n == 0);
+    }
+
+
+    //---- exhaustive into_iter --------------------------------------------------------------------
+    #[test]
+    fn into_iter_exhaustive() {
+        for i in 1..10 {
+            into_iter_exhaustive_n(i);
+        }
+    }
+
+    fn into_iter_exhaustive_n(n: usize) {
+        test_exhaustive_n(n, &|tree| into_iter_exhaustive_with_tree(tree));
+    }
+
+    fn into_iter_exhaustive_with_tree(tree: Tree) {
+        let tree = TeardownTreeSet::from_internal(tree);
+        let mut n = tree.size();
+        for (i, x) in tree.clone().into_iter().enumerate() {
+            assert!(i+1 == x, "i={}, x={}, tree={}", i, x, &tree);
+            n -= 1;
+        }
+        assert!(n == 0);
     }
 
 

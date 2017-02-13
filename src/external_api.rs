@@ -3,10 +3,17 @@ use std::marker::PhantomData;
 
 pub use applied::interval::{Interval, KeyInterval};
 
-pub use self::plain::{TeardownTreeMap, TeardownTreeSet, SetIter, MapIter};
-pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, IntervalSetIter, IntervalMapIter};
+pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
+pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
 pub use base::{TeardownTreeRefill, Sink};
 pub use base::sink;
+
+
+pub mod iter {
+    pub use super::plain::{SetIter, MapIter, SetIntoIter, MapIntoIter};
+    pub use super::interval::{IntervalSetIter, IntervalMapIter, IntervalSetIntoIter, IntervalMapIntoIter};
+}
+
 
 
 mod plain {
@@ -315,28 +322,75 @@ mod plain {
 
     #[derive(new)]
     pub struct MapIter<'a, K: Ord+Clone+'a, V: 'a> {
-        internal: ::base::Iter<'a, PlNode<K, V>>
+        inner: ::base::Iter<'a, PlNode<K, V>>
     }
 
     impl<'a, K: Ord+Clone+'a, V: 'a> Iterator for MapIter<'a, K, V> {
         type Item = &'a (K, V);
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.internal.next().map(|entry| entry.as_tuple())
+            self.inner.next().map(|entry| entry.as_tuple())
         }
     }
 
 
     #[derive(new)]
     pub struct SetIter<'a, T: Ord+Clone+'a> {
-        internal: ::base::Iter<'a, PlNode<T, ()>>
+        inner: ::base::Iter<'a, PlNode<T, ()>>
     }
 
     impl<'a, T: Ord+Clone+'a> Iterator for SetIter<'a, T> {
         type Item = &'a T;
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.internal.next().map(|entry| entry.key())
+            self.inner.next().map(|entry| entry.key())
+        }
+    }
+
+
+    impl<K: Ord+Clone, V> IntoIterator for TeardownTreeMap<K, V> {
+        type Item = (K, V);
+        type IntoIter = MapIntoIter<K, V>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            MapIntoIter::new(::base::IntoIter::new(self.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct MapIntoIter<K: Ord+Clone, V> {
+        inner: ::base::IntoIter<PlNode<K, V>>
+    }
+
+    impl<K: Ord+Clone, V> Iterator for MapIntoIter<K, V> {
+        type Item = (K, V);
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+    }
+
+
+
+    impl<T: Ord+Clone> IntoIterator for TeardownTreeSet<T> {
+        type Item = T;
+        type IntoIter = SetIntoIter<T>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            SetIntoIter::new(::base::IntoIter::new(self.map.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct SetIntoIter<T: Ord+Clone> {
+        inner: ::base::IntoIter<PlNode<T, ()>>
+    }
+
+    impl<T: Ord+Clone> Iterator for SetIntoIter<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|(item, _)| item)
         }
     }
 }
@@ -632,28 +686,75 @@ mod interval {
 
     #[derive(new)]
     pub struct IntervalMapIter<'a, Iv: Interval+'a, V: 'a> {
-        internal: ::base::Iter<'a, IvNode<Iv, V>>
+        inner: ::base::Iter<'a, IvNode<Iv, V>>
     }
 
     impl<'a, Iv: Interval+'a, V: 'a> Iterator for IntervalMapIter<'a, Iv, V> {
         type Item = &'a (Iv, V);
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.internal.next().map(|entry| entry.as_tuple())
+            self.inner.next().map(|entry| entry.as_tuple())
         }
     }
 
 
     #[derive(new)]
     pub struct IntervalSetIter<'a, Iv: Interval+'a> {
-        internal: ::base::Iter<'a, IvNode<Iv, ()>>
+        inner: ::base::Iter<'a, IvNode<Iv, ()>>
     }
 
     impl<'a, Iv: Interval+'a> Iterator for IntervalSetIter<'a, Iv> {
         type Item = &'a Iv;
 
         fn next(&mut self) -> Option<Self::Item> {
-            self.internal.next().map(|entry| entry.key())
+            self.inner.next().map(|entry| entry.key())
+        }
+    }
+
+
+    impl<Iv: Interval, V> IntoIterator for IntervalTeardownTreeMap<Iv, V> {
+        type Item = (Iv, V);
+        type IntoIter = IntervalMapIntoIter<Iv, V>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            IntervalMapIntoIter::new(::base::IntoIter::new(self.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct IntervalMapIntoIter<Iv: Interval, V> {
+        inner: ::base::IntoIter<IvNode<Iv, V>>
+    }
+
+    impl<Iv: Interval, V> Iterator for IntervalMapIntoIter<Iv, V> {
+        type Item = (Iv, V);
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+    }
+
+
+
+    impl<Iv: Interval> IntoIterator for IntervalTeardownTreeSet<Iv> {
+        type Item = Iv;
+        type IntoIter = IntervalSetIntoIter<Iv>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            IntervalSetIntoIter::new(::base::IntoIter::new(self.map.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct IntervalSetIntoIter<Iv: Interval> {
+        inner: ::base::IntoIter<IvNode<Iv, ()>>
+    }
+
+    impl<Iv: Interval> Iterator for IntervalSetIntoIter<Iv> {
+        type Item = Iv;
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|(item, _)| item)
         }
     }
 }

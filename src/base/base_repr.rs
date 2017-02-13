@@ -440,6 +440,16 @@ impl<N: Node> TreeRepr<N> {
 }
 
 
+impl<N: Node> IntoIterator for TreeRepr<N> {
+    type Item = (N::K, N::V);
+    type IntoIter = IntoIter<N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        IntoIter::new(self)
+    }
+}
+
+
 
 macro_rules! traverse_preorder_block {
     ($this:expr, $root:expr, $a:expr, $on_next:expr) => (
@@ -651,20 +661,13 @@ fn right_enclosing(idx: usize) -> usize {
 
 pub struct Iter<'a, N: Node> where N: 'a, N::K: 'a, N::V: 'a {
     tree: &'a TreeRepr<N>,
-    next_idx: usize,
-    next: Option<&'a Entry<N::K, N::V>>
+    next_idx: usize
 }
 
 impl <'a, N: Node> Iter<'a, N> where N::K: 'a, N::V: 'a {
     fn new(tree: &'a TreeRepr<N>) -> Iter<'a, N> {
         let next_idx = tree.find_min(0);
-        let next = if tree.is_nil(next_idx) {
-            None
-        } else {
-            let node = tree.node(next_idx);
-            Some(node.deref())
-        };
-        Iter { tree:tree, next_idx:next_idx, next:next }
+        Iter { tree:tree, next_idx:next_idx }
     }
 }
 
@@ -672,31 +675,70 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
     type Item = &'a Entry<N::K, N::V>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(next) = self.next.take() {
-            let next_idx = self.next_idx;
-
-            self.next_idx = if self.tree.has_right(next_idx) {
-                self.tree.find_min(righti(next_idx))
-            } else {
-                let l_enclosing = left_enclosing(next_idx+1);
-
-                if l_enclosing <= 1 {
-                    // done
-                    return Some(next);
-                }
-
-                parenti(l_enclosing-1)
-            };
-
-            let node = self.tree.node(self.next_idx);
-            self.next = Some(node);
-
-            Some(next)
-        } else {
+        let curr = self.next_idx;
+        if self.tree.is_nil(curr) {
             None
+        } else {
+            self.next_idx =
+                calc_next_idx(self.next_idx, self.tree)
+                    .map_or_else(|| self.tree.data.capacity(), |x| x);
+            Some(self.tree.node(curr).deref())
         }
     }
 }
+
+
+
+pub struct IntoIter<N: Node> {
+    tree: TreeRepr<N>,
+    next_idx: usize
+}
+
+impl <N: Node> IntoIter<N> {
+    pub fn new(tree: TreeRepr<N>) -> Self {
+        let next_idx = tree.find_min(0);
+        IntoIter { tree:tree, next_idx:next_idx }
+    }
+}
+
+impl<N: Node> Iterator for IntoIter<N> {
+    type Item = (N::K, N::V);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let curr = self.next_idx;
+        if self.tree.is_nil(curr) {
+            None
+        } else {
+            self.next_idx =
+                calc_next_idx(self.next_idx, &self.tree)
+                    .map_or_else(|| self.tree.data.capacity(), |x| x);
+
+            Some(self.tree.take(curr).into_tuple())
+        }
+    }
+}
+
+
+
+#[inline]
+fn calc_next_idx<N: Node>(curr: usize, tree: &TreeRepr<N>) -> Option<usize> {
+    let next = if tree.has_right(curr) {
+        tree.find_min(righti(curr))
+    } else {
+        let l_enclosing = left_enclosing(curr+1);
+
+        if l_enclosing <= 1 {
+            // done
+            return None
+        }
+
+        parenti(l_enclosing-1)
+    };
+
+    Some(next)
+}
+
+
 
 
 

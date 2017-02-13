@@ -35,6 +35,10 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         unsafe { &mut *self.repr.get() }
     }
 
+    pub fn into_repr(self) -> TreeRepr<IvNode<Iv, V>> {
+        unsafe { self.repr.into_inner() }
+    }
+
 
     #[inline]
     fn update_maxb(&mut self, idx: usize) {

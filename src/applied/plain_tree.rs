@@ -102,6 +102,10 @@ impl<K: Key, V> PlTree<K, V> {
     fn repr_mut(&mut self) -> &mut TreeRepr<PlNode<K, V>> {
         unsafe { &mut *self.repr.get() }
     }
+
+    pub fn into_repr(self) -> TreeRepr<PlNode<K, V>> {
+        unsafe { self.repr.into_inner() }
+    }
 }
 
 
