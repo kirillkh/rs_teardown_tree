@@ -60,7 +60,7 @@ mod plain {
 
         /// Executes a range query.
         #[inline]
-        pub fn query_range<'a, Q, S>(&'a self, range: Range<Q>, sink: &mut S)
+        pub fn query_range<'a, Q, S>(&'a self, range: Range<Q>, sink: S)
             where Q: PartialOrd<K>,
                   S: Sink<&'a Entry<K, V>>
         {
@@ -198,11 +198,11 @@ mod plain {
 
         /// Executes a range query and feeds references to the matching items into `sink`.
         #[inline]
-        pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: &mut S)
+        pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: S)
             where Q: PartialOrd<T>,
                   S: Sink<&'a T>
         {
-            self.map.query_range(query, &mut RefSinkAdapter::new(sink))
+            self.map.query_range(query, RefSinkAdapter::new(sink))
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -360,11 +360,11 @@ mod interval {
 
         /// Executes an overlap query.
         #[inline]
-        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: &mut S)
+        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: S)
             where Q: Interval<K=Iv::K>,
                   S: Sink<&'a Entry<Iv, V>>
         {
-            self.internal.query_overlap_rec(0, query, sink)
+            self.internal.query_overlap(0, query, sink)
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -475,12 +475,12 @@ mod interval {
 
         /// Executes an overlap query.
         #[inline]
-        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: &mut S)
+        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: S)
             where Q: Interval<K=Iv::K>,
                   S: Sink<&'a Iv>
         {
 
-            self.map.query_overlap(query, &mut RefSinkAdapter::new(sink))
+            self.map.query_overlap(query, RefSinkAdapter::new(sink))
         }
 
         /// Deletes the given interval from the tree and returns true (or false if it was not found).
@@ -609,19 +609,19 @@ impl<T, S: Sink<T>> Sink<(T, ())> for SinkAdapter<T, S> {
 
 
 
-struct RefSinkAdapter<'a, 'b, T: 'a, S: Sink<&'a T>+'b> {
-    sink: &'b mut S,
+struct RefSinkAdapter<'a, T: 'a, S: Sink<&'a T>> {
+    sink: S,
     _ph: PhantomData<&'a T>
 }
 
-impl<'a, 'b, T: 'a, S: Sink<&'a T>+'b> RefSinkAdapter<'a, 'b, T, S> {
+impl<'a, T: 'a, S: Sink<&'a T>> RefSinkAdapter<'a, T, S> {
     #[inline]
-    fn new(sink: &'b mut S) -> Self {
+    fn new(sink: S) -> Self {
         RefSinkAdapter { sink: sink, _ph: PhantomData }
     }
 }
 
-impl<'a, 'b, T: 'a, S: Sink<&'a T>+'b> Sink<&'a Entry<T, ()>> for RefSinkAdapter<'a, 'b, T, S> {
+impl<'a, T: 'a, S: Sink<&'a T>> Sink<&'a Entry<T, ()>> for RefSinkAdapter<'a, T, S> {
     #[inline]
     fn consume(&mut self, entry: &'a Entry<T, ()>) {
         self.sink.consume(&entry.key)

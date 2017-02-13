@@ -209,7 +209,7 @@ impl<K: Key, V> PlTree<K, V> {
         self.work(driver, filter, |worker: &mut PlWorker<K,V,D,Flt>| worker.filter())
     }
 
-    pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: &mut S)
+    pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, mut sink: S)
         where Q: PartialOrd<K>, S: Sink<&'a Entry<K, V>>
     {
         let mut from = self.index_of(&query.start);
@@ -220,7 +220,7 @@ impl<K: Key, V> PlTree<K, V> {
             }
         }
 
-        TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
+        TreeRepr::traverse_inorder_from(self, from, 0, &mut sink, |this, sink, idx| {
             let node = this.node(idx);
             if query.end <= node.key && query.start != node.key {
                 true

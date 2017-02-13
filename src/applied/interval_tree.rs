@@ -156,8 +156,15 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     }
 
 
+    pub fn query_overlap<'a, Q, S>(&'a self, idx: usize, query: &Q, mut sink: S)
+        where Q: Interval<K=Iv::K>,
+              S: Sink<&'a Entry<Iv, V>>
+    {
+        self.query_overlap_rec(idx, query, &mut sink);
+    }
+
     // TODO: implement via Worker, so that we don't have to pay the price for dereferencing sink
-    pub fn query_overlap_rec<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: &mut S)
+    fn query_overlap_rec<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: &mut S)
         where Q: Interval<K=Iv::K>,
               S: Sink<&'a Entry<Iv, V>>
     {
