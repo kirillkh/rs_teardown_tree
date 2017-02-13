@@ -610,7 +610,7 @@ mod test_delete_interval {
     fn init_maxb(tree: &mut Tree, idx: usize) -> usize {
         assert!(!tree.is_nil(idx));
 
-        let mut maxb = *tree.node(idx).key.b();
+        let mut maxb = *tree.node(idx).key().b();
         if tree.has_left(idx) {
             maxb = cmp::max(maxb, init_maxb(tree, lefti(idx)));
         }
@@ -671,7 +671,7 @@ mod test_delete_interval {
     fn check_maxb(orig: &Tree, tree: &Tree, idx: usize) -> usize {
         assert!(!tree.is_nil(idx));
 
-        let mut expected_maxb = *tree.node(idx).key.b();
+        let mut expected_maxb = *tree.node(idx).key().b();
         if tree.has_left(idx) {
             expected_maxb = cmp::max(expected_maxb, check_maxb(orig, tree, lefti(idx)));
         }

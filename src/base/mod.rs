@@ -107,7 +107,7 @@ pub mod validation {
         if node.is_none() {
             return Ok(None);
         } else {
-            let key = &node.unwrap().key;
+            let key = node.unwrap().key();
             let left = check_bst(tree, lefti(idx))?;
             let right = check_bst(tree, righti(idx))?;
 

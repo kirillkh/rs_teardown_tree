@@ -75,7 +75,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
 
         // consume root if necessary
         let node = self.node_unsafe(idx);
-        let consumed = if self.filter_mut().accept(&node.key)
+        let consumed = if self.filter_mut().accept(node.key())
             { Some(self.take(idx)) }
             else
             { None };

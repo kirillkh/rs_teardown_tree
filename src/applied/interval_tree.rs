@@ -41,11 +41,11 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         let node = self.node_mut_unsafe(idx);
 
         let left_self_maxb =
-        if self.has_left(idx) {
-            cmp::max(&self.left(idx).maxb, node.key.b())
-        } else {
-            node.key.b()
-        }.clone();
+            if self.has_left(idx) {
+                cmp::max(&self.left(idx).maxb, node.key().b())
+            } else {
+                node.key().b()
+            }.clone();
         node.maxb =
             if self.has_right(idx) {
                 cmp::max(self.right(idx).maxb.clone(), left_self_maxb)
@@ -79,8 +79,8 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             None
         } else {
             let entry = self.delete_idx(idx);
-            self.update_ancestors_after_delete(idx, 0, &entry.key.b());
-            Some(entry.val)
+            self.update_ancestors_after_delete(idx, 0, entry.key().b());
+            Some(entry.into_tuple().1)
         }
     }
 
@@ -115,7 +115,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             entry
         };
 
-        self.update_ancestors_after_delete(max_idx, idx, &entry.key.b());
+        self.update_ancestors_after_delete(max_idx, idx, entry.key().b());
         entry
     }
 
@@ -132,7 +132,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             entry
         };
 
-        self.update_ancestors_after_delete(min_idx, idx, &entry.key.b());
+        self.update_ancestors_after_delete(min_idx, idx, entry.key().b());
         entry
     }
 }
@@ -311,7 +311,7 @@ impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
         // This is safe: it is guaranteed that the container (Sink) does not outlive content (node entry)
         // by IvTree::query_overlap()'s requirement that S: Sink<&'a Entry<Iv, V>>.
         let node = self.node_unsafe(idx);
-        let k: &Iv = &node.entry.key;
+        let k: &Iv = node.entry.key();
 
         if &node.maxb < query.a() {
             // whole subtree outside the range
@@ -472,7 +472,7 @@ impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
         where Q: Interval<K=Iv::K>
     {
         let node = self.node_mut_unsafe(idx);
-        let k: &Iv = &node.entry.key;
+        let k: &Iv = node.entry.key();
 
         if &node.maxb < query.a() {
             // whole subtree outside the range
@@ -630,13 +630,13 @@ impl<Iv, V, S, Flt> ItemVisitor<IvNode<Iv, V>> for UpdateMax<Iv, S, Flt>
         let node = &mut tree.node_mut_unsafe(idx);
         match (tree.has_left(idx), tree.has_right(idx)) {
             (false, false) =>
-                node.maxb = node.key.b().clone(),
+                node.maxb = node.key().b().clone(),
             (false, true) =>
-                node.maxb = cmp::max(node.key.b(), &tree.node(righti(idx)).maxb).clone(),
+                node.maxb = cmp::max(node.key().b(), &tree.node(righti(idx)).maxb).clone(),
             (true, false) =>
-                node.maxb = cmp::max(node.key.b(), &tree.node(lefti(idx)).maxb).clone(),
+                node.maxb = cmp::max(node.key().b(), &tree.node(lefti(idx)).maxb).clone(),
             (true, true) =>
-                node.maxb = cmp::max(node.key.b(),
+                node.maxb = cmp::max(node.key().b(),
                                      cmp::max(&tree.node(lefti(idx)).maxb, &tree.node(righti(idx)).maxb))
                                     .clone(),
         }

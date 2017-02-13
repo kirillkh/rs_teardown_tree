@@ -219,17 +219,17 @@ impl<N: Node> TreeRepr<N> {
 
     #[inline(always)]
     pub fn key_unsafe<'b>(&self, idx: usize) -> &'b N::K where N: 'b {
-        &self.node_unsafe(idx).key
+        self.node_unsafe(idx).key()
     }
 
     #[inline(always)]
     pub fn key<'a>(&'a self, idx: usize) -> &'a N::K where N: 'a {
-        &self.node(idx).key
+        self.node(idx).key()
     }
 
     #[inline(always)]
     pub fn val<'a>(&'a self, idx: usize) -> &'a N::V where N: 'a {
-        &self.data[idx].val
+        self.data[idx].val()
     }
 
     #[inline(always)]
@@ -319,13 +319,13 @@ impl<N: Node> TreeRepr<N> {
     #[inline(always)]
     pub fn key_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut N::K {
         unsafe {
-            mem::transmute(&mut self.node_mut(idx).key)
+            mem::transmute(self.node_mut(idx).key_mut())
         }
     }
 
     #[inline(always)]
     pub fn key_mut<'a>(&'a mut self, idx: usize) -> &'a mut N::K where N: 'a {
-        &mut self.node_mut(idx).key
+        self.node_mut(idx).key_mut()
     }
 
     #[inline]

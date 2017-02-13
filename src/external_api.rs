@@ -624,7 +624,7 @@ impl<'a, T: 'a, S: Sink<&'a T>> RefSinkAdapter<'a, T, S> {
 impl<'a, T: 'a, S: Sink<&'a T>> Sink<&'a Entry<T, ()>> for RefSinkAdapter<'a, T, S> {
     #[inline]
     fn consume(&mut self, entry: &'a Entry<T, ()>) {
-        self.sink.consume(&entry.key)
+        self.sink.consume(entry.key())
     }
 }
 

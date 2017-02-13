@@ -68,7 +68,7 @@ impl<K: Key, V> Node for PlNode<K, V> {
 
 impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.entry.key, fmt)
+        fmt::Debug::fmt(self.entry.key(), fmt)
     }
 }
 
@@ -129,7 +129,7 @@ impl<K: Key, V> PlTree<K, V> {
         } else if self.has_right(idx) {
             self.delete_min(idx, righti(idx));
         }
-        node.entry.val
+        node.entry.into_tuple().1
     }
 
 
@@ -222,7 +222,7 @@ impl<K: Key, V> PlTree<K, V> {
 
         TreeRepr::traverse_inorder_from(self, from, 0, &mut sink, |this, sink, idx| {
             let node = this.node(idx);
-            if query.end <= node.key && query.start != node.key {
+            if &query.end <= node.key() && &query.start != node.key() {
                 true
             } else {
                 sink.consume(node);
