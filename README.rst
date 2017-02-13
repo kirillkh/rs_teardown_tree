@@ -74,7 +74,7 @@ Benchmarks
 ----------
 
 .. image:: benchmarks/full_refill_teardown_1000.png
-:alt: TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000
+    :alt: TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000
     :align: center
 
 I have performed a set of benchmarks, comparing ``TeardownTree::delete_range()`` against
