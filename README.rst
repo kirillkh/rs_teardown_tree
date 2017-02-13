@@ -54,6 +54,7 @@ As a library
 |
 |     ``[dependencies]``
 |     ``teardown_tree = "0.6.1"``
+|
 
 | And to your crate's root:
 |
@@ -73,7 +74,7 @@ Benchmarks
 ----------
 
 .. image:: benchmarks/full_refill_teardown_1000.png
-    :alt: TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000
+:alt: TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000
     :align: center
 
 I have performed a set of benchmarks, comparing ``TeardownTree::delete_range()`` against
@@ -99,4 +100,7 @@ As the graph above shows, on my machine the whole clone/teardown sequence on a t
 tree, then delete 1000 items at a time until the tree is empty), is ~20 times faster with ``TeardownTree::delete_range()``
 than with ``BTreeSet::remove()``. It also uses 45% less memory.
 
-More benchmarks can be found `here <benchmarks/benchmarks.md>`_.
+|Benchmarks|_
+
+.. |Benchmarks| replace:: **All benchmarks**
+.. _Benchmarks:  benchmarks/benchmarks.md
