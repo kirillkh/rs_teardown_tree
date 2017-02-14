@@ -200,9 +200,14 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         let mut worker = IvWorker::new(repr, sink, filter);
         let result = f(&mut worker);
 
+        // We do not reallocate the vecs inside repr, and the only thing that changes in its memory
+        // is the size of the tree. So we can get away with only updating the size as opposed to
+        // doing another expensive copy of the whole TreeRepr struct.
+        //
+        // This optimization results in a measurable speed-up to tiny/small range queries.
         unsafe {
-            let x = mem::replace(&mut *self.repr.get(), worker.repr);
-            mem::forget(x);
+            (*self.repr.get()).size = worker.repr.size;
+            mem::forget(worker.repr);
         }
 
         result

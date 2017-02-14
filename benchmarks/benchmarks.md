@@ -10,6 +10,6 @@
 
 [Raw data][1].
 
-To benchmark on your machine: ``cargo run --release --bin benchmarks``.
+To benchmark on your machine: ``cd rs_teardown_tree/benchmarks && cargo run --release``.
 
 [1]: benchmarks.ods

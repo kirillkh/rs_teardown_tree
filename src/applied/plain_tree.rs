@@ -190,7 +190,8 @@ impl<K: Key, V> PlTree<K, V> {
         self.filter_with_driver(RangeDriver::new(range, sink), filter)
     }
 
-    /// Deletes all items inside `range` from the tree and feeds them into `sink`.
+    /// Deletes all items inside `range` from the tree and feeds them into `sink`. The items are
+    /// returned in order.
     #[inline]
     pub fn delete_range_ref<Q, S>(&mut self, range: Range<&Q>, sink: S)
         where Q: PartialOrd<K>, S: Sink<(K, V)>
@@ -206,6 +207,7 @@ impl<K: Key, V> PlTree<K, V> {
         self.filter_with_driver(RangeRefDriver::new(range, sink), filter)
     }
 
+    /// Deletes items based on driver decisions and filter. The items are returned in order.
     #[inline]
     pub fn filter_with_driver<D, Flt>(&mut self, driver: D, filter: Flt)
         where D: TraversalDriver<K, V>, Flt: ItemFilter<K>
@@ -250,10 +252,13 @@ impl<K: Key, V> PlTree<K, V> {
         let mut worker = PlWorker::new(repr, driver, filter);
         let result = f(&mut worker);
 
-        unsafe {
-            let x = mem::replace(&mut *self.repr.get(), worker.repr);
-            mem::forget(x);
-        }
+        // We do not reallocate the vecs inside repr, and the only thing that changes in its memory
+        // is the size of the tree. So we can get away with only updating the size as opposed to
+        // doing another expensive copy of the whole TreeRepr struct.
+        //
+        // This optimization results in a measurable speed-up to tiny/small range queries.
+        self.repr_mut().size = worker.repr.size;
+        mem::forget(worker.repr);
 
         result
     }
@@ -327,8 +332,6 @@ pub struct PlWorker<K, V, D, Flt>
 impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
     where K: Key, D: TraversalDriver<K, V>, Flt: ItemFilter<K>
 {
-    /// Delete based on driver decisions.
-    /// The items are returned in order.
     #[inline]
     fn filter(&mut self) {
         self.delete_range_loop(0);
