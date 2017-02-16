@@ -83,6 +83,7 @@ impl<'a, T, S> Sink<&'a T> for RefCloningSink<T, S>
 }
 
 
+// The caller must make sure output.len() < output.capacity().
 #[inline(always)]
 pub fn consume_unchecked<T>(output: &mut Vec<T>, item: T) {
     unsafe {

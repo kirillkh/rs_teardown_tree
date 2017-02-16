@@ -96,14 +96,20 @@ impl<K: Key, V> PlTree<K, V> {
 
 
     fn repr(&self) -> &TreeRepr<PlNode<K, V>> {
+        // This is safe according to UnsafeCell::get(), because there are no mutable aliases to
+        // self.repr possible at the time when &self is taken.
         unsafe { &*self.repr.get() }
     }
 
     fn repr_mut(&mut self) -> &mut TreeRepr<PlNode<K, V>> {
+        // This is safe according to UnsafeCell::get(), because the access to self.repr is unique at
+        // the time when &mut self is taken.
         unsafe { &mut *self.repr.get() }
     }
 
     pub fn into_repr(self) -> TreeRepr<PlNode<K, V>> {
+        // This is safe according to UnsafeCell::into_inner(), because no thread can be inspecting
+        // the inner value when self is passed by value.
         unsafe { self.repr.into_inner() }
     }
 }
@@ -123,11 +129,13 @@ impl<K: Key, V> PlTree<K, V> {
         }
     }
 
+    // The caller must ensure that `!is_nil(idx)`.
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> V {
         debug_assert!(!self.is_nil(idx));
 
         let node = self.take(idx);
+        // All 3 invariants of delete_max/min are satisfied.
         if self.has_left(idx) {
             self.delete_max(idx, lefti(idx));
         } else if self.has_right(idx) {
@@ -137,12 +145,18 @@ impl<K: Key, V> PlTree<K, V> {
     }
 
 
+    // The caller must ensure that the following invariants are satisfied:
+    //   a) both idx and hole point to valid indices into data
+    //   b) the cell at `idx` is non-empty
+    //   c) the cell at `hole` is empty
     #[inline]
     fn delete_max(&mut self, mut hole: usize, mut idx: usize) {
+        // We maintain all three invariants (a), (b) and (c) for each iteration of the loop.
         loop {
             debug_assert!(self.is_nil(hole) && !self.is_nil(idx) && idx == lefti(hole));
 
             idx = self.find_max(idx);
+            // This is safe because the invariant of `move_from_to()` is exactly (a), (b) and (c).
             unsafe { self.move_from_to(idx, hole); }
             hole = idx;
 
@@ -153,12 +167,18 @@ impl<K: Key, V> PlTree<K, V> {
         }
     }
 
+    // The caller must ensure that the following invariants are satisfied:
+    //   a) both idx and hole point to valid indices into data
+    //   b) the cell at `idx` is non-empty
+    //   c) the cell at `hole` is empty
     #[inline]
     fn delete_min(&mut self, mut hole: usize, mut idx: usize) {
+        // We maintain all three invariants (a), (b) and (c) for each iteration of the loop.
         loop {
             debug_assert!(self.is_nil(hole) && !self.is_nil(idx) && idx == righti(hole));
 
             idx = self.find_min(idx);
+            // This is safe because the invariant of `move_from_to()` is exactly (a), (b) and (c).
             unsafe { self.move_from_to(idx, hole); }
             hole = idx;
 
@@ -346,8 +366,7 @@ impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
                 return;
             }
 
-            let key = self.key_unsafe(idx);
-            let decision = self.drv.decide(key);
+            let decision = self.drv.decide(self.key(idx));
 
             if decision.left() && decision.right() {
                 let item = self.filter_take(idx);
@@ -368,10 +387,10 @@ impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
         }
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline(never)]
     fn delete_range_min(&mut self, idx: usize) {
-        let key = self.key_unsafe(idx);
-        let decision = self.drv.decide(key);
+        let decision = self.drv.decide(self.key(idx));
         debug_assert!(decision.left());
 
         if decision.right() {
@@ -407,10 +426,10 @@ impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
         }
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline(never)]
     fn delete_range_max(&mut self, idx: usize) {
-        let key = self.key_unsafe(idx);
-        let decision = self.drv.decide(key);
+        let decision = self.drv.decide(self.key(idx));
         debug_assert!(decision.right(), "idx={}", idx);
 
         if decision.left() {

@@ -14,34 +14,46 @@ pub struct IvTree<Iv: Interval, V> {
 
 //---- constructors and helpers --------------------------------------------------------------------
 impl<Iv: Interval, V> IvTree<Iv, V> {
+    fn update_parent_maxb(&mut self, child_idx: usize) {
+        // This is safe, as there is no data race, and we don't leak anything.
+        let parent = self.node_mut_unsafe(parenti(child_idx));
+        let node = self.node(child_idx);
+
+        if node.maxb > parent.maxb {
+            parent.maxb = node.maxb.clone()
+        }
+    }
+
     // assumes a contiguous layout of nodes (no holes)
     fn init_maxb(&mut self) {
         // initialize maxb values
         for i in (1..self.size()).rev() {
-            let parent = self.node_mut_unsafe(parenti(i));
-            let node = self.node(i);
-
-            if node.maxb > parent.maxb {
-                parent.maxb = node.maxb.clone()
-            }
+            self.update_parent_maxb(i);
         }
     }
 
     fn repr(&self) -> &TreeRepr<IvNode<Iv, V>> {
+        // This is safe according to UnsafeCell::get(), because there are no mutable aliases to
+        // self.repr possible at the time when &self is taken.
         unsafe { &*self.repr.get() }
     }
 
     fn repr_mut(&mut self) -> &mut TreeRepr<IvNode<Iv, V>> {
+        // This is safe according to UnsafeCell::get(), because the access to self.repr is unique at
+        // the time when &mut self is taken.
         unsafe { &mut *self.repr.get() }
     }
 
     pub fn into_repr(self) -> TreeRepr<IvNode<Iv, V>> {
+        // This is safe according to UnsafeCell::into_inner(), because no thread can be inspecting
+        // the inner value when self is passed by value.
         unsafe { self.repr.into_inner() }
     }
 
 
     #[inline]
     fn update_maxb(&mut self, idx: usize) {
+        // This is safe, as nothing is leaked, and there is no data race.
         let node = self.node_mut_unsafe(idx);
 
         let left_self_maxb =
@@ -88,6 +100,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         }
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> Entry<Iv, V> {
         debug_assert!(!self.is_nil(idx));
@@ -106,6 +119,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         entry
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline]
     fn delete_max(&mut self, idx: usize) -> Entry<Iv, V> {
         let max_idx = self.find_max(idx);
@@ -115,6 +129,8 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             self.update_maxb(max_idx);
             entry
         } else {
+            // Given an `idx` that satisfies `!is_nil(idx)`, `find_max()` returns an index that also
+            // satisfies that property, therefore `take()`'s invariant is satisfied.
             let IvNode{entry, ..} = self.take(max_idx);
             entry
         };
@@ -123,6 +139,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         entry
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline]
     fn delete_min(&mut self, idx: usize) -> Entry<Iv, V> {
         let min_idx = self.find_min(idx);
@@ -132,6 +149,8 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             self.update_maxb(min_idx);
             entry
         } else {
+            // Given an `idx` that satisfies `!is_nil(idx)`, `find_min()` returns an index that also
+            // satisfies that property, therefore `take()`'s invariant is satisfied.
             let IvNode{entry, ..} = self.take(min_idx);
             entry
         };
@@ -244,12 +263,7 @@ impl<Iv: Interval, V> AppliedTree<IvNode<Iv, V>> for IvTree<Iv, V> {
         // initialize maxb values
         for i in (1..tree.data.len()).rev() {
             if !tree.is_nil(i) {
-                let parent = tree.node_mut_unsafe(parenti(i));
-                let node = tree.node(i);
-
-                if node.maxb > parent.maxb {
-                    parent.maxb = node.maxb.clone()
-                }
+                tree.update_parent_maxb(i);
             }
         }
 
@@ -317,8 +331,11 @@ impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
             return;
         }
 
-        // This is safe: it is guaranteed that the container (Sink) does not outlive content (node)
-        // by IvTree::query_overlap()'s requirement that S: Sink<&'a (Iv, V)>.
+        // This is safe: it is guaranteed that the reference (`&node.entry.item`) does not outlive
+        // the storage (`self.data`), because the declaration:
+        //          IvTree::query_overlap::<'a, _, S: Sink<&'a _>>()
+        // ensures that the lifetime of references inside Sink is bounded from above by the lifetime
+        // of &self.
         let node = self.node_unsafe(idx);
         let k: &Iv = node.entry.key();
 
@@ -476,10 +493,14 @@ impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
 //        replacement_entry
 //    }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline(never)]
     fn filter_overlap_ivl_rec<Q>(&mut self, query: &Q, idx: usize, min_included: bool)
         where Q: Interval<K=Iv::K>
     {
+        // This is safe because:
+        //   a) we don't leak any of the node's content,
+        //   b) no data race is caused by holding references to both .maxb and .key, as they are distinct fields
         let node = self.node_mut_unsafe(idx);
         let k: &Iv = node.entry.key();
 
@@ -636,18 +657,18 @@ impl<Iv, V, S, Flt> ItemVisitor<IvNode<Iv, V>> for UpdateMax<Iv, S, Flt>
             return;
         }
 
-        let node = &mut tree.node_mut_unsafe(idx);
-        match (tree.has_left(idx), tree.has_right(idx)) {
-            (false, false) =>
-                node.maxb = node.key().b().clone(),
-            (false, true) =>
-                node.maxb = cmp::max(node.key().b(), &tree.node(righti(idx)).maxb).clone(),
-            (true, false) =>
-                node.maxb = cmp::max(node.key().b(), &tree.node(lefti(idx)).maxb).clone(),
-            (true, true) =>
-                node.maxb = cmp::max(node.key().b(),
-                                     cmp::max(&tree.node(lefti(idx)).maxb, &tree.node(righti(idx)).maxb))
-                                    .clone(),
-        }
+        // This is safe, as nothing is leaked, and there is no data race.
+        let node = tree.node_mut_unsafe(idx);
+        node.maxb = {
+            let b = node.key().b();
+            match (tree.has_left(idx), tree.has_right(idx)) {
+                (false, false) => b.clone(),
+                (false, true)  => cmp::max(b, &tree.node(righti(idx)).maxb).clone(),
+                (true, false)  => cmp::max(b, &tree.node(lefti(idx)).maxb).clone(),
+                (true, true)   => cmp::max(b,
+                                      cmp::max(&tree.node(lefti(idx)).maxb, &tree.node(righti(idx)).maxb))
+                                  .clone(),
+            }
+        };
     }
 }

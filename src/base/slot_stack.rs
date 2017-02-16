@@ -26,6 +26,7 @@ pub struct SlotStack {
 impl SlotStack {
     pub fn new(capacity: usize) -> SlotStack {
         unsafe {
+            // we manage the allocated memory manually
             let mut slots = vec![mem::uninitialized(); capacity];
             let ptr: *mut Slot = slots.as_mut_ptr();
             mem::forget(slots);
@@ -58,6 +59,7 @@ impl SlotStack {
     }
 
 
+    // The caller must make sure that there is an open slot, i.e. `self.nfilled < self.nslots`.
     #[inline(always)]
     pub fn fill(&mut self) -> usize {
         debug_assert!(self.nfilled < self.nslots);
