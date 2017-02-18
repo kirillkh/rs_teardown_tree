@@ -19,3 +19,7 @@ treap = { git = "https://github.com/kirillkh/treap-rs.git" }
 teardown_tree = { path = ".." }
 libc = "0.2.7"
 ##wio = "0.1.2"
+
+[dependencies.x86]
+version = "0.8.1"
+default-features = false
