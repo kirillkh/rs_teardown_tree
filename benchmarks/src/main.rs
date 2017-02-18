@@ -13,11 +13,6 @@ use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_sing
 
 use std::time::Duration;
 
-#[inline]
-fn nanos(d: Duration) -> u64 {
-    d.as_secs()*1000000000 + d.subsec_nanos() as u64
-}
-
 //#[cfg(all(feature = "unstable", target_os = "windows"))]
 //fn set_affinity() {
 //    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
@@ -100,11 +95,10 @@ fn bench_refill_impl<M: TeardownTreeMaster>(_: usize, spec: &[u64]) -> (String, 
 fn main() {
     bench_refill::<TreeBulk>(100, 4000000);
     return;
-    bench_refill_impl::<TreeBulk>(10, &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]);
-
 
     bench_table(10, "Refill", &[
         BenchJob::new(&bench_refill_impl::<TreeBulk>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
+        BenchJob::new(&bench_refill_impl::<IntervalTreeBulk>,    &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
         BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[7000000,     460000,     48000,      5000,       300,    25,     3]),
         BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[27000000,    3500000,    350000,     30000,      2300,   110,    10]),
         BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[7000000,     540000,     50000,      4500,       400,    25,     3]),
@@ -835,23 +829,12 @@ mod bench_delete_range {
             Display::fmt(&self.0, fmt)
         }
     }
-
-
-    pub fn black_box<T>(dummy: T) -> T {
-        use std::ptr;
-        use std::mem::forget;
-
-        unsafe {
-            let ret = ptr::read_volatile(&dummy as *const T);
-            forget(dummy);
-            ret
-        }
-    }
 }
 
 
 
 mod ts {
+    use super::black_box;
     use x86::bits64::time::{rdtsc, rdtscp};
 
     pub type Timestamp = u64;
@@ -859,6 +842,9 @@ mod ts {
     #[inline]
     pub fn new_timestamp() -> Timestamp {
         // we cannot use rdtscp, it's bugged (some kind of memory or register corruption)
+
+        // TODO: check whether a fence is really needed here. it sure is very expensive
+//        unsafe { black_box(rdtsc()) }
         unsafe { rdtsc() }
     }
 
@@ -869,4 +855,21 @@ mod ts {
         *prev_timestamp = timestamp;
         elapsed
     }
+}
+
+
+pub fn black_box<T>(dummy: T) -> T {
+    use std::ptr;
+    use std::mem::forget;
+
+    unsafe {
+        let ret = ptr::read_volatile(&dummy as *const T);
+        forget(dummy);
+        ret
+    }
+}
+
+#[inline]
+fn nanos(d: Duration) -> u64 {
+    d.as_secs()*1000000000 + d.subsec_nanos() as u64
 }
