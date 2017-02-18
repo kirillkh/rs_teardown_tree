@@ -1,4 +1,4 @@
-*Benchmarks last updated for teardown_tree v0.5.0 / Rust 1.16.0-nightly.*
+*Benchmarks last updated for teardown_tree v0.6.4 / Rust 1.17.0-nightly.*
 
 ![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 100](full_refill_teardown_100.png?raw=true "full cycle/100")
 
