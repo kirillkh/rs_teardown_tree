@@ -1,3 +1,4 @@
+extern crate libc;
 extern crate rand;
 extern crate treap;
 extern crate teardown_tree;
@@ -166,6 +167,7 @@ mod bench_delete_range {
     use teardown_tree::sink::{UncheckedVecRefSink};
     use super::nanos;
     use cpuprofiler::PROFILER;
+    use super::ts::{Timestamp, new_timestamp, next_elapsed};
 
     pub type Tree = TeardownTreeSet<usize>;
     pub type TreeBulk = TeardownTreeBulk;
@@ -245,7 +247,7 @@ mod bench_delete_range {
         println!("average time to delete {} random elements from TeardownTree using delete_range(), {} elements: {}ns, total: {}ms", rm_items, n, elapsed_nanos/iters, elapsed_nanos/1000000)
     }
 
-
+    #[inline(never)]
     pub fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) -> usize {
         let elems: Vec<_> = (0..n).collect();
         let tree = build::<M>(elems);
@@ -253,13 +255,14 @@ mod bench_delete_range {
         let mut elapsed_nanos = 0;
 
         PROFILER.lock().unwrap().start("./my-prof.profile").expect("Couldn't start");
+        let mut ts: Timestamp = new_timestamp();
         for _ in 0..iters {
             copy = black_box(copy);
             copy.clear();
-            let start = time::SystemTime::now();
+            next_elapsed(&mut ts);
             copy.rfill(&tree);
-            let elapsed = start.elapsed().unwrap();
-            elapsed_nanos += nanos(elapsed);
+            let elapsed = next_elapsed(&mut ts);
+            elapsed_nanos += elapsed;
         }
         PROFILER.lock().unwrap().stop().unwrap();
 
@@ -334,7 +337,7 @@ mod bench_delete_range {
         type T: Debug;
 
         fn del_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>);
-        fn rfill(&mut self, master: &Self::Master);
+        #[inline(never)] fn rfill(&mut self, master: &Self::Master);
         fn sz(&self) -> usize;
         fn clear(&mut self);
         fn as_vec(&self) -> Vec<usize>;
@@ -377,6 +380,7 @@ mod bench_delete_range {
             self.0.delete_range(range, UncheckedVecRefSink::new(output));
         }
 
+        #[inline(never)]
         fn rfill(&mut self, master: &Self::Master) {
             self.0.refill(&master.0)
         }
@@ -441,6 +445,7 @@ mod bench_delete_range {
             }
         }
 
+        #[inline(never)]
         fn rfill(&mut self, master: &Self::Master) {
             self.0.refill(&master.0)
         }
@@ -516,6 +521,7 @@ mod bench_delete_range {
             }
         }
 
+        #[inline(never)]
         fn rfill(&mut self, master: &Self::Master) {
             assert!(self.set.is_empty(), "size={}", self.set.len());
             self.set = master.0.clone();
@@ -585,6 +591,7 @@ mod bench_delete_range {
             self.0.remove_range(range, output);
         }
 
+        #[inline(never)]
         fn rfill(&mut self, master: &Self::Master) {
             self.0 = master.0.clone()
         }
@@ -658,6 +665,7 @@ mod bench_delete_range {
             self.0.remove_range(&range.start .. &range.end, output);
         }
 
+        #[inline(never)]
         fn rfill(&mut self, master: &Self::Master) {
             self.0 = master.0.clone()
         }
@@ -731,6 +739,7 @@ mod bench_delete_range {
             self.0.delete_overlap(&KeyInterval::new(range.start, range.end), UncheckedVecRefSink::new(output));
         }
 
+        #[inline(never)]
         fn rfill(&mut self, master: &Self::Master) {
             self.0.refill(&master.0)
         }
@@ -792,6 +801,7 @@ mod bench_delete_range {
             self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, UncheckedVecRefSink::new(output));
         }
 
+        #[inline(never)]
         fn rfill(&mut self, master: &Self::Master) {
             self.0.refill(&master.0)
         }
@@ -826,5 +836,90 @@ mod bench_delete_range {
             forget(dummy);
             ret
         }
+    }
+}
+
+
+
+
+
+
+
+
+#[cfg(target_os = "linux")]
+mod ts {
+    use libc::{c_long, suseconds_t, getrusage, RUSAGE_SELF, time_t, timeval, rusage};
+
+    pub type Timestamp = u64;
+
+    fn new_rusage() -> rusage {
+        let mut usage = rusage {
+            ru_utime: timeval{ tv_sec: 0 as time_t, tv_usec: 0 as suseconds_t, },
+            ru_stime: timeval{ tv_sec: 0 as time_t, tv_usec: 0 as suseconds_t, },
+            ru_maxrss: 0 as c_long,
+            ru_ixrss: 0 as c_long,
+            ru_idrss: 0 as c_long,
+            ru_isrss: 0 as c_long,
+            ru_minflt: 0 as c_long,
+            ru_majflt: 0 as c_long,
+            ru_nswap: 0 as c_long,
+            ru_inblock: 0 as c_long,
+            ru_oublock: 0 as c_long,
+            ru_msgsnd: 0 as c_long,
+            ru_msgrcv: 0 as c_long,
+            ru_nsignals: 0 as c_long,
+            ru_nvcsw: 0 as c_long,
+            ru_nivcsw: 0 as c_long,
+        };
+
+        unsafe { getrusage(RUSAGE_SELF, (&mut usage) as *mut rusage); }
+        usage
+    }
+
+    #[inline]
+    pub fn new_timestamp() -> Timestamp {
+        let usage = new_rusage();
+        let mut timestamp = 0;
+        next_elapsed(&mut timestamp)
+    }
+
+    #[inline]
+    pub fn next_elapsed(prev_timestamp: &mut Timestamp) -> u64 {
+        let usage = new_rusage();
+        let secs = (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) as u64;
+        let usecs = (usage.ru_utime.tv_usec + usage.ru_stime.tv_sec) as u64;
+        let timestamp = (secs * 1_000_000) + usecs;
+
+        let elapsed = timestamp - *prev_timestamp;
+        *prev_timestamp = timestamp;
+        elapsed
+    }
+}
+
+
+
+#[cfg(target_os = "windows")]
+mod ts {
+    use std::time;
+    use std::time::Duration;
+
+    pub type Timestamp = time::SystemTime;
+
+    #[inline]
+    pub fn new_timestamp() -> Timestamp {
+        time::SystemTime::now()
+    }
+
+    #[inline]
+    pub fn next_elapsed(prev_timestamp: &mut Timestamp) -> u64 {
+        let now = time::SystemTime::now();
+        let dur = now.duration_since(*prev_timestamp).unwrap();
+        *prev_timestamp = now;
+        nanos(dur)
+    }
+
+    #[inline]
+    fn nanos(d: Duration) -> u64 {
+        d.as_secs()*1000000000 + d.subsec_nanos() as u64
     }
 }
