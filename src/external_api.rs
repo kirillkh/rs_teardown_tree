@@ -5,13 +5,20 @@ pub use applied::interval::{Interval, KeyInterval};
 
 pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
 pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
-pub use base::{TeardownTreeRefill, Sink, Entry}; // TODO: exposing Entry is probably not a good idea
+pub use base::{TeardownTreeRefill, Sink};
 pub use base::sink;
 
 
+pub mod iter {
+    pub use super::plain::{SetIter, MapIter, SetIntoIter, MapIntoIter};
+    pub use super::interval::{IntervalSetIter, IntervalMapIter, IntervalSetIntoIter, IntervalMapIntoIter};
+}
+
+
+
 mod plain {
-    use base::{TeardownTreeRefill, Sink, Entry, ItemFilter};
-    use applied::plain_tree::{PlTree};
+    use base::{TeardownTreeRefill, Sink, ItemFilter};
+    use applied::plain_tree::{PlTree, PlNode};
     use super::{SinkAdapter, RefSinkAdapter};
 
     use std::fmt;
@@ -19,7 +26,6 @@ mod plain {
     use std::ops::Range;
 
     #[cfg(test)] use base::{TreeRepr, Key};
-    #[cfg(test)] use applied::plain_tree::PlNode;
 
 
     #[derive(Clone)]
@@ -60,9 +66,9 @@ mod plain {
 
         /// Executes a range query.
         #[inline]
-        pub fn query_range<'a, Q, S>(&'a self, range: Range<Q>, sink: &mut S)
+        pub fn query_range<'a, Q, S>(&'a self, range: Range<Q>, sink: S)
             where Q: PartialOrd<K>,
-                  S: Sink<&'a Entry<K, V>>
+                  S: Sink<&'a (K, V)>
         {
             self.internal.query_range(range, sink)
         }
@@ -119,6 +125,12 @@ mod plain {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.internal.clear(); }
+
+        /// Creates an iterator into the map.
+        #[inline]
+        pub fn iter<'a>(&'a self) -> MapIter<'a, K, V> {
+            MapIter::new(self.internal.iter())
+        }
     }
 
     impl<K: Ord+Clone+Debug, V> Debug for TeardownTreeMap<K, V> {
@@ -198,11 +210,11 @@ mod plain {
 
         /// Executes a range query and feeds references to the matching items into `sink`.
         #[inline]
-        pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: &mut S)
+        pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: S)
             where Q: PartialOrd<T>,
                   S: Sink<&'a T>
         {
-            self.map.query_range(query, &mut RefSinkAdapter::new(sink))
+            self.map.query_range(query, RefSinkAdapter::new(sink))
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -261,6 +273,11 @@ mod plain {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.map.clear(); }
+
+        /// Creates an iterator into the set.
+        #[inline] pub fn iter<'a>(&'a self) -> SetIter<'a, T> {
+            SetIter::new(self.map.internal.iter())
+        }
     }
 
     impl<K: Ord+Clone+Copy> TeardownTreeRefill for TeardownTreeSet<K> {
@@ -301,6 +318,81 @@ mod plain {
             Display::fmt(&self.map, fmt)
         }
     }
+
+
+    #[derive(new)]
+    pub struct MapIter<'a, K: Ord+Clone+'a, V: 'a> {
+        inner: ::base::Iter<'a, PlNode<K, V>>
+    }
+
+    impl<'a, K: Ord+Clone+'a, V: 'a> Iterator for MapIter<'a, K, V> {
+        type Item = &'a (K, V);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|entry| entry.as_tuple())
+        }
+    }
+
+
+    #[derive(new)]
+    pub struct SetIter<'a, T: Ord+Clone+'a> {
+        inner: ::base::Iter<'a, PlNode<T, ()>>
+    }
+
+    impl<'a, T: Ord+Clone+'a> Iterator for SetIter<'a, T> {
+        type Item = &'a T;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|entry| entry.key())
+        }
+    }
+
+
+    impl<K: Ord+Clone, V> IntoIterator for TeardownTreeMap<K, V> {
+        type Item = (K, V);
+        type IntoIter = MapIntoIter<K, V>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            MapIntoIter::new(::base::IntoIter::new(self.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct MapIntoIter<K: Ord+Clone, V> {
+        inner: ::base::IntoIter<PlNode<K, V>>
+    }
+
+    impl<K: Ord+Clone, V> Iterator for MapIntoIter<K, V> {
+        type Item = (K, V);
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+    }
+
+
+
+    impl<T: Ord+Clone> IntoIterator for TeardownTreeSet<T> {
+        type Item = T;
+        type IntoIter = SetIntoIter<T>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            SetIntoIter::new(::base::IntoIter::new(self.map.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct SetIntoIter<T: Ord+Clone> {
+        inner: ::base::IntoIter<PlNode<T, ()>>
+    }
+
+    impl<T: Ord+Clone> Iterator for SetIntoIter<T> {
+        type Item = T;
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|(item, _)| item)
+        }
+    }
 }
 
 
@@ -309,15 +401,14 @@ mod interval {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
-    use base::{TeardownTreeRefill, ItemFilter, Entry, Sink};
+    use base::{TeardownTreeRefill, ItemFilter, Sink};
     use super::{SinkAdapter, RefSinkAdapter};
 
     use applied::AppliedTree;
-    use applied::interval::{Interval};
+    use applied::interval::{Interval, IvNode};
     use applied::interval_tree::{IvTree};
 
     #[cfg(test)] use base::TreeRepr;
-    #[cfg(test)] use applied::interval::IvNode;
 
 
     #[derive(Clone)]
@@ -360,11 +451,11 @@ mod interval {
 
         /// Executes an overlap query.
         #[inline]
-        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: &mut S)
+        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: S)
             where Q: Interval<K=Iv::K>,
-                  S: Sink<&'a Entry<Iv, V>>
+                  S: Sink<&'a (Iv, V)>
         {
-            self.internal.query_overlap_rec(0, query, sink)
+            self.internal.query_overlap(0, query, sink)
         }
 
         /// Deletes the item with the given key from the tree and returns it (or None).
@@ -405,6 +496,12 @@ mod interval {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.internal.clear(); }
+
+        /// Creates an iterator into the map.
+        #[inline]
+        pub fn iter<'a>(&'a self) -> IntervalMapIter<'a, Iv, V> {
+            IntervalMapIter::new(self.internal.iter())
+        }
     }
 
 
@@ -475,12 +572,12 @@ mod interval {
 
         /// Executes an overlap query.
         #[inline]
-        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: &mut S)
+        pub fn query_overlap<'a, Q, S>(&'a self, query: &Q, sink: S)
             where Q: Interval<K=Iv::K>,
                   S: Sink<&'a Iv>
         {
 
-            self.map.query_overlap(query, &mut RefSinkAdapter::new(sink))
+            self.map.query_overlap(query, RefSinkAdapter::new(sink))
         }
 
         /// Deletes the given interval from the tree and returns true (or false if it was not found).
@@ -521,6 +618,12 @@ mod interval {
 
         /// Removes all items from the tree (the items are dropped, but the internal storage is not).
         #[inline] pub fn clear(&mut self) { self.map.clear(); }
+
+        /// Creates an iterator into the set.
+        #[inline]
+        pub fn iter<'a>(&'a self) -> IntervalSetIter<'a, Iv> {
+            IntervalSetIter::new(self.map.internal.iter())
+        }
     }
 
     #[cfg(test)]
@@ -579,6 +682,81 @@ mod interval {
             Display::fmt(&self.map, fmt)
         }
     }
+
+
+    #[derive(new)]
+    pub struct IntervalMapIter<'a, Iv: Interval+'a, V: 'a> {
+        inner: ::base::Iter<'a, IvNode<Iv, V>>
+    }
+
+    impl<'a, Iv: Interval+'a, V: 'a> Iterator for IntervalMapIter<'a, Iv, V> {
+        type Item = &'a (Iv, V);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|entry| entry.as_tuple())
+        }
+    }
+
+
+    #[derive(new)]
+    pub struct IntervalSetIter<'a, Iv: Interval+'a> {
+        inner: ::base::Iter<'a, IvNode<Iv, ()>>
+    }
+
+    impl<'a, Iv: Interval+'a> Iterator for IntervalSetIter<'a, Iv> {
+        type Item = &'a Iv;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|entry| entry.key())
+        }
+    }
+
+
+    impl<Iv: Interval, V> IntoIterator for IntervalTeardownTreeMap<Iv, V> {
+        type Item = (Iv, V);
+        type IntoIter = IntervalMapIntoIter<Iv, V>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            IntervalMapIntoIter::new(::base::IntoIter::new(self.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct IntervalMapIntoIter<Iv: Interval, V> {
+        inner: ::base::IntoIter<IvNode<Iv, V>>
+    }
+
+    impl<Iv: Interval, V> Iterator for IntervalMapIntoIter<Iv, V> {
+        type Item = (Iv, V);
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next()
+        }
+    }
+
+
+
+    impl<Iv: Interval> IntoIterator for IntervalTeardownTreeSet<Iv> {
+        type Item = Iv;
+        type IntoIter = IntervalSetIntoIter<Iv>;
+
+        fn into_iter(self) -> Self::IntoIter {
+            IntervalSetIntoIter::new(::base::IntoIter::new(self.map.internal.into_repr()))
+        }
+    }
+
+    // this is just a wrapper for ::base::IntoIter<Node> to avoid leaking the Node type
+    #[derive(new)]
+    pub struct IntervalSetIntoIter<Iv: Interval> {
+        inner: ::base::IntoIter<IvNode<Iv, ()>>
+    }
+
+    impl<Iv: Interval> Iterator for IntervalSetIntoIter<Iv> {
+        type Item = Iv;
+        fn next(&mut self) -> Option<Self::Item> {
+            self.inner.next().map(|(item, _)| item)
+        }
+    }
 }
 
 #[inline(always)]
@@ -609,22 +787,22 @@ impl<T, S: Sink<T>> Sink<(T, ())> for SinkAdapter<T, S> {
 
 
 
-struct RefSinkAdapter<'a, 'b, T: 'a, S: Sink<&'a T>+'b> {
-    sink: &'b mut S,
+struct RefSinkAdapter<'a, T: 'a, S: Sink<&'a T>> {
+    sink: S,
     _ph: PhantomData<&'a T>
 }
 
-impl<'a, 'b, T: 'a, S: Sink<&'a T>+'b> RefSinkAdapter<'a, 'b, T, S> {
+impl<'a, T: 'a, S: Sink<&'a T>> RefSinkAdapter<'a, T, S> {
     #[inline]
-    fn new(sink: &'b mut S) -> Self {
+    fn new(sink: S) -> Self {
         RefSinkAdapter { sink: sink, _ph: PhantomData }
     }
 }
 
-impl<'a, 'b, T: 'a, S: Sink<&'a T>+'b> Sink<&'a Entry<T, ()>> for RefSinkAdapter<'a, 'b, T, S> {
+impl<'a, T: 'a, S: Sink<&'a T>> Sink<&'a (T, ())> for RefSinkAdapter<'a, T, S> {
     #[inline]
-    fn consume(&mut self, entry: &'a Entry<T, ()>) {
-        self.sink.consume(&entry.key)
+    fn consume(&mut self, entry: &'a (T, ())) {
+        self.sink.consume(&entry.0)
     }
 }
 

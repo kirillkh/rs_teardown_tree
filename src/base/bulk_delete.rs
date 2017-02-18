@@ -41,8 +41,8 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     type Sink: Sink<(N::K, N::V)>;
     type Filter: ItemFilter<N::K>;
 
-    #[inline] fn filter_mut(&mut self) -> &mut Self::Filter;
-    #[inline] fn sink_mut(&mut self) -> &mut Self::Sink;
+    #[inline(always)] fn filter_mut(&mut self) -> &mut Self::Filter;
+    #[inline(always)] fn sink_mut(&mut self) -> &mut Self::Sink;
 
     //---- consume_subtree_* ---------------------------------------------------------------
     #[inline(always)]
@@ -60,9 +60,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         let sink: &mut Self::Sink = unsafe { mem::transmute(self.sink_mut()) };
 
         TreeRepr::traverse_inorder_mut(self, root, sink, |this, sink, idx| {
-            unsafe {
-                this.move_to(idx, sink);
-            }
+            this.move_to(idx, sink);
             false
         });
     }
@@ -73,9 +71,10 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
             return;
         }
 
+        // This is safe: filter, which is taken by mutable references below, can not mutate `self`.
+        let key = self.key_unsafe(idx);
         // consume root if necessary
-        let node = self.node_unsafe(idx);
-        let consumed = if self.filter_mut().accept(&node.key)
+        let consumed = if self.filter_mut().accept(key)
             { Some(self.take(idx)) }
             else
             { None };
@@ -108,8 +107,10 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
      }
 
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline(always)]
     fn filter_take(&mut self, idx: usize) -> Option<N> {
+        // This is safe: filter, which is taken by mutable references below, can not mutate `self`.
         let key = self.key_unsafe(idx);
         if self.filter_mut().accept(key) {
             Some(self.take(idx))
@@ -120,9 +121,11 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
 
 
     //---- fill_slots_* -------------------------------------------------------------------
+    // The caller must make sure that `!is_nil(idx)` and there is an open `min_slot`.
     #[inline(never)]
     fn fill_slots_min(&mut self, idx: usize) -> bool {
         debug_assert!(!self.is_nil(idx));
+        debug_assert!(self.slots_min().has_open());
 
         if self.has_left(idx) {
             self.descend_fill_min_left(idx, false);
@@ -131,8 +134,6 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
             }
         }
 
-        debug_assert!(self.slots_min().has_open());
-
         self.fill_slot_min(idx);
 
         let done = !self.descend_fill_min_right(idx, true);
@@ -140,9 +141,11 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     }
 
 
+    // The caller must make sure that `!is_nil(idx)` and there is an open `max_slot`.
     #[inline(never)]
     fn fill_slots_max(&mut self, idx: usize) -> bool {
         debug_assert!(!self.is_nil(idx));
+        debug_assert!(self.slots_max().has_open());
 
         if self.has_right(idx) {
             self.descend_fill_max_right(idx, false);
@@ -152,8 +155,6 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
             }
         }
 
-        debug_assert!(self.slots_max().has_open());
-
         self.fill_slot_max(idx);
 
         let done = !self.descend_fill_max_left(idx, true);
@@ -161,20 +162,27 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     }
 
 
+    // The caller must make sure that `!is_nil(idx)` and there is an open `min_slot`.
     #[inline(always)]
     fn fill_slot_min(&mut self, idx: usize) {
+        debug_assert!(!self.is_nil(idx));
         debug_assert!(self.slots_min().has_open());
+        // Since there is an open `min_slot`, `dst_idx` points to an empty cell.
         let dst_idx = self.slots_min().fill();
         unsafe {
+            // We are safe to call `move_from_to()`, as all its requirements are satisfied.
             self.move_from_to(idx, dst_idx);
         }
     }
 
+    // The caller must make sure that `!is_nil(idx)` and there is an open `max_slot`.
     #[inline(always)]
     fn fill_slot_max(&mut self, idx: usize) {
         debug_assert!(self.slots_max().has_open());
         let dst_idx = self.slots_max().fill();
+        // Since there is an open `max_slot`, `dst_idx` points to an empty cell.
         unsafe {
+            // We are safe to call `move_from_to()`, as all its requirements are satisfied.
             self.move_from_to(idx, dst_idx);
         }
     }
@@ -231,6 +239,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     }
 
 
+    // The caller must make sure that there is an open min_slot.
     #[inline(always)]
     fn descend_fill_min_left(&mut self, idx: usize, with_slot: bool) -> bool {
         self.descend_left(idx, with_slot, |this: &mut Self, child_idx| {
@@ -238,6 +247,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         })
     }
 
+    // The caller must make sure that there is an open max_slot or `with_slot=true`.
     #[inline(always)]
     fn descend_fill_max_left(&mut self, idx: usize, with_slot: bool) -> bool {
         self.descend_left(idx, with_slot, |this: &mut Self, child_idx| {
@@ -246,6 +256,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
     }
 
 
+    // The caller must make sure that there is an open `min_slot` or `with_slot=true`.
     #[inline(always)]
     fn descend_fill_min_right(&mut self, idx: usize, with_slot: bool) -> bool {
         self.descend_right(idx, with_slot, |this: &mut Self, child_idx| {
@@ -253,6 +264,7 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         })
     }
 
+    // The caller must make sure that there is an open max_slot.
     #[inline(always)]
     fn descend_fill_max_right(&mut self, idx: usize, with_slot: bool) -> bool {
         self.descend_right(idx, with_slot, |this: &mut Self, child_idx| {

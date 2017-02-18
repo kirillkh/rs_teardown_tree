@@ -53,7 +53,8 @@ As a library
 | Add to your Cargo.toml:
 |
 |     ``[dependencies]``
-|     ``teardown_tree = "0.5.0"``
+|     ``teardown_tree = "0.6.4"``
+|
 
 | And to your crate's root:
 |
@@ -99,4 +100,7 @@ As the graph above shows, on my machine the whole clone/teardown sequence on a t
 tree, then delete 1000 items at a time until the tree is empty), is ~20 times faster with ``TeardownTree::delete_range()``
 than with ``BTreeSet::remove()``. It also uses 45% less memory.
 
-More benchmarks can be found `here <benchmarks/benchmarks.md>`_.
+|Benchmarks|_
+
+.. |Benchmarks| replace:: **All benchmarks**
+.. _Benchmarks:  benchmarks/benchmarks.md

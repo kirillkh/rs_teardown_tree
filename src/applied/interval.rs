@@ -133,6 +133,6 @@ impl<K: Ord+Clone> Ord for KeyInterval<K> {
 
 impl<K: Ord+Clone+fmt::Debug, Iv: Interval<K=K>, V> fmt::Debug for IvNode<Iv, V> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        write!(fmt, "({:?}..{:?}, m={:?})", self.key.a(), self.key.b(), &self.maxb)
+        write!(fmt, "({:?}..{:?}, m={:?})", self.key().a(), self.key().b(), &self.maxb)
     }
 }

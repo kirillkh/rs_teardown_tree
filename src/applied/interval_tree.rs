@@ -14,38 +14,54 @@ pub struct IvTree<Iv: Interval, V> {
 
 //---- constructors and helpers --------------------------------------------------------------------
 impl<Iv: Interval, V> IvTree<Iv, V> {
+    fn update_parent_maxb(&mut self, child_idx: usize) {
+        // This is safe, as there is no data race, and we don't leak anything.
+        let parent = self.node_mut_unsafe(parenti(child_idx));
+        let node = self.node(child_idx);
+
+        if node.maxb > parent.maxb {
+            parent.maxb = node.maxb.clone()
+        }
+    }
+
     // assumes a contiguous layout of nodes (no holes)
     fn init_maxb(&mut self) {
         // initialize maxb values
         for i in (1..self.size()).rev() {
-            let parent = self.node_mut_unsafe(parenti(i));
-            let node = self.node(i);
-
-            if node.maxb > parent.maxb {
-                parent.maxb = node.maxb.clone()
-            }
+            self.update_parent_maxb(i);
         }
     }
 
     fn repr(&self) -> &TreeRepr<IvNode<Iv, V>> {
+        // This is safe according to UnsafeCell::get(), because there are no mutable aliases to
+        // self.repr possible at the time when &self is taken.
         unsafe { &*self.repr.get() }
     }
 
     fn repr_mut(&mut self) -> &mut TreeRepr<IvNode<Iv, V>> {
+        // This is safe according to UnsafeCell::get(), because the access to self.repr is unique at
+        // the time when &mut self is taken.
         unsafe { &mut *self.repr.get() }
+    }
+
+    pub fn into_repr(self) -> TreeRepr<IvNode<Iv, V>> {
+        // This is safe according to UnsafeCell::into_inner(), because no thread can be inspecting
+        // the inner value when self is passed by value.
+        unsafe { self.repr.into_inner() }
     }
 
 
     #[inline]
     fn update_maxb(&mut self, idx: usize) {
+        // This is safe, as nothing is leaked, and there is no data race.
         let node = self.node_mut_unsafe(idx);
 
         let left_self_maxb =
-        if self.has_left(idx) {
-            cmp::max(&self.left(idx).maxb, node.key.b())
-        } else {
-            node.key.b()
-        }.clone();
+            if self.has_left(idx) {
+                cmp::max(&self.left(idx).maxb, node.key().b())
+            } else {
+                node.key().b()
+            }.clone();
         node.maxb =
             if self.has_right(idx) {
                 cmp::max(self.right(idx).maxb.clone(), left_self_maxb)
@@ -79,11 +95,12 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             None
         } else {
             let entry = self.delete_idx(idx);
-            self.update_ancestors_after_delete(idx, 0, &entry.key.b());
-            Some(entry.val)
+            self.update_ancestors_after_delete(idx, 0, entry.key().b());
+            Some(entry.into_tuple().1)
         }
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> Entry<Iv, V> {
         debug_assert!(!self.is_nil(idx));
@@ -102,6 +119,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         entry
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline]
     fn delete_max(&mut self, idx: usize) -> Entry<Iv, V> {
         let max_idx = self.find_max(idx);
@@ -111,14 +129,17 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             self.update_maxb(max_idx);
             entry
         } else {
+            // Given an `idx` that satisfies `!is_nil(idx)`, `find_max()` returns an index that also
+            // satisfies that property, therefore `take()`'s invariant is satisfied.
             let IvNode{entry, ..} = self.take(max_idx);
             entry
         };
 
-        self.update_ancestors_after_delete(max_idx, idx, &entry.key.b());
+        self.update_ancestors_after_delete(max_idx, idx, entry.key().b());
         entry
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline]
     fn delete_min(&mut self, idx: usize) -> Entry<Iv, V> {
         let min_idx = self.find_min(idx);
@@ -128,11 +149,13 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             self.update_maxb(min_idx);
             entry
         } else {
+            // Given an `idx` that satisfies `!is_nil(idx)`, `find_min()` returns an index that also
+            // satisfies that property, therefore `take()`'s invariant is satisfied.
             let IvNode{entry, ..} = self.take(min_idx);
             entry
         };
 
-        self.update_ancestors_after_delete(min_idx, idx, &entry.key.b());
+        self.update_ancestors_after_delete(min_idx, idx, entry.key().b());
         entry
     }
 }
@@ -156,28 +179,11 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
     }
 
 
-    // TODO: implement via Worker, so that we don't have to pay the price for dereferencing sink
-    pub fn query_overlap_rec<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: &mut S)
+    pub fn query_overlap<'a, Q, S>(&'a self, idx: usize, query: &Q, sink: S)
         where Q: Interval<K=Iv::K>,
-              S: Sink<&'a Entry<Iv, V>>
+              S: Sink<&'a (Iv, V)>
     {
-        if self.is_nil(idx) {
-            return;
-        }
-
-        let node = self.node(idx);
-        let k: &Iv = &node.entry.key;
-
-        if &node.maxb < query.a() {
-            // whole subtree outside the range
-        } else if query.b() <= k.a() && k.a() != query.a() {
-            // root and right are outside the range
-            self.query_overlap_rec(lefti(idx), query, sink);
-        } else {
-            self.query_overlap_rec(lefti(idx), query, sink);
-            if query.overlaps(k) { sink.consume(node) }
-            self.query_overlap_rec(righti(idx), query, sink);
-        }
+        self.work(sink, NoopFilter, |worker: &mut IvWorker<Iv,V,S,_>| worker.query_overlap_rec(idx, query))
     }
 
 //    /// returns index of the first item in the tree that may overlap `query`
@@ -202,9 +208,8 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
 //    }
 
     #[inline]
-    fn work<S, Flt, F, R>(&mut self, sink: S, filter: Flt, mut f: F) -> R
-        where S: Sink<(Iv, V)>,
-              Flt: ItemFilter<Iv>,
+    fn work<S, Flt, F, R>(&self, sink: S, filter: Flt, mut f: F) -> R
+        where Flt: ItemFilter<Iv>,
               F: FnMut(&mut IvWorker<Iv,V,S,Flt>) -> R
     {
         let repr: TreeRepr<IvNode<Iv, V>> = unsafe {
@@ -214,9 +219,14 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
         let mut worker = IvWorker::new(repr, sink, filter);
         let result = f(&mut worker);
 
+        // We do not reallocate the vecs inside repr, and the only thing that changes in its memory
+        // is the size of the tree. So we can get away with only updating the size as opposed to
+        // doing another expensive copy of the whole TreeRepr struct.
+        //
+        // This optimization results in a measurable speed-up to tiny/small range queries.
         unsafe {
-            let x = mem::replace(&mut *self.repr.get(), worker.repr);
-            mem::forget(x);
+            (*self.repr.get()).size = worker.repr.size;
+            mem::forget(worker.repr);
         }
 
         result
@@ -253,12 +263,7 @@ impl<Iv: Interval, V> AppliedTree<IvNode<Iv, V>> for IvTree<Iv, V> {
         // initialize maxb values
         for i in (1..tree.data.len()).rev() {
             if !tree.is_nil(i) {
-                let parent = tree.node_mut_unsafe(parenti(i));
-                let node = tree.node(i);
-
-                if node.maxb > parent.maxb {
-                    parent.maxb = node.maxb.clone()
-                }
+                tree.update_parent_maxb(i);
             }
         }
 
@@ -307,13 +312,49 @@ impl<Iv: Interval, V: Clone> Clone for IvTree<Iv, V> {
 
 #[derive(new)]
 pub struct IvWorker<Iv, V, S, Flt>
-    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+    where Iv: Interval
 {
     repr: TreeRepr<IvNode<Iv, V>>,
     sink: S,
     filter: Flt,
 }
 
+
+// query_overlap worker
+impl<'a, Iv: 'a, V: 'a, S, Flt> IvWorker<Iv, V, S, Flt>
+    where Iv: Interval, S: Sink<&'a (Iv, V)>, Flt: ItemFilter<Iv>
+{
+    fn query_overlap_rec<Q>(&mut self, idx: usize, query: &Q)
+        where Q: Interval<K=Iv::K>
+    {
+        if self.is_nil(idx) {
+            return;
+        }
+
+        // This is safe: it is guaranteed that the reference (`&node.entry.item`) does not outlive
+        // the storage (`self.data`), because the declaration:
+        //          IvTree::query_overlap::<'a, _, S: Sink<&'a _>>()
+        // ensures that the lifetime of references inside Sink is bounded from above by the lifetime
+        // of &self.
+        let node = self.node_unsafe(idx);
+        let k: &Iv = node.entry.key();
+
+        if &node.maxb < query.a() {
+            // whole subtree outside the range
+        } else if query.b() <= k.a() && k.a() != query.a() {
+            // root and right are outside the range
+            self.query_overlap_rec(lefti(idx), query);
+        } else {
+            self.query_overlap_rec(lefti(idx), query);
+            if query.overlaps(k) { self.sink.consume(node.as_tuple()) }
+            self.query_overlap_rec(righti(idx), query);
+        }
+    }
+
+}
+
+
+// filter_overlap worker
 impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
     where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
 {
@@ -452,12 +493,16 @@ impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
 //        replacement_entry
 //    }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline(never)]
     fn filter_overlap_ivl_rec<Q>(&mut self, query: &Q, idx: usize, min_included: bool)
         where Q: Interval<K=Iv::K>
     {
+        // This is safe because:
+        //   a) we don't leak any of the node's content,
+        //   b) no data race is caused by holding references to both .maxb and .key, as they are distinct fields
         let node = self.node_mut_unsafe(idx);
-        let k: &Iv = &node.entry.key;
+        let k: &Iv = node.entry.key();
 
         if &node.maxb < query.a() {
             // whole subtree outside the range
@@ -558,7 +603,7 @@ impl<Iv, V, S, Flt> IvWorker<Iv, V, S, Flt>
 
 
 impl<Iv, V, S, Flt> Deref for IvWorker<Iv, V, S, Flt>
-    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+    where Iv: Interval, Flt: ItemFilter<Iv>
 {
     type Target = TreeRepr<IvNode<Iv, V>>;
 
@@ -568,7 +613,7 @@ impl<Iv, V, S, Flt> Deref for IvWorker<Iv, V, S, Flt>
 }
 
 impl<Iv, V, S, Flt> DerefMut for IvWorker<Iv, V, S, Flt>
-    where Iv: Interval, S: Sink<(Iv, V)>, Flt: ItemFilter<Iv>
+    where Iv: Interval, Flt: ItemFilter<Iv>
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.repr
@@ -612,18 +657,18 @@ impl<Iv, V, S, Flt> ItemVisitor<IvNode<Iv, V>> for UpdateMax<Iv, S, Flt>
             return;
         }
 
-        let node = &mut tree.node_mut_unsafe(idx);
-        match (tree.has_left(idx), tree.has_right(idx)) {
-            (false, false) =>
-                node.maxb = node.key.b().clone(),
-            (false, true) =>
-                node.maxb = cmp::max(node.key.b(), &tree.node(righti(idx)).maxb).clone(),
-            (true, false) =>
-                node.maxb = cmp::max(node.key.b(), &tree.node(lefti(idx)).maxb).clone(),
-            (true, true) =>
-                node.maxb = cmp::max(node.key.b(),
-                                     cmp::max(&tree.node(lefti(idx)).maxb, &tree.node(righti(idx)).maxb))
-                                    .clone(),
-        }
+        // This is safe, as nothing is leaked, and there is no data race.
+        let node = tree.node_mut_unsafe(idx);
+        node.maxb = {
+            let b = node.key().b();
+            match (tree.has_left(idx), tree.has_right(idx)) {
+                (false, false) => b.clone(),
+                (false, true)  => cmp::max(b, &tree.node(righti(idx)).maxb).clone(),
+                (true, false)  => cmp::max(b, &tree.node(lefti(idx)).maxb).clone(),
+                (true, true)   => cmp::max(b,
+                                      cmp::max(&tree.node(lefti(idx)).maxb, &tree.node(righti(idx)).maxb))
+                                  .clone(),
+            }
+        };
     }
 }

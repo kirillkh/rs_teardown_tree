@@ -68,7 +68,7 @@ impl<K: Key, V> Node for PlNode<K, V> {
 
 impl<K: Key+fmt::Debug, V> fmt::Debug for PlNode<K, V> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.entry.key, fmt)
+        fmt::Debug::fmt(self.entry.key(), fmt)
     }
 }
 
@@ -96,11 +96,21 @@ impl<K: Key, V> PlTree<K, V> {
 
 
     fn repr(&self) -> &TreeRepr<PlNode<K, V>> {
+        // This is safe according to UnsafeCell::get(), because there are no mutable aliases to
+        // self.repr possible at the time when &self is taken.
         unsafe { &*self.repr.get() }
     }
 
     fn repr_mut(&mut self) -> &mut TreeRepr<PlNode<K, V>> {
+        // This is safe according to UnsafeCell::get(), because the access to self.repr is unique at
+        // the time when &mut self is taken.
         unsafe { &mut *self.repr.get() }
+    }
+
+    pub fn into_repr(self) -> TreeRepr<PlNode<K, V>> {
+        // This is safe according to UnsafeCell::into_inner(), because no thread can be inspecting
+        // the inner value when self is passed by value.
+        unsafe { self.repr.into_inner() }
     }
 }
 
@@ -119,26 +129,34 @@ impl<K: Key, V> PlTree<K, V> {
         }
     }
 
+    // The caller must ensure that `!is_nil(idx)`.
     #[inline]
     fn delete_idx(&mut self, idx: usize) -> V {
         debug_assert!(!self.is_nil(idx));
 
         let node = self.take(idx);
+        // All 3 invariants of delete_max/min are satisfied.
         if self.has_left(idx) {
             self.delete_max(idx, lefti(idx));
         } else if self.has_right(idx) {
             self.delete_min(idx, righti(idx));
         }
-        node.entry.val
+        node.entry.into_tuple().1
     }
 
 
+    // The caller must ensure that the following invariants are satisfied:
+    //   a) both idx and hole point to valid indices into data
+    //   b) the cell at `idx` is non-empty
+    //   c) the cell at `hole` is empty
     #[inline]
     fn delete_max(&mut self, mut hole: usize, mut idx: usize) {
+        // We maintain all three invariants (a), (b) and (c) for each iteration of the loop.
         loop {
             debug_assert!(self.is_nil(hole) && !self.is_nil(idx) && idx == lefti(hole));
 
             idx = self.find_max(idx);
+            // This is safe because the invariant of `move_from_to()` is exactly (a), (b) and (c).
             unsafe { self.move_from_to(idx, hole); }
             hole = idx;
 
@@ -149,12 +167,18 @@ impl<K: Key, V> PlTree<K, V> {
         }
     }
 
+    // The caller must ensure that the following invariants are satisfied:
+    //   a) both idx and hole point to valid indices into data
+    //   b) the cell at `idx` is non-empty
+    //   c) the cell at `hole` is empty
     #[inline]
     fn delete_min(&mut self, mut hole: usize, mut idx: usize) {
+        // We maintain all three invariants (a), (b) and (c) for each iteration of the loop.
         loop {
             debug_assert!(self.is_nil(hole) && !self.is_nil(idx) && idx == righti(hole));
 
             idx = self.find_min(idx);
+            // This is safe because the invariant of `move_from_to()` is exactly (a), (b) and (c).
             unsafe { self.move_from_to(idx, hole); }
             hole = idx;
 
@@ -186,7 +210,8 @@ impl<K: Key, V> PlTree<K, V> {
         self.filter_with_driver(RangeDriver::new(range, sink), filter)
     }
 
-    /// Deletes all items inside `range` from the tree and feeds them into `sink`.
+    /// Deletes all items inside `range` from the tree and feeds them into `sink`. The items are
+    /// returned in order.
     #[inline]
     pub fn delete_range_ref<Q, S>(&mut self, range: Range<&Q>, sink: S)
         where Q: PartialOrd<K>, S: Sink<(K, V)>
@@ -202,6 +227,7 @@ impl<K: Key, V> PlTree<K, V> {
         self.filter_with_driver(RangeRefDriver::new(range, sink), filter)
     }
 
+    /// Deletes items based on driver decisions and filter. The items are returned in order.
     #[inline]
     pub fn filter_with_driver<D, Flt>(&mut self, driver: D, filter: Flt)
         where D: TraversalDriver<K, V>, Flt: ItemFilter<K>
@@ -209,8 +235,8 @@ impl<K: Key, V> PlTree<K, V> {
         self.work(driver, filter, |worker: &mut PlWorker<K,V,D,Flt>| worker.filter())
     }
 
-    pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, sink: &mut S)
-        where Q: PartialOrd<K>, S: Sink<&'a Entry<K, V>>
+    pub fn query_range<'a, Q, S>(&'a self, query: Range<Q>, mut sink: S)
+        where Q: PartialOrd<K>, S: Sink<&'a (K, V)>
     {
         let mut from = self.index_of(&query.start);
         if self.is_nil(from) {
@@ -220,12 +246,12 @@ impl<K: Key, V> PlTree<K, V> {
             }
         }
 
-        TreeRepr::traverse_inorder_from(self, from, 0, &mut (), |this, _, idx| {
+        TreeRepr::traverse_inorder_from(self, from, 0, &mut sink, |this, sink, idx| {
             let node = this.node(idx);
-            if query.end <= node.key && query.start != node.key {
+            if &query.end <= node.key() && &query.start != node.key() {
                 true
             } else {
-                sink.consume(node);
+                sink.consume(node.as_tuple());
                 false
             }
         })
@@ -246,10 +272,13 @@ impl<K: Key, V> PlTree<K, V> {
         let mut worker = PlWorker::new(repr, driver, filter);
         let result = f(&mut worker);
 
-        unsafe {
-            let x = mem::replace(&mut *self.repr.get(), worker.repr);
-            mem::forget(x);
-        }
+        // We do not reallocate the vecs inside repr, and the only thing that changes in its memory
+        // is the size of the tree. So we can get away with only updating the size as opposed to
+        // doing another expensive copy of the whole TreeRepr struct.
+        //
+        // This optimization results in a measurable speed-up to tiny/small range queries.
+        self.repr_mut().size = worker.repr.size;
+        mem::forget(worker.repr);
 
         result
     }
@@ -313,7 +342,7 @@ impl<K: Key, V> DerefMut for PlTree<K, V> {
 
 #[derive(new)]
 pub struct PlWorker<K, V, D, Flt>
-    where K: Key, D: TraversalDriver<K, V>, Flt: ItemFilter<K>
+    where K: Key
 {
     repr: TreeRepr<PlNode<K, V>>,
     drv: D,
@@ -323,8 +352,6 @@ pub struct PlWorker<K, V, D, Flt>
 impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
     where K: Key, D: TraversalDriver<K, V>, Flt: ItemFilter<K>
 {
-    /// Delete based on driver decisions.
-    /// The items are returned in order.
     #[inline]
     fn filter(&mut self) {
         self.delete_range_loop(0);
@@ -339,8 +366,7 @@ impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
                 return;
             }
 
-            let key = self.key_unsafe(idx);
-            let decision = self.drv.decide(key);
+            let decision = self.drv.decide(self.key(idx));
 
             if decision.left() && decision.right() {
                 let item = self.filter_take(idx);
@@ -361,10 +387,10 @@ impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
         }
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline(never)]
     fn delete_range_min(&mut self, idx: usize) {
-        let key = self.key_unsafe(idx);
-        let decision = self.drv.decide(key);
+        let decision = self.drv.decide(self.key(idx));
         debug_assert!(decision.left());
 
         if decision.right() {
@@ -400,10 +426,10 @@ impl<K, V, D, Flt> PlWorker<K, V, D, Flt>
         }
     }
 
+    // The caller must make sure that `!is_nil(idx)`.
     #[inline(never)]
     fn delete_range_max(&mut self, idx: usize) {
-        let key = self.key_unsafe(idx);
-        let decision = self.drv.decide(key);
+        let decision = self.drv.decide(self.key(idx));
         debug_assert!(decision.right(), "idx={}", idx);
 
         if decision.left() {

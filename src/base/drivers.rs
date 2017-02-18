@@ -14,7 +14,6 @@ pub trait TraversalDriver<K: Key, V>: Sink<(K, V)> {
 pub trait TraversalDecision {
     #[inline] fn left(&self) -> bool;
     #[inline] fn right(&self) -> bool;
-    #[inline] fn consume(&self) -> bool;
 }
 
 
@@ -32,10 +31,6 @@ impl TraversalDecision for RangeDecision {
 
     #[inline] fn right(&self) -> bool {
         self.right
-    }
-
-    #[inline] fn consume(&self) -> bool {
-        self.left && self.right
     }
 }
 

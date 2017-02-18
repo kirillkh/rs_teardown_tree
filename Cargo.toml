@@ -1,6 +1,6 @@
 [package]
 name = "teardown_tree"
-version = "0.5.2"
+version = "0.6.4"
 authors = ["Kirill Khazan <kirillkh@gmail.com>"]
 description = "A binary search tree that supports fast clone and delete-range operations"
 readme = "README.rst"
