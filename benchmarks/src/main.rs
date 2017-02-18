@@ -11,11 +11,6 @@ use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_sing
 
 use std::time::Duration;
 
-#[inline]
-fn nanos(d: Duration) -> u64 {
-    d.as_secs()*1000000000 + d.subsec_nanos() as u64
-}
-
 //#[cfg(all(feature = "unstable", target_os = "windows"))]
 //fn set_affinity() {
 //    assert!(wio::thread::Thread::current().unwrap().set_affinity_mask(8).is_ok());
@@ -163,7 +158,7 @@ mod bench_delete_range {
     use teardown_tree::{IntervalTeardownTreeSet, KeyInterval, Interval, TeardownTreeRefill, TeardownTreeSet, NoopFilter};
     use teardown_tree::util::make_teardown_seq;
     use teardown_tree::sink::{UncheckedVecRefSink};
-    use super::nanos;
+    use super::{nanos, black_box};
     use super::ts::{Timestamp, new_timestamp, next_elapsed};
 
     pub type Tree = TeardownTreeSet<usize>;
@@ -827,23 +822,12 @@ mod bench_delete_range {
             Display::fmt(&self.0, fmt)
         }
     }
-
-
-    pub fn black_box<T>(dummy: T) -> T {
-        use std::ptr;
-        use std::mem::forget;
-
-        unsafe {
-            let ret = ptr::read_volatile(&dummy as *const T);
-            forget(dummy);
-            ret
-        }
-    }
 }
 
 
 
 mod ts {
+    use super::black_box;
     use x86::bits64::time::{rdtsc, rdtscp};
 
     pub type Timestamp = u64;
@@ -851,6 +835,9 @@ mod ts {
     #[inline]
     pub fn new_timestamp() -> Timestamp {
         // we cannot use rdtscp, it's bugged (some kind of memory or register corruption)
+
+        // TODO: check whether a fence is really needed here. it sure is very expensive
+//        unsafe { black_box(rdtsc()) }
         unsafe { rdtsc() }
     }
 
@@ -861,4 +848,21 @@ mod ts {
         *prev_timestamp = timestamp;
         elapsed
     }
+}
+
+
+pub fn black_box<T>(dummy: T) -> T {
+    use std::ptr;
+    use std::mem::forget;
+
+    unsafe {
+        let ret = ptr::read_volatile(&dummy as *const T);
+        forget(dummy);
+        ret
+    }
+}
+
+#[inline]
+fn nanos(d: Duration) -> u64 {
+    d.as_secs()*1000000000 + d.subsec_nanos() as u64
 }
