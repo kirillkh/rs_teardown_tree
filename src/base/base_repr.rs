@@ -756,12 +756,14 @@ impl<N: Node> Iterator for IntoIter<N> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let curr = self.next_idx;
-        if self.tree.is_nil(curr) {
+        let done = self.tree.data.capacity();
+        if curr == done {
             None
         } else {
+            debug_assert!(!self.tree.is_nil(curr));
             self.next_idx =
                 iter_next_idx(self.next_idx, &self.tree)
-                    .map_or_else(|| self.tree.data.capacity(), |x| x);
+                    .map_or_else(|| done, |x| x);
 
             Some(self.tree.take(curr).into_tuple())
         }
