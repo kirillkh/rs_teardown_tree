@@ -79,10 +79,11 @@ Benchmarks
 
 I have performed a set of benchmarks, comparing ``TeardownTree::delete_range()`` against
 
-1. ``BTreeSet`` in Rust's standard library
-2. |treap|_
-3. |splay|_
-4. ``TeardownTree::delete()``, which deletes a single element
+1. ``IntervalTeardownTree::delete_range()``, an Interval Tree based on TeardownTree (using (x,x) points in place of intervals)
+2. ``BTreeSet::remove()`` in Rust's standard library
+3. |treap|_
+4. |splay|_
+5. ``TeardownTree::delete()``, which deletes a single element
 
 .. |treap| replace:: ``Treap``
 .. _treap: https://github.com/kirillkh/treap-rs
