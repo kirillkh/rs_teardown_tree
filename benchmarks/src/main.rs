@@ -1,4 +1,5 @@
 extern crate libc;
+extern crate x86;
 extern crate rand;
 extern crate treap;
 extern crate teardown_tree;
@@ -28,12 +29,12 @@ fn nanos(d: Duration) -> u64 {
 
 
 struct BenchJob<'a> {
-    f: &'a Fn(usize, &'a [usize]) -> (String, Vec<usize>),
-    spec: &'a [usize]
+    f: &'a Fn(usize, &'a [u64]) -> (String, Vec<u64>),
+    spec: &'a [u64]
 }
 
 impl<'a> BenchJob<'a> {
-    pub fn new(f: &'a Fn(usize, &'a [usize]) -> (String, Vec<usize>), spec: &'a [usize]) -> BenchJob<'a> {
+    pub fn new(f: &'a Fn(usize, &'a [u64]) -> (String, Vec<u64>), spec: &'a [u64]) -> BenchJob<'a> {
         BenchJob { f: f, spec: spec }
     }
 }
@@ -67,11 +68,11 @@ fn bench_table(batch_sz: usize, action: &str, jobs: &[BenchJob]) {
 
 
 
-fn bench_teardown_full_impl<M: TeardownTreeMaster>(batch_sz: usize, spec: &[usize]) -> (String, Vec<usize>) {
+fn bench_teardown_full_impl<M: TeardownTreeMaster>(batch_sz: usize, spec: &[u64]) -> (String, Vec<u64>) {
     let mut n = batch_sz;
-    let timings: Vec<usize> = spec.iter()
+    let timings: Vec<u64> = spec.iter()
         .map(|iters| {
-            let time = bench_refill_teardown_cycle::<M>(n, batch_sz, *iters as u64);
+            let time = bench_refill_teardown_cycle::<M>(n, batch_sz, *iters);
             n *= 10;
             time
         })
@@ -81,12 +82,12 @@ fn bench_teardown_full_impl<M: TeardownTreeMaster>(batch_sz: usize, spec: &[usiz
 }
 
 
-fn bench_refill_impl<M: TeardownTreeMaster>(_: usize, spec: &[usize]) -> (String, Vec<usize>) {
+fn bench_refill_impl<M: TeardownTreeMaster>(_: usize, spec: &[u64]) -> (String, Vec<u64>) {
     let mut n = 10;
 
-    let timings: Vec<usize> = spec.iter()
+    let timings: Vec<u64> = spec.iter()
         .map(|iters| {
-            let time = bench_refill::<M>(n, *iters as u64);
+            let time = bench_refill::<M>(n, *iters);
             n *= 10;
             time
         })
@@ -175,7 +176,9 @@ mod bench_delete_range {
 
     pub fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
         let mut rng = XorShiftRng::from_seed([1,2,3,4]);
-        let mut elapsed_nanos = 0;
+        let mut elapsed_cycles = 0;
+
+        let start = time::Instant::now();
         for _ in 0..iters {
             let mut btset = BTreeSet::new();
             for i in 0..n {
@@ -195,21 +198,23 @@ mod bench_delete_range {
                 keys
             };
 
-            let start = time::SystemTime::now();
+            let mut ts: Timestamp = new_timestamp();
             for i in 0..rm_items {
                 let x = btset.remove(&keys[i]);
                 black_box(x);
             }
-            let elapsed = start.elapsed().unwrap();
-            elapsed_nanos += nanos(elapsed);
+            elapsed_cycles += next_elapsed(&mut ts);
         }
+        let elapsed = start.elapsed();
+        let elapsed_nanos = nanos(elapsed);
 
-//        println!("average time to delete {} random elements from BTreeMap using remove(), {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+        let avg_cycles = elapsed_cycles/iters;
+        println!("average time to delete {} random elements from BTreeMap using remove(), {} elements: {}cy, total: {}ms", rm_items, n, avg_cycles, elapsed_nanos/1000000)
     }
 
     pub fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
         let mut rng = XorShiftRng::from_seed([1,2,3,4]);
-        let mut elapsed_nanos = 0;
+        let mut elapsed_cycles = 0;
 
         let elems: Vec<_> = (1..n+1).collect();
 
@@ -217,6 +222,7 @@ mod bench_delete_range {
         let mut copy = tree.clone();
         let mut output = Vec::with_capacity(tree.0.size());
 
+        let start = time::Instant::now();
         for _ in 0..iters {
             let keys = {
                 let mut pool: Vec<_> = (1..n+1).collect();
@@ -234,45 +240,48 @@ mod bench_delete_range {
             copy.rfill(&tree);
 
 
-            let start = time::SystemTime::now();
+            let mut ts: Timestamp = new_timestamp();
             for i in 0..rm_items {
                 output.truncate(0);
                 let x = copy.0.delete_range(keys[i]..keys[i]+1, UncheckedVecRefSink::new(&mut output));
                 black_box(x);
             }
-            let elapsed = start.elapsed().unwrap();
-            elapsed_nanos += nanos(elapsed);
+            elapsed_cycles += next_elapsed(&mut ts);
         }
+        let elapsed = start.elapsed();
+        let elapsed_nanos = nanos(elapsed);
 
-        println!("average time to delete {} random elements from TeardownTree using delete_range(), {} elements: {}ns, total: {}ms", rm_items, n, elapsed_nanos/iters, elapsed_nanos/1000000)
+        let avg_cycles = elapsed_cycles/iters;
+
+        println!("average time to delete {} random elements from TeardownTree using delete_range(), {} elements: {}cy, total: {}ms", rm_items, n, avg_cycles, elapsed_nanos/1000000)
     }
 
     #[inline(never)]
-    pub fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) -> usize {
+    pub fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) -> u64 {
         let elems: Vec<_> = (0..n).collect();
         let tree = build::<M>(elems);
         let mut copy = tree.cpy();
-        let mut elapsed_nanos = 0;
+        let mut elapsed_cycles = 0;
 
+        let start = time::Instant::now();
         PROFILER.lock().unwrap().start("./my-prof.profile").expect("Couldn't start");
-        let mut ts: Timestamp = new_timestamp();
         for _ in 0..iters {
             copy = black_box(copy);
             copy.clear();
-            next_elapsed(&mut ts);
+            let mut ts: Timestamp = new_timestamp();
             copy.rfill(&tree);
-            let elapsed = next_elapsed(&mut ts);
-            elapsed_nanos += elapsed;
+            elapsed_cycles += next_elapsed(&mut ts);
         }
         PROFILER.lock().unwrap().stop().unwrap();
+        let total = nanos(start.elapsed());
 
-        let avg_time = elapsed_nanos/iters;
-        println!("average time to refill {} with {} elements: {}ns, total: {}ms", M::descr_refill(), n, avg_time, elapsed_nanos/1000000);
-        avg_time as usize
+        let avg_cycles = elapsed_cycles/iters;
+        println!("average time to refill {} with {} elements: {}cy, total: {}ms", M::descr_refill(), n, avg_cycles, total/1000000);
+        avg_cycles
     }
 
     #[inline(never)]
-    pub fn bench_refill_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters: u64) -> usize {
+    pub fn bench_refill_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters: u64) -> u64 {
         let mut rng = XorShiftRng::from_seed([1,2,3,4]);
         let elems: Vec<_> = (0..n).collect();
 
@@ -284,8 +293,9 @@ mod bench_delete_range {
         copy.del_range(0..n, &mut output);
         output.truncate(0);
 
+        let start = time::Instant::now();
+        let mut ts: Timestamp = new_timestamp();
         PROFILER.lock().unwrap().start("./my-prof.profile").expect("Couldn't start");
-        let start = time::SystemTime::now();
         for iter in 0..iters {
             copy.rfill(&tree);
             for i in 0..ranges.len() {
@@ -297,12 +307,12 @@ mod bench_delete_range {
             }
             assert!(copy.sz() == 0);
         }
-        let elapsed = start.elapsed().unwrap();
-        let elapsed_nanos = nanos(elapsed);
         PROFILER.lock().unwrap().stop().unwrap();
-        let avg_time = elapsed_nanos/iters;
-//        println!("average time to refill/tear down {}, {} elements in bulks of {} elements: {}ns, total: {}ms", M::descr_cycle(), n, rm_items, avg_time, elapsed_nanos/1000000);
-        avg_time as usize
+        let elapsed_cycles = next_elapsed(&mut ts);
+        let avg_cycles = elapsed_cycles/iters;
+        let elapsed_nanos = nanos(start.elapsed());
+        println!("average time to refill/tear down {}, {} elements in bulks of {} elements: {}cy, total: {}ms", M::descr_cycle(), n, rm_items, avg_cycles, elapsed_nanos/1000000);
+        avg_cycles
     }
 
 
@@ -841,85 +851,22 @@ mod bench_delete_range {
 
 
 
-
-
-
-
-
-#[cfg(target_os = "linux")]
 mod ts {
-    use libc::{c_long, suseconds_t, getrusage, RUSAGE_SELF, time_t, timeval, rusage};
+    use x86::bits64::time::{rdtsc, rdtscp};
 
     pub type Timestamp = u64;
 
-    fn new_rusage() -> rusage {
-        let mut usage = rusage {
-            ru_utime: timeval{ tv_sec: 0 as time_t, tv_usec: 0 as suseconds_t, },
-            ru_stime: timeval{ tv_sec: 0 as time_t, tv_usec: 0 as suseconds_t, },
-            ru_maxrss: 0 as c_long,
-            ru_ixrss: 0 as c_long,
-            ru_idrss: 0 as c_long,
-            ru_isrss: 0 as c_long,
-            ru_minflt: 0 as c_long,
-            ru_majflt: 0 as c_long,
-            ru_nswap: 0 as c_long,
-            ru_inblock: 0 as c_long,
-            ru_oublock: 0 as c_long,
-            ru_msgsnd: 0 as c_long,
-            ru_msgrcv: 0 as c_long,
-            ru_nsignals: 0 as c_long,
-            ru_nvcsw: 0 as c_long,
-            ru_nivcsw: 0 as c_long,
-        };
-
-        unsafe { getrusage(RUSAGE_SELF, (&mut usage) as *mut rusage); }
-        usage
-    }
-
     #[inline]
     pub fn new_timestamp() -> Timestamp {
-        let usage = new_rusage();
-        let mut timestamp = 0;
-        next_elapsed(&mut timestamp)
+        // we cannot use rdtscp, it's bugged (some kind of memory or register corruption)
+        unsafe { rdtsc() }
     }
 
     #[inline]
     pub fn next_elapsed(prev_timestamp: &mut Timestamp) -> u64 {
-        let usage = new_rusage();
-        let secs = (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) as u64;
-        let usecs = (usage.ru_utime.tv_usec + usage.ru_stime.tv_sec) as u64;
-        let timestamp = (secs * 1_000_000) + usecs;
-
+        let timestamp = new_timestamp();
         let elapsed = timestamp - *prev_timestamp;
         *prev_timestamp = timestamp;
         elapsed
-    }
-}
-
-
-
-#[cfg(target_os = "windows")]
-mod ts {
-    use std::time;
-    use std::time::Duration;
-
-    pub type Timestamp = time::SystemTime;
-
-    #[inline]
-    pub fn new_timestamp() -> Timestamp {
-        time::SystemTime::now()
-    }
-
-    #[inline]
-    pub fn next_elapsed(prev_timestamp: &mut Timestamp) -> u64 {
-        let now = time::SystemTime::now();
-        let dur = now.duration_since(*prev_timestamp).unwrap();
-        *prev_timestamp = now;
-        nanos(dur)
-    }
-
-    #[inline]
-    fn nanos(d: Duration) -> u64 {
-        d.as_secs()*1000000000 + d.subsec_nanos() as u64
     }
 }

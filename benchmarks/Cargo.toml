@@ -20,3 +20,7 @@ teardown_tree = { path = ".." }
 libc = "0.2.7"
 ##wio = "0.1.2"
 cpuprofiler = "0.0.2"
+
+[dependencies.x86]
+version = "0.8.1"
+default-features = false
