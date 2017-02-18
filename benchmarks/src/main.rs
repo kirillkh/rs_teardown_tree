@@ -96,7 +96,7 @@ fn bench_refill_impl<M: TeardownTreeMaster>(_: usize, spec: &[usize]) -> (String
 
 
 fn main() {
-    bench_refill::<TreeBulk>(100, 40000000);
+    bench_refill::<TreeBulk>(100, 4000000);
     return;
     bench_refill_impl::<TreeBulk>(10, &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]);
 
@@ -252,6 +252,7 @@ mod bench_delete_range {
         let mut copy = tree.cpy();
         let mut elapsed_nanos = 0;
 
+        PROFILER.lock().unwrap().start("./my-prof.profile").expect("Couldn't start");
         for _ in 0..iters {
             copy = black_box(copy);
             copy.clear();
@@ -260,6 +261,7 @@ mod bench_delete_range {
             let elapsed = start.elapsed().unwrap();
             elapsed_nanos += nanos(elapsed);
         }
+        PROFILER.lock().unwrap().stop().unwrap();
 
         let avg_time = elapsed_nanos/iters;
         println!("average time to refill {} with {} elements: {}ns, total: {}ms", M::descr_refill(), n, avg_time, elapsed_nanos/1000000);
