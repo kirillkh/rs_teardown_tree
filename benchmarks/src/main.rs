@@ -91,12 +91,9 @@ fn bench_refill_impl<M: TeardownTreeMaster>(_: usize, spec: &[u64]) -> (String, 
 
 
 fn main() {
-    bench_refill::<TreeBulk>(100, 40000000);
-    bench_refill_impl::<TreeBulk>(10, &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]);
-
-
     bench_table(10, "Refill", &[
         BenchJob::new(&bench_refill_impl::<TreeBulk>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
+        BenchJob::new(&bench_refill_impl::<IntervalTreeBulk>,    &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
         BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[7000000,     460000,     48000,      5000,       300,    25,     3]),
         BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[27000000,    3500000,    350000,     30000,      2300,   110,    10]),
         BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[7000000,     540000,     50000,      4500,       400,    25,     3]),
