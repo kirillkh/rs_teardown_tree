@@ -4,7 +4,7 @@ extern crate teardown_tree;
 extern crate splay;
 //extern crate wio;
 
-use bench_delete_range::{TreapMaster, TreeBulk, TeardownTreeSingle, BTreeSetMaster, SplayMaster, IntervalTreeBulk, FilteredIntervalTreeBulk};
+use bench_delete_range::{TeardownTreeMaster, TreapMaster, TreeBulk, TeardownTreeSingle, BTreeSetMaster, SplayMaster, IntervalTreeBulk, FilteredIntervalTreeBulk};
 use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
 
 use std::time::Duration;
@@ -23,138 +23,110 @@ fn nanos(d: Duration) -> u64 {
 //fn set_affinity() {
 //}
 
+
+struct BenchJob<'a> {
+    f: &'a Fn(usize, &'a [usize]) -> (String, Vec<usize>),
+    spec: &'a [usize]
+}
+
+impl<'a> BenchJob<'a> {
+    pub fn new(f: &'a Fn(usize, &'a [usize]) -> (String, Vec<usize>), spec: &'a [usize]) -> BenchJob<'a> {
+        BenchJob { f: f, spec: spec }
+    }
+}
+
+
+fn bench_table(batch_sz: usize, action: &str, jobs: &[BenchJob]) {
+    println!("\n\t\t\t\t, , {}", action);
+    print!("method\\N,\t\t\t");
+    let ntimings = jobs[0].spec.len();
+    let mut n = batch_sz;
+    for _ in 0..ntimings {
+        print!("{},\t", n);
+        n *= 10;
+    }
+    println!();
+
+    for job in jobs.iter() {
+        let f = job.f;
+        let spec = job.spec;
+
+        let (descr, timings) = f(batch_sz, spec);
+
+        print!("{},\t", descr);
+        for time in timings.into_iter() {
+            print!("{},\t", time);
+        }
+        println!();
+    }
+}
+
+
+
+
+fn bench_teardown_full_impl<M: TeardownTreeMaster>(batch_sz: usize, spec: &[usize]) -> (String, Vec<usize>) {
+    let mut n = batch_sz;
+    let timings: Vec<usize> = spec.iter()
+        .map(|iters| {
+            let time = bench_refill_teardown_cycle::<M>(n, batch_sz, *iters as u64);
+            n *= 10;
+            time
+        })
+        .collect();
+
+    (M::descr_cycle(), timings)
+}
+
+
+fn bench_refill_impl<M: TeardownTreeMaster>(_: usize, spec: &[usize]) -> (String, Vec<usize>) {
+    let mut n = 10;
+
+    let timings: Vec<usize> = spec.iter()
+        .map(|iters| {
+            let time = bench_refill::<M>(n, *iters as u64);
+            n *= 10;
+            time
+        })
+        .collect();
+
+    (M::descr_cycle(), timings)
+}
+
+
 fn main() {
-//    set_affinity();
-    bench_refill_teardown_cycle::<TreeBulk>(10, 10,   40000000);
-    bench_refill_teardown_cycle::<TreeBulk>(100, 10,   3100000);
-    bench_refill_teardown_cycle::<TreeBulk>(1000, 10,   300000);
-    bench_refill_teardown_cycle::<TreeBulk>(10000, 10,   10000);
-    bench_refill_teardown_cycle::<TreeBulk>(100000, 10,   1200);
-    bench_refill_teardown_cycle::<TreeBulk>(1000000, 10,    70);
-    bench_refill_teardown_cycle::<TreeBulk>(10000000, 10,    7);
-
-    bench_refill_teardown_cycle::<TreeBulk>(100, 100,    4500000);
-    bench_refill_teardown_cycle::<TreeBulk>(1000, 100,    700000);
-    bench_refill_teardown_cycle::<TreeBulk>(10000, 100,    70000);
-    bench_refill_teardown_cycle::<TreeBulk>(100000, 100,    4500);
-    bench_refill_teardown_cycle::<TreeBulk>(1000000, 100,    400);
-    bench_refill_teardown_cycle::<TreeBulk>(10000000, 100,    32);
-
-    bench_refill_teardown_cycle::<TreeBulk>(1000, 1000,  700000);
-    bench_refill_teardown_cycle::<TreeBulk>(10000, 1000,  80000);
-    bench_refill_teardown_cycle::<TreeBulk>(100000, 1000,  8000);
-    bench_refill_teardown_cycle::<TreeBulk>(1000000, 1000,  700);
-    bench_refill_teardown_cycle::<TreeBulk>(10000000, 1000,  50);
-
-
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(100, 100,    4500000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 100,    350000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 100,    35000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 100,    2200);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 100,    200);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 100,    16);
-
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000, 1000,  350000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000, 1000,  40000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(100000, 1000,  4000);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(1000000, 1000,  350);
-    bench_refill_teardown_cycle::<IntervalTreeBulk>(10000000, 1000,  25);
-
-
-    bench_refill_teardown_cycle::<TreapMaster>(100, 100, 300000);
-    bench_refill_teardown_cycle::<TreapMaster>(1000, 100, 25000);
-    bench_refill_teardown_cycle::<TreapMaster>(10000, 100, 4000);
-    bench_refill_teardown_cycle::<TreapMaster>(100000, 100, 250);
-    bench_refill_teardown_cycle::<TreapMaster>(1000000, 100, 20);
-    bench_refill_teardown_cycle::<TreapMaster>(10000000, 100, 3);
-
-    bench_refill_teardown_cycle::<TreapMaster>(1000, 1000, 10000);
-    bench_refill_teardown_cycle::<TreapMaster>(10000, 1000, 5000);
-    bench_refill_teardown_cycle::<TreapMaster>(100000, 1000, 400);
-    bench_refill_teardown_cycle::<TreapMaster>(1000000, 1000,  40);
-    bench_refill_teardown_cycle::<TreapMaster>(10000000, 1000,  3);
-
-
-    bench_refill_teardown_cycle::<BTreeSetMaster>(100, 100, 500000);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(1000, 100, 50000);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(10000, 100, 4000);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(100000, 100, 350);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(1000000, 100, 30);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(10000000, 100, 4);
-
-    bench_refill_teardown_cycle::<BTreeSetMaster>(1000, 1000, 50000);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(10000, 1000, 6000);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(100000, 1000, 600);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(1000000, 1000, 40);
-    bench_refill_teardown_cycle::<BTreeSetMaster>(10000000, 1000, 4);
-
-
-    bench_refill_teardown_cycle::<SplayMaster>(100, 100, 500000);
-    bench_refill_teardown_cycle::<SplayMaster>(1000, 100, 50000);
-    bench_refill_teardown_cycle::<SplayMaster>(10000, 100, 4000);
-    bench_refill_teardown_cycle::<SplayMaster>(100000, 100, 350);
-    bench_refill_teardown_cycle::<SplayMaster>(1000000, 100, 30);
-    bench_refill_teardown_cycle::<SplayMaster>(10000000, 100, 4);
-
-    bench_refill_teardown_cycle::<SplayMaster>(1000, 1000, 50000);
-    bench_refill_teardown_cycle::<SplayMaster>(10000, 1000, 6000);
-    bench_refill_teardown_cycle::<SplayMaster>(100000, 1000, 600);
-    bench_refill_teardown_cycle::<SplayMaster>(1000000, 1000, 40);
-    bench_refill_teardown_cycle::<SplayMaster>(10000000, 1000, 4);
-
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(100, 100, 2000000);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(1000, 100,  60000);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(10000, 100,  6000);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(100000, 100,  500);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(1000000, 100,  50);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(10000000, 100,  5);
-
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(1000, 1000,  80000);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(10000, 1000,  8000);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(100000, 1000,  600);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(1000000, 1000,  60);
-    bench_refill_teardown_cycle::<TeardownTreeSingle>(10000000, 1000,  6);
-
-
-
     bench_refill::<TreeBulk>(100, 40000000);
-    bench_refill::<TreeBulk>(1000, 6000000);
-    bench_refill::<TreeBulk>(10000, 500000);
-    bench_refill::<TreeBulk>(100000, 40000);
-    bench_refill::<TreeBulk>(1000000, 1200);
-    bench_refill::<TreeBulk>(10000000, 110);
+    bench_refill_impl::<TreeBulk>(10, &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]);
 
 
-    bench_refill::<IntervalTreeBulk>(100, 40000000);
-    bench_refill::<IntervalTreeBulk>(1000, 6000000);
-    bench_refill::<IntervalTreeBulk>(10000, 500000);
-    bench_refill::<IntervalTreeBulk>(100000, 40000);
-    bench_refill::<IntervalTreeBulk>(1000000, 1200);
-    bench_refill::<IntervalTreeBulk>(10000000, 110);
+    bench_table(10, "Refill", &[
+        BenchJob::new(&bench_refill_impl::<TreeBulk>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
+        BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[7000000,     460000,     48000,      5000,       300,    25,     3]),
+        BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[27000000,    3500000,    350000,     30000,      2300,   110,    10]),
+        BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[7000000,     540000,     50000,      4500,       400,    25,     3]),
+    ]);
 
 
-    bench_refill::<TreapMaster>(100, 260000);
-    bench_refill::<TreapMaster>(1000, 28000);
-    bench_refill::<TreapMaster>(10000, 3000);
-    bench_refill::<TreapMaster>(100000, 220);
-    bench_refill::<TreapMaster>(1000000, 25);
-    bench_refill::<TreapMaster>(10000000, 3);
+    bench_table(10, "Teardown in bulks of 10 items", &[
+        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,         &[40000000, 3100000,    300000, 10000,  1200,   70, 7]),
+    ]);
 
+    bench_table(100, "Teardown in bulks of 100 items", &[
+        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[7000000, 700000, 70000,  4500,   400, 32]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[6000000, 350000, 35000,  2200,   200, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[900000,  50000,  4000,   250,    20,  3]),
+        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[1000000, 50000,  4000,   350,    30,  4]),
+        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[1000000, 50000,  4000,   350,    30,  4]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[2000000, 160000, 6000,   500,    50,  5]),
+    ]);
 
-    bench_refill::<BTreeSetMaster>(100, 1700000);
-    bench_refill::<BTreeSetMaster>(1000, 180000);
-    bench_refill::<BTreeSetMaster>(10000, 16000);
-    bench_refill::<BTreeSetMaster>(100000, 1300);
-    bench_refill::<BTreeSetMaster>(1000000, 100);
-    bench_refill::<BTreeSetMaster>(10000000, 8);
-
-
-    bench_refill::<SplayMaster>(100, 260000);
-    bench_refill::<SplayMaster>(1000, 28000);
-    bench_refill::<SplayMaster>(10000, 3000);
-    bench_refill::<SplayMaster>(100000, 220);
-    bench_refill::<SplayMaster>(1000000, 25);
-    bench_refill::<SplayMaster>(10000000, 3);
+    bench_table(1000, "Teardown in bulks of 1000 items", &[
+        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[700000, 80000,  8000,   700,    50]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[700000, 40000,  4000,   350,    25]),
+        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[50000,  5000,   400,    40,     3]),
+        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[100000, 6000,   600,    40,     4]),
+        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[50000,  6000,   600,    40,     4]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[80000,  8000,   600,    60,     6]),
+    ]);
 
 
     imptree_single_elem_range_n(100, 100,    200000);
@@ -186,7 +158,7 @@ mod bench_delete_range {
     use splay::SplaySet;
 
     use treap::TreapMap;
-    use teardown_tree::{IntervalTeardownTreeSet, KeyInterval, TeardownTreeRefill, TeardownTreeSet, NoopFilter};
+    use teardown_tree::{IntervalTeardownTreeSet, KeyInterval, Interval, TeardownTreeRefill, TeardownTreeSet, NoopFilter};
     use teardown_tree::util::make_teardown_seq;
     use teardown_tree::sink::{UncheckedVecRefSink};
     use super::nanos;
@@ -226,7 +198,7 @@ mod bench_delete_range {
             elapsed_nanos += nanos(elapsed);
         }
 
-        println!("average time to delete {} random elements from BTreeMap using remove(), {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
+//        println!("average time to delete {} random elements from BTreeMap using remove(), {} elements: {}ns", rm_items, n, elapsed_nanos/iters)
     }
 
     pub fn imptree_single_elem_range_n(n: usize, rm_items: usize, iters: u64) {
@@ -270,7 +242,7 @@ mod bench_delete_range {
     }
 
 
-    pub fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) {
+    pub fn bench_refill<M: TeardownTreeMaster>(n: usize, iters: u64) -> usize {
         let elems: Vec<_> = (0..n).collect();
         let tree = build::<M>(elems);
         let mut copy = tree.cpy();
@@ -285,11 +257,13 @@ mod bench_delete_range {
             elapsed_nanos += nanos(elapsed);
         }
 
-        println!("average time to refill {} with {} elements: {}ns, total: {}ms", M::descr_refill(), n, elapsed_nanos/iters, elapsed_nanos/1000000)
+        let avg_time = elapsed_nanos/iters;
+        println!("average time to refill {} with {} elements: {}ns, total: {}ms", M::descr_refill(), n, avg_time, elapsed_nanos/1000000);
+        avg_time as usize
     }
 
     #[inline(never)]
-    pub fn bench_refill_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters: u64) {
+    pub fn bench_refill_teardown_cycle<M: TeardownTreeMaster>(n: usize, rm_items: usize, iters: u64) -> usize {
         let mut rng = XorShiftRng::from_seed([1,2,3,4]);
         let elems: Vec<_> = (0..n).collect();
 
@@ -315,7 +289,9 @@ mod bench_delete_range {
         }
         let elapsed = start.elapsed().unwrap();
         let elapsed_nanos = nanos(elapsed);
-        println!("average time to refill/tear down {}, {} elements in bulks of {} elements: {}ns, total: {}ms", M::descr_cycle(), n, rm_items, elapsed_nanos/iters, elapsed_nanos/1000000)
+        let avg_time = elapsed_nanos/iters;
+//        println!("average time to refill/tear down {}, {} elements in bulks of {} elements: {}ns, total: {}ms", M::descr_cycle(), n, rm_items, avg_time, elapsed_nanos/1000000);
+        avg_time as usize
     }
 
 
@@ -353,6 +329,7 @@ mod bench_delete_range {
         fn rfill(&mut self, master: &Self::Master);
         fn sz(&self) -> usize;
         fn clear(&mut self);
+        fn as_vec(&self) -> Vec<usize>;
     }
 
 
@@ -376,7 +353,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "TeardownTree using delete_range()".to_string()
+            "TeardownTree::delete_range()".to_string()
         }
 
         fn descr_refill() -> String {
@@ -402,6 +379,10 @@ mod bench_delete_range {
 
         fn clear(&mut self) {
             self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.0.iter().cloned().collect()
         }
     }
 
@@ -432,7 +413,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "TeardownTree using delete()".to_string()
+            "TeardownTree::delete()".to_string()
         }
 
         fn descr_refill() -> String {
@@ -462,6 +443,10 @@ mod bench_delete_range {
 
         fn clear(&mut self) {
             self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.0.iter().cloned().collect()
         }
     }
 
@@ -498,7 +483,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "BTreeSet using remove()".to_string()
+            "BTreeSet::remove()".to_string()
         }
 
         fn descr_refill() -> String {
@@ -534,6 +519,10 @@ mod bench_delete_range {
 
         fn clear(&mut self) {
             self.set.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.set.iter().cloned().collect()
         }
     }
 
@@ -572,7 +561,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "Treap using split/join".to_string()
+            "Treap::delete_range".to_string()
         }
 
         fn descr_refill() -> String {
@@ -598,6 +587,10 @@ mod bench_delete_range {
 
         fn clear(&mut self) {
             self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.0.iter_ordered().map(|(&x, _)| x).collect()
         }
     }
 
@@ -641,7 +634,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "SplayTree using remove_range()".to_string()
+            "SplayTree::remove_range()".to_string()
         }
 
         fn descr_refill() -> String {
@@ -667,6 +660,10 @@ mod bench_delete_range {
 
         fn clear(&mut self) {
             self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.0.clone().into_iter().collect()
         }
     }
 
@@ -710,7 +707,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "IntervalTeardownTree using delete_range()".to_string()
+            "IntervalTeardownTree::delete_range()".to_string()
         }
 
         fn descr_refill() -> String {
@@ -736,6 +733,10 @@ mod bench_delete_range {
 
         fn clear(&mut self) {
             self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.0.iter().map(|it| it.a()).cloned().collect()
         }
     }
 
@@ -767,7 +768,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "IntervalTeardownTree using filter_range()".to_string()
+            "IntervalTeardownTree::filter_range()".to_string()
         }
 
         fn descr_refill() -> String {
@@ -793,6 +794,10 @@ mod bench_delete_range {
 
         fn clear(&mut self) {
             self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.0.iter().map(|it| it.a()).cloned().collect()
         }
     }
 
