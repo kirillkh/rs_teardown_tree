@@ -578,7 +578,7 @@ mod bench_teardown {
         type T = (usize, usize);
 
         fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.filter_range(range, AcceptingFilter, UncheckedVecRefSink::new(output));
+            self.0.delete_range(range, UncheckedVecRefSink::new(output));
         }
 
         #[inline(never)]
