@@ -6,7 +6,7 @@ extern crate teardown_tree;
 extern crate splay;
 //extern crate wio;
 
-use bench_delete_range::{TeardownTreeMaster, TreapMaster, TreeBulk, TeardownTreeSingle, BTreeSetMaster, SplayMaster, IntervalTreeBulk, FilteredIntervalTreeBulk};
+use bench_delete_range::{TeardownTreeMaster, TreapMaster, TreeBulk, TeardownTreeSingle, TeardownTreeFilter, IntervalTreeFilter, BTreeSetMaster, SplayMaster, IntervalTreeBulk, FilteredIntervalTreeBulk};
 use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
 
 use std::time::Duration;
@@ -101,30 +101,36 @@ fn main() {
 
 
     bench_table(10, "Teardown in bulks of 10 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,           &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,   &[22000000, 1300000,    100000,  4000,   400,   25, 4]),
-        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,        &[ 2500000,  180000,     14000,  1300,    90,    6, 2]),
-        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,     &[13000000,  600000,     32000,  2300,   190,   16, 3]),
-        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,        &[ 3300000,  300000,     24000,  1800,   180,    9, 2]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>, &[32000000, 2000000,    120000,  5000,   350,   30, 3]),
+        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[32000000, 2000000,    120000,  5000,   350,   30, 3]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeFilter>,  &[24000000, 2000000,    170000, 10000,  1000,   70, 7]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[22000000, 1300000,    100000,  5000,   400,   25, 4]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeFilter>,  &[17000000, 1100000,     80000,  5000,   400,   25, 4]),
+        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 2500000,  180000,     14000,  1300,    90,    6, 2]),
+        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[13000000,  600000,     32000,  2300,   190,   16, 3]),
+        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[ 3300000,  300000,     24000,  1800,   180,    9, 2]),
     ]);
 
     bench_table(100, "Teardown in bulks of 100 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[7000000, 700000, 70000,  4500,   400, 32]),
+        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[8000000, 700000, 70000,  4500,   400, 32]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[2200000, 150000, 6000,   500,    50,  5]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeFilter>,  &[3000000, 270000, 25000,  2000,   180, 28]),
         BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[6000000, 350000, 35000,  2200,   200, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeFilter>,  &[2000000, 200000, 20000,  1500,   150, 16]),
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[900000,  50000,  4000,   250,    20,  3]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[1000000, 50000,  4000,   350,    30,  4]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[1000000, 50000,  4000,   350,    30,  4]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[2000000, 160000, 6000,   500,    50,  5]),
     ]);
 
     bench_table(1000, "Teardown in bulks of 1000 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[700000, 80000,  8000,   700,    50]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[700000, 40000,  4000,   350,    25]),
+        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[800000, 80000,  8000,   700,    70]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[80000,   6000,   500,    60,     6]),
+        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeFilter>,  &[300000, 25000,  2500,   250,    25]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[700000, 60000,  4800,   400,    50]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeFilter>,  &[200000, 20000,  2000,   200,    25]),
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[50000,  5000,   400,    40,     3]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[100000, 6000,   600,    40,     4]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[50000,  6000,   600,    40,     4]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[80000,  8000,   600,    60,     6]),
     ]);
 
 
@@ -343,7 +349,7 @@ mod bench_delete_range {
     }
 
 
-    /// for benchmarking TeardownTree delete_range()
+    /// for benchmarking TeardownTree::delete_range()
     #[derive(Clone, Debug)]
     pub struct TeardownTreeBulk(TeardownTreeSet<usize>);
 
@@ -404,7 +410,7 @@ mod bench_delete_range {
     }
 
 
-    /// for benchmarking TeardownTree delete()
+    /// for benchmarking TeardownTree::delete()
     #[derive(Clone, Debug)]
     pub struct TeardownTreeSingle(TeardownTreeSet<usize>);
 
@@ -472,7 +478,7 @@ mod bench_delete_range {
     #[derive(Debug)]
     pub struct BTreeSetMaster(BTreeSet<usize>);
 
-    /// for benchmarking BTreeSet remove()
+    /// for benchmarking BTreeSet::remove()
     impl TeardownTreeMaster for BTreeSetMaster {
         type Cpy = BTreeSetCopy;
 
@@ -701,7 +707,7 @@ mod bench_delete_range {
     }
 
 
-    /// for benchmarking IntervalTeardownTree delete_range()
+    /// for benchmarking IntervalTeardownTree::delete_range()
     #[derive(Clone, Debug)]
     pub struct IntervalTreeBulk(IntervalTeardownTreeSet<KeyInterval<usize>>);
 
@@ -827,7 +833,7 @@ mod bench_delete_range {
 
 
 
-    /// for benchmarking TeardownTree filter_range()
+    /// for benchmarking TeardownTree::filter_range()
     #[derive(Clone, Debug)]
     pub struct TeardownTreeFilter(TeardownTreeSet<usize>);
 
@@ -886,6 +892,71 @@ mod bench_delete_range {
             Display::fmt(&self.0, fmt)
         }
     }
+
+
+
+    /// for benchmarking IntervalTeardownTree::filter_overlap()
+    #[derive(Clone, Debug)]
+    pub struct IntervalTreeFilter(IntervalTeardownTreeSet<usize>);
+
+    impl TeardownTreeMaster for IntervalTreeFilter {
+        type Cpy = IntervalTreeFilter;
+
+        fn build(elems: Vec<usize>) -> Self {
+            IntervalTreeFilter(IntervalTeardownTreeSet::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "IntervalTeardownTree::filter_overlap()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "IntervalTeardownTree".to_string()
+        }
+    }
+
+    impl TeardownTreeCopy for IntervalTreeFilter {
+        type Master = IntervalTreeFilter;
+        type T = usize;
+
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), AcceptingFilter, UncheckedVecRefSink::new(output));
+        }
+
+        #[inline(never)]
+        fn refill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<usize> {
+            self.0.iter().cloned().collect()
+        }
+    }
+
+    impl Display for IntervalTreeFilter {
+        fn fmt(&self, fmt: &mut Formatter) -> Result {
+            Display::fmt(&self.0, fmt)
+        }
+    }
+
+
+
 
     #[derive(Clone, Debug)]
     pub struct AcceptingFilter;
