@@ -135,7 +135,7 @@ impl<K: Key, V> PlTree<K, V> {
         debug_assert!(!self.is_nil(idx));
 
         let node = self.take(idx);
-        // All 3 invariants of delete_max/min are satisfied.
+        // All 3 precondition of delete_max/min are satisfied.
         if self.has_left(idx) {
             self.delete_max(idx, lefti(idx));
         } else if self.has_right(idx) {
@@ -145,7 +145,7 @@ impl<K: Key, V> PlTree<K, V> {
     }
 
 
-    // The caller must ensure that the following invariants are satisfied:
+    // The caller must ensure that the following preconditions are satisfied:
     //   a) both idx and hole point to valid indices into data
     //   b) the cell at `idx` is non-empty
     //   c) the cell at `hole` is empty
@@ -167,7 +167,7 @@ impl<K: Key, V> PlTree<K, V> {
         }
     }
 
-    // The caller must ensure that the following invariants are satisfied:
+    // The caller must ensure that the following preconditions are satisfied:
     //   a) both idx and hole point to valid indices into data
     //   b) the cell at `idx` is non-empty
     //   c) the cell at `hole` is empty

@@ -130,7 +130,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             entry
         } else {
             // Given an `idx` that satisfies `!is_nil(idx)`, `find_max()` returns an index that also
-            // satisfies that property, therefore `take()`'s invariant is satisfied.
+            // satisfies that property, therefore `take()`'s precondition is satisfied.
             let IvNode{entry, ..} = self.take(max_idx);
             entry
         };
@@ -150,7 +150,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
             entry
         } else {
             // Given an `idx` that satisfies `!is_nil(idx)`, `find_min()` returns an index that also
-            // satisfies that property, therefore `take()`'s invariant is satisfied.
+            // satisfies that property, therefore `take()`'s precondition is satisfied.
             let IvNode{entry, ..} = self.take(min_idx);
             entry
         };
