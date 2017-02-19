@@ -4,7 +4,7 @@
 //
 //    use self::test::Bencher;
 //
-//    use base::{TreeRepr, TreeBase, TeardownTreeRefill};
+//    use base::{TreeRepr, TreeBase, Refill};
 //    use applied::plain_tree::PlainDeleteInternal;
 //
 //    type Tree = TreeRepr<usize>;

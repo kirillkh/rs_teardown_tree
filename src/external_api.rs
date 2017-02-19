@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 
 pub use applied::interval::{Interval, KeyInterval};
 
-pub use self::plain::{TeardownTreeMap, TeardownTreeSet};
-pub use self::interval::{IntervalTeardownTreeMap, IntervalTeardownTreeSet};
-pub use base::{TeardownTreeRefill, Sink};
+pub use self::plain::{TeardownMap, TeardownSet};
+pub use self::interval::{IntervalTeardownMap, IntervalTeardownSet};
+pub use base::{Refill, Sink};
 pub use base::sink;
 
 
@@ -17,7 +17,7 @@ pub mod iter {
 
 
 mod plain {
-    use base::{TeardownTreeRefill, Sink, ItemFilter};
+    use base::{Refill, Sink, ItemFilter};
     use applied::plain_tree::{PlTree, PlNode};
     use super::{SinkAdapter, RefSinkAdapter};
 
@@ -29,23 +29,23 @@ mod plain {
 
 
     #[derive(Clone)]
-    pub struct TeardownTreeMap<K: Ord+Clone, V> {
+    pub struct TeardownMap<K: Ord+Clone, V> {
         internal: PlTree<K,V>
     }
 
-    impl<K: Ord+Clone, V> TeardownTreeMap<K, V> {
-        /// Creates a new `TeardownTreeMap` with the given set of items. The items can be given in
+    impl<K: Ord+Clone, V> TeardownMap<K, V> {
+        /// Creates a new `TeardownMap` with the given set of items. The items can be given in
         /// any order. Duplicate keys are supported.
         #[inline]
-        pub fn new(items: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
-            TeardownTreeMap { internal: PlTree::new(items) }
+        pub fn new(items: Vec<(K, V)>) -> TeardownMap<K, V> {
+            TeardownMap { internal: PlTree::new(items) }
         }
 
-        /// Creates a new `TeardownTreeMap` with the given set of items. Duplicate keys are supported.
+        /// Creates a new `TeardownMap` with the given set of items. Duplicate keys are supported.
         /// **Note**: the items are assumed to be sorted!
         #[inline]
-        pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownTreeMap<K, V> {
-            TeardownTreeMap { internal: PlTree::with_sorted(sorted) }
+        pub fn with_sorted(sorted: Vec<(K, V)>) -> TeardownMap<K, V> {
+            TeardownMap { internal: PlTree::with_sorted(sorted) }
         }
 
         /// Finds the item with the given key and returns it (or None).
@@ -133,19 +133,19 @@ mod plain {
         }
     }
 
-    impl<K: Ord+Clone+Debug, V> Debug for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone+Debug, V> Debug for TeardownMap<K, V> {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Debug::fmt(&self.internal, fmt)
         }
     }
 
-    impl<K: Ord+Clone+Debug, V> Display for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone+Debug, V> Display for TeardownMap<K, V> {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Display::fmt(&self.internal, fmt)
         }
     }
 
-    impl<K: Ord+Clone+Copy, V: Copy> TeardownTreeRefill for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone+Copy, V: Copy> Refill for TeardownMap<K, V> {
         #[inline]
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
@@ -154,7 +154,7 @@ mod plain {
 
 
     #[cfg(test)]
-    impl<K: Ord+Clone, V> super::TreeWrapperAccess for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone, V> super::TreeWrapperAccess for TeardownMap<K, V> {
         type Repr = TreeRepr<PlNode<K,V>>;
         type Wrapper = PlTree<K,V>;
 
@@ -171,7 +171,7 @@ mod plain {
         }
 
         fn from_internal(wrapper: PlTree<K, V>) -> Self {
-            TeardownTreeMap { internal: wrapper }
+            TeardownMap { internal: wrapper }
         }
 
         fn from_repr(repr: Self::Repr) -> Self {
@@ -181,25 +181,25 @@ mod plain {
 
 
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeSet<T: Ord+Clone> {
-        map: TeardownTreeMap<T, ()>
+    pub struct TeardownSet<T: Ord+Clone> {
+        map: TeardownMap<T, ()>
     }
 
-    impl<T: Ord+Clone> TeardownTreeSet<T> {
-        /// Creates a new `TeardownTreeSet` with the given set of items. The items can be given in any
+    impl<T: Ord+Clone> TeardownSet<T> {
+        /// Creates a new `TeardownSet` with the given set of items. The items can be given in any
         /// order. Duplicates are supported.
         #[inline]
-        pub fn new(items: Vec<T>) -> TeardownTreeSet<T> {
+        pub fn new(items: Vec<T>) -> TeardownSet<T> {
             let map_items = super::conv_to_tuple_vec(items);
-            TeardownTreeSet { map: TeardownTreeMap::new(map_items) }
+            TeardownSet { map: TeardownMap::new(map_items) }
         }
 
-        /// Creates a new `TeardownTreeSet` with the given set of items. Duplicates are supported.
+        /// Creates a new `TeardownSet` with the given set of items. Duplicates are supported.
         /// **Note**: the items are assumed to be sorted!
         #[inline]
-        pub fn with_sorted(sorted: Vec<T>) -> TeardownTreeSet<T> {
+        pub fn with_sorted(sorted: Vec<T>) -> TeardownSet<T> {
             let map_items = super::conv_to_tuple_vec(sorted);
-            TeardownTreeSet { map: TeardownTreeMap::with_sorted(map_items) }
+            TeardownSet { map: TeardownMap::with_sorted(map_items) }
         }
 
         /// Returns true if the set contains the given item.
@@ -280,7 +280,7 @@ mod plain {
         }
     }
 
-    impl<K: Ord+Clone+Copy> TeardownTreeRefill for TeardownTreeSet<K> {
+    impl<K: Ord+Clone+Copy> Refill for TeardownSet<K> {
         #[inline]
         fn refill(&mut self, master: &Self) {
             self.map.refill(&master.map)
@@ -288,7 +288,7 @@ mod plain {
     }
 
     #[cfg(test)]
-    impl<K: Key> super::TreeWrapperAccess for TeardownTreeSet<K> {
+    impl<K: Key> super::TreeWrapperAccess for TeardownSet<K> {
         type Repr = TreeRepr<PlNode<K, ()>>;
         type Wrapper = PlTree<K, ()>;
 
@@ -305,7 +305,7 @@ mod plain {
         }
 
         fn from_internal(wrapper: PlTree<K, ()>) -> Self {
-            TeardownTreeSet { map: TeardownTreeMap { internal: wrapper } }
+            TeardownSet { map: TeardownMap { internal: wrapper } }
         }
 
         fn from_repr(repr: Self::Repr) -> Self {
@@ -313,7 +313,7 @@ mod plain {
         }
     }
 
-    impl<T: Ord+Clone+Debug> Display for TeardownTreeSet<T> {
+    impl<T: Ord+Clone+Debug> Display for TeardownSet<T> {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Display::fmt(&self.map, fmt)
         }
@@ -348,7 +348,7 @@ mod plain {
     }
 
 
-    impl<K: Ord+Clone, V> IntoIterator for TeardownTreeMap<K, V> {
+    impl<K: Ord+Clone, V> IntoIterator for TeardownMap<K, V> {
         type Item = (K, V);
         type IntoIter = MapIntoIter<K, V>;
 
@@ -372,7 +372,7 @@ mod plain {
 
 
 
-    impl<T: Ord+Clone> IntoIterator for TeardownTreeSet<T> {
+    impl<T: Ord+Clone> IntoIterator for TeardownSet<T> {
         type Item = T;
         type IntoIter = SetIntoIter<T>;
 
@@ -401,7 +401,7 @@ mod interval {
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
 
-    use base::{TeardownTreeRefill, ItemFilter, Sink};
+    use base::{Refill, ItemFilter, Sink};
     use super::{SinkAdapter, RefSinkAdapter};
 
     use applied::AppliedTree;
@@ -412,25 +412,25 @@ mod interval {
 
 
     #[derive(Clone)]
-    pub struct IntervalTeardownTreeMap<Iv: Interval, V> {
+    pub struct IntervalTeardownMap<Iv: Interval, V> {
         internal: IvTree<Iv, V>
     }
 
-    impl<Iv: Interval, V> IntervalTeardownTreeMap<Iv, V> {
-        /// Creates a new `IntervalTeardownTreeMap` with the given set of intervals. The items can be
+    impl<Iv: Interval, V> IntervalTeardownMap<Iv, V> {
+        /// Creates a new `IntervalTeardownMap` with the given set of intervals. The items can be
         /// given in any order. Duplicates are supported.
         #[inline]
-        pub fn new(mut items: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
+        pub fn new(mut items: Vec<(Iv, V)>) -> IntervalTeardownMap<Iv, V> {
             items.sort_by(|a, b| a.0.cmp(&b.0));
             Self::with_sorted(items)
         }
 
-        /// Creates a new `IntervalTeardownTreeMap` with the given set of intervals. Duplicates are
+        /// Creates a new `IntervalTeardownMap` with the given set of intervals. Duplicates are
         /// supported.
         /// **Note**: the items are assumed to be sorted with respect to `Interval::cmp()`!
         #[inline]
-        pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownTreeMap<Iv, V> {
-            IntervalTeardownTreeMap { internal: IvTree::with_sorted(sorted) }
+        pub fn with_sorted(sorted: Vec<(Iv, V)>) -> IntervalTeardownMap<Iv, V> {
+            IntervalTeardownMap { internal: IvTree::with_sorted(sorted) }
         }
 
         /// Finds the item with the given key and returns it (or None).
@@ -506,7 +506,7 @@ mod interval {
 
 
     #[cfg(test)]
-    impl<Iv: Interval, V> super::TreeWrapperAccess for IntervalTeardownTreeMap<Iv, V> {
+    impl<Iv: Interval, V> super::TreeWrapperAccess for IntervalTeardownMap<Iv, V> {
         type Repr = TreeRepr<IvNode<Iv,V>>;
         type Wrapper = IvTree<Iv,V>;
 
@@ -523,7 +523,7 @@ mod interval {
         }
 
         fn from_internal(wrapper: IvTree<Iv, V>) -> Self {
-            IntervalTeardownTreeMap { internal: wrapper }
+            IntervalTeardownMap { internal: wrapper }
         }
 
         fn from_repr(repr: Self::Repr) -> Self {
@@ -531,7 +531,7 @@ mod interval {
         }
     }
 
-    impl<Iv: Interval+Copy, V: Copy> TeardownTreeRefill for IntervalTeardownTreeMap<Iv, V> {
+    impl<Iv: Interval+Copy, V: Copy> Refill for IntervalTeardownMap<Iv, V> {
         #[inline]
         fn refill(&mut self, master: &Self) {
             self.internal.refill(&master.internal)
@@ -540,26 +540,26 @@ mod interval {
 
 
     #[derive(Clone)]
-    pub struct IntervalTeardownTreeSet<Iv: Interval> {
-        map: IntervalTeardownTreeMap<Iv, ()>
+    pub struct IntervalTeardownSet<Iv: Interval> {
+        map: IntervalTeardownMap<Iv, ()>
     }
 
-    impl<Iv: Interval> IntervalTeardownTreeSet<Iv> {
-        /// Creates a new `IntervalTeardownTreeSet` with the given set of intervals. The items can be
+    impl<Iv: Interval> IntervalTeardownSet<Iv> {
+        /// Creates a new `IntervalTeardownSet` with the given set of intervals. The items can be
         /// given in any order. Duplicates are supported.
         #[inline]
-        pub fn new(items: Vec<Iv>) -> IntervalTeardownTreeSet<Iv> {
+        pub fn new(items: Vec<Iv>) -> IntervalTeardownSet<Iv> {
             let map_items = super::conv_to_tuple_vec(items);
-            IntervalTeardownTreeSet { map: IntervalTeardownTreeMap::new(map_items) }
+            IntervalTeardownSet { map: IntervalTeardownMap::new(map_items) }
         }
 
-        /// Creates a new `IntervalTeardownTreeSet` with the given set of intervals. Duplicates are
+        /// Creates a new `IntervalTeardownSet` with the given set of intervals. Duplicates are
         /// supported.
         /// **Note**: the items are assumed to be sorted!
         #[inline]
-        pub fn with_sorted(sorted: Vec<Iv>) -> IntervalTeardownTreeSet<Iv> {
+        pub fn with_sorted(sorted: Vec<Iv>) -> IntervalTeardownSet<Iv> {
             let map_items = super::conv_to_tuple_vec(sorted);
-            IntervalTeardownTreeSet { map: IntervalTeardownTreeMap::with_sorted(map_items) }
+            IntervalTeardownSet { map: IntervalTeardownMap::with_sorted(map_items) }
         }
 
         /// Returns true if the set contains the given item.
@@ -627,7 +627,7 @@ mod interval {
     }
 
     #[cfg(test)]
-    impl<Iv: Interval> super::TreeWrapperAccess for IntervalTeardownTreeSet<Iv> {
+    impl<Iv: Interval> super::TreeWrapperAccess for IntervalTeardownSet<Iv> {
         type Repr = TreeRepr<IvNode<Iv, ()>>;
         type Wrapper = IvTree<Iv, ()>;
 
@@ -644,7 +644,7 @@ mod interval {
         }
 
         fn from_internal(wrapper: IvTree<Iv, ()>) -> Self {
-            IntervalTeardownTreeSet { map: IntervalTeardownTreeMap { internal: wrapper } }
+            IntervalTeardownSet { map: IntervalTeardownMap { internal: wrapper } }
         }
 
         fn from_repr(repr: Self::Repr) -> Self {
@@ -652,32 +652,32 @@ mod interval {
         }
     }
 
-    impl<Iv: Interval+Copy> TeardownTreeRefill for IntervalTeardownTreeSet<Iv> {
+    impl<Iv: Interval+Copy> Refill for IntervalTeardownSet<Iv> {
         #[inline] fn refill(&mut self, master: &Self) {
             self.map.refill(&master.map)
         }
     }
 
 
-    impl<Iv: Interval+Debug, V> Debug for IntervalTeardownTreeMap<Iv, V> where Iv::K: Debug {
+    impl<Iv: Interval+Debug, V> Debug for IntervalTeardownMap<Iv, V> where Iv::K: Debug {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Debug::fmt(&self.internal, fmt)
         }
     }
 
-    impl<Iv: Interval, V> Display for IntervalTeardownTreeMap<Iv, V> where Iv::K: Debug {
+    impl<Iv: Interval, V> Display for IntervalTeardownMap<Iv, V> where Iv::K: Debug {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Display::fmt(&self.internal, fmt)
         }
     }
 
-    impl<Iv: Interval+Debug> Debug for IntervalTeardownTreeSet<Iv> where Iv::K: Debug {
+    impl<Iv: Interval+Debug> Debug for IntervalTeardownSet<Iv> where Iv::K: Debug {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Debug::fmt(&self.map, fmt)
         }
     }
 
-    impl<Iv: Interval> Display for IntervalTeardownTreeSet<Iv> where Iv::K: Debug {
+    impl<Iv: Interval> Display for IntervalTeardownSet<Iv> where Iv::K: Debug {
         fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
             Display::fmt(&self.map, fmt)
         }
@@ -712,7 +712,7 @@ mod interval {
     }
 
 
-    impl<Iv: Interval, V> IntoIterator for IntervalTeardownTreeMap<Iv, V> {
+    impl<Iv: Interval, V> IntoIterator for IntervalTeardownMap<Iv, V> {
         type Item = (Iv, V);
         type IntoIter = IntervalMapIntoIter<Iv, V>;
 
@@ -736,7 +736,7 @@ mod interval {
 
 
 
-    impl<Iv: Interval> IntoIterator for IntervalTeardownTreeSet<Iv> {
+    impl<Iv: Interval> IntoIterator for IntervalTeardownSet<Iv> {
         type Item = Iv;
         type IntoIter = IntervalSetIntoIter<Iv>;
 

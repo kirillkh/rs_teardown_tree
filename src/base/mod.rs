@@ -24,13 +24,13 @@ pub trait Sink<T> {
 
 
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
-pub trait TeardownTreeRefill {
+pub trait Refill {
     fn refill(&mut self, master: &Self);
 }
 
 
 
-impl<N: Node> TeardownTreeRefill for TreeRepr<N> where N::K: Copy, N::V: Copy {
+impl<N: Node> Refill for TreeRepr<N> where N::K: Copy, N::V: Copy {
     fn refill(&mut self, master: &TreeRepr<N>) {
         let len = self.data.len();
         debug_assert!(len == master.data.len());
@@ -43,7 +43,7 @@ impl<N: Node> TeardownTreeRefill for TreeRepr<N> where N::K: Copy, N::V: Copy {
 }
 
 
-//impl<T: Clone+Item> TeardownTreeRefill<T> for TeardownTree<T> {
+//impl<T: Clone+Item> Refill<T> for TeardownTree<T> {
 //    fn refill(&mut self, master: &TeardownTree<T>) {
 //            let len = self.data().len();
 //            debug_assert!(len == master.data.len());

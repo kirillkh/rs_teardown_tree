@@ -16,8 +16,8 @@ mod external_api;
 
 mod rust_bench;
 
-pub use self::external_api::{IntervalTeardownTreeMap, IntervalTeardownTreeSet, Interval, KeyInterval,
-                             TeardownTreeMap, TeardownTreeSet, TeardownTreeRefill,
+pub use self::external_api::{IntervalTeardownMap, IntervalTeardownSet, Interval, KeyInterval,
+                             TeardownMap, TeardownSet, Refill,
                              iter};
 pub use self::base::{ItemFilter, NoopFilter, Sink};
 pub use self::base::sink;
@@ -32,7 +32,7 @@ mod test_delete_plain {
     use base::util::make_teardown_seq;
     use base::validation::{check_bst_del_range, check_integrity_del_range};
     use applied::plain_tree::{PlTree, PlNode};
-    use external_api::{TeardownTreeSet, TreeWrapperAccess};
+    use external_api::{TeardownSet, TreeWrapperAccess};
     use super::common::{conv_from_tuple_vec, check_tree, test_exhaustive_items, exhaustive_range_check, mk_prebuilt};
 
     use rand::{Rng, XorShiftRng, SeedableRng};
@@ -45,11 +45,11 @@ mod test_delete_plain {
 
     #[test]
     fn build() {
-        TeardownTreeSet::new(vec![1]);
-        TeardownTreeSet::new(vec![1, 2]);
-        TeardownTreeSet::new(vec![1, 2, 3]);
-        TeardownTreeSet::new(vec![1, 2, 3, 4]);
-        TeardownTreeSet::new(vec![1, 2, 3, 4, 5]);
+        TeardownSet::new(vec![1]);
+        TeardownSet::new(vec![1, 2]);
+        TeardownSet::new(vec![1, 2, 3]);
+        TeardownSet::new(vec![1, 2, 3, 4]);
+        TeardownSet::new(vec![1, 2, 3, 4, 5]);
     }
 
     #[test]
@@ -85,7 +85,7 @@ mod test_delete_plain {
         let nodes: Vec<Option<Nd>> = mk_prebuilt(items);
         let tree = PlTree::with_nodes(nodes);
         let mut output = Vec::with_capacity(tree.size());
-        delete_and_check(&mut TeardownTreeSet::from_internal(tree), range, &mut NoopFilter, &mut output);
+        delete_and_check(&mut TeardownSet::from_internal(tree), range, &mut NoopFilter, &mut output);
     }
 
     pub fn test_exhaustive_n<F>(n: usize, check: &F)
@@ -98,7 +98,7 @@ mod test_delete_plain {
         test_exhaustive_items::<_, Tree, _>(&mut items, check);
     }
 
-    fn delete_and_check<Flt>(orig: &mut TeardownTreeSet<usize>, search: Range<usize>, filter: &mut Flt, output: &mut Vec<usize>) -> TeardownTreeSet<usize>
+    fn delete_and_check<Flt>(orig: &mut TeardownSet<usize>, search: Range<usize>, filter: &mut Flt, output: &mut Vec<usize>) -> TeardownSet<usize>
         where Flt: ItemFilter<usize>+Clone+Debug
     {
         let mut tree = orig.clone();
@@ -225,18 +225,18 @@ mod test_delete_plain {
     fn check_plain_tree(xs: Vec<usize>, rm: Range<usize>, output: &mut Vec<usize>) -> bool {
         let rm = if rm.start <= rm.end { rm } else {rm.end .. rm.start};
 
-        let mut tree = TeardownTreeSet::new(xs);
+        let mut tree = TeardownSet::new(xs);
         delete_and_check(&mut tree, rm, &mut NoopFilter, output);
         true
     }
 
     #[derive(Clone, Debug)]
     struct SetRefFilter<'a> {
-        set: &'a TeardownTreeSet<usize>
+        set: &'a TeardownSet<usize>
     }
 
     impl<'a> SetRefFilter<'a> {
-        pub fn new(set: &'a TeardownTreeSet<usize>) -> Self {
+        pub fn new(set: &'a TeardownSet<usize>) -> Self {
             SetRefFilter { set: set }
         }
     }
@@ -258,9 +258,9 @@ mod test_delete_plain {
             flt_elems.swap_remove(pos);
         }
 
-        let mut orig = TeardownTreeSet::new(elems);
+        let mut orig = TeardownSet::new(elems);
         let mut output = Vec::with_capacity(orig.size());
-        let flt_tree = TeardownTreeSet::new(flt_elems);
+        let flt_tree = TeardownSet::new(flt_elems);
 
         for range in ranges.into_iter() {
             output.truncate(0);
@@ -339,7 +339,7 @@ mod test_query_plain {
 
     use applied::interval::{KeyInterval, Interval};
     use applied::plain_tree::{PlTree, PlNode};
-    use external_api::{TeardownTreeSet, TeardownTreeMap, TreeWrapperAccess};
+    use external_api::{TeardownSet, TeardownMap, TreeWrapperAccess};
     use base::{TreeRepr, Traverse};
     use base::sink::{RefCopyingSink, UncheckedVecRefSink};
     use super::test_delete_plain::test_exhaustive_n;
@@ -362,7 +362,7 @@ mod test_query_plain {
     }
 
     fn query_range_exhaustive_with_tree(tree: Tree) {
-        let tree = TeardownTreeSet::from_internal(tree);
+        let tree = TeardownSet::from_internal(tree);
         let n = tree.size();
         let mut output = Vec::with_capacity(n);
         for i in 0..n+2 {
@@ -391,7 +391,7 @@ mod test_query_plain {
     }
 
     fn iter_exhaustive_with_tree(tree: Tree) {
-        let tree = TeardownTreeSet::from_internal(tree);
+        let tree = TeardownSet::from_internal(tree);
         let mut n = tree.size();
         for (i, &x) in tree.iter().enumerate() {
             assert!(i+1 == x, "i={}, x={}, tree={}", i, x, &tree);
@@ -414,7 +414,7 @@ mod test_query_plain {
     }
 
     fn into_iter_exhaustive_with_tree(tree: Tree) {
-        let tree = TeardownTreeSet::from_internal(tree);
+        let tree = TeardownSet::from_internal(tree);
         let mut n = tree.size();
         for (i, x) in tree.clone().into_iter().enumerate() {
             assert!(i+1 == x, "i={}, x={}, tree={}", i, x, &tree);
@@ -442,7 +442,7 @@ mod test_query_plain {
     }
 
     fn find_exhaustive_with_tree(tree: PlTree<usize, usize>) {
-        let tree = TeardownTreeMap::from_internal(tree);
+        let tree = TeardownMap::from_internal(tree);
         let n = tree.size();
 
         assert_eq!(tree.find(&0), None);
@@ -459,7 +459,7 @@ mod test_query_plain {
     fn test_prebuilt(items: &[usize], range: Range<usize>) {
         let nodes: Vec<Option<Nd>> = mk_prebuilt(items);
         let tree = PlTree::with_nodes(nodes);
-        let tree = TeardownTreeSet::from_internal(tree);
+        let tree = TeardownSet::from_internal(tree);
         let mut output = Vec::with_capacity(tree.size());
 
         {
@@ -504,7 +504,7 @@ mod test_delete_interval {
     use applied::AppliedTree;
     use applied::interval::{Interval, IvNode, KeyInterval};
     use applied::interval_tree::{IvTree};
-    use external_api::{IntervalTeardownTreeSet, TreeWrapperAccess};
+    use external_api::{IntervalTeardownSet, TreeWrapperAccess};
     use super::common::{check_tree};
 
     type Iv = KeyInterval<usize>;
@@ -522,7 +522,7 @@ mod test_delete_interval {
     fn test_shape_delete_overlap<Flt>(xs: Vec<Range<usize>>, filter: Flt, rm: Range<usize>)
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
     {
-        test_shape(xs, filter, |tree: &mut IntervalTeardownTreeSet<Iv>, filter, output| {
+        test_shape(xs, filter, |tree: &mut IntervalTeardownSet<Iv>, filter, output| {
             delete_and_check(tree, rm.clone(), filter, output);
         });
     }
@@ -555,8 +555,8 @@ mod test_delete_interval {
     }
 
 
-    fn delete_and_check<Flt>(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: Range<usize>, mut filter: Flt,
-                             output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
+    fn delete_and_check<Flt>(orig: &mut IntervalTeardownSet<KeyInterval<usize>>, rm: Range<usize>, mut filter: Flt,
+                             output: &mut Vec<KeyInterval<usize>>) -> IntervalTeardownSet<KeyInterval<usize>>
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug
     {
         let mut tree = orig.clone();
@@ -625,7 +625,7 @@ mod test_delete_interval {
     }
 
 
-    fn check_delete_single(orig: &mut IntervalTeardownTreeSet<KeyInterval<usize>>, rm: KeyInterval<usize>) -> IntervalTeardownTreeSet<KeyInterval<usize>>
+    fn check_delete_single(orig: &mut IntervalTeardownSet<KeyInterval<usize>>, rm: KeyInterval<usize>) -> IntervalTeardownSet<KeyInterval<usize>>
     {
         let mut tree = orig.clone();
 
@@ -672,7 +672,7 @@ mod test_delete_interval {
 
 
     fn test_random_shape<C>(xs: Vec<Range<usize>>, rng: &mut XorShiftRng, mut check: C) -> bool
-        where C: FnMut(&mut IntervalTeardownTreeSet<Iv>)
+        where C: FnMut(&mut IntervalTeardownSet<Iv>)
     {
         let mut intervals = xs.into_iter()
             .map(|r| normalize_range(r).into())
@@ -681,13 +681,13 @@ mod test_delete_interval {
 
         let tree = gen_tree(intervals, rng);
 
-        check(&mut IntervalTeardownTreeSet::from_internal(tree));
+        check(&mut IntervalTeardownSet::from_internal(tree));
         true
     }
 
     fn test_shape<Flt, C>(xs: Vec<Range<usize>>, filter: Flt, mut check: C)
         where Flt: ItemFilter<KeyInterval<usize>>+Clone+Debug,
-              C: FnMut(&mut IntervalTeardownTreeSet<Iv>, Flt, &mut Vec<KeyInterval<usize>>)
+              C: FnMut(&mut IntervalTeardownSet<Iv>, Flt, &mut Vec<KeyInterval<usize>>)
     {
         let nodes = xs.into_iter()
                 .map(|r| if r.start<=r.end {
@@ -703,7 +703,7 @@ mod test_delete_interval {
             init_maxb(&mut internal, 0);
         }
 
-        let mut tree = IntervalTeardownTreeSet::from_internal(internal);
+        let mut tree = IntervalTeardownSet::from_internal(internal);
         let mut output = Vec::with_capacity(tree.size());
         check(&mut tree, filter, &mut output);
     }
@@ -739,7 +739,7 @@ mod test_delete_interval {
         let elems: Vec<_> = (0..n).map(|x| (KeyInterval::new(x,x))).collect();
         let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
 
-        let mut orig = IntervalTeardownTreeSet::new(elems);
+        let mut orig = IntervalTeardownSet::new(elems);
         let mut output = Vec::with_capacity(orig.size());
 
         for range in ranges.into_iter() {
@@ -765,11 +765,11 @@ mod test_delete_interval {
 
     #[derive(Clone, Debug)]
     struct SetRefFilter<'a> {
-        set: &'a IntervalTeardownTreeSet<KeyInterval<usize>>
+        set: &'a IntervalTeardownSet<KeyInterval<usize>>
     }
 
     impl<'a> SetRefFilter<'a> {
-        pub fn new(set: &'a IntervalTeardownTreeSet<KeyInterval<usize>>) -> Self {
+        pub fn new(set: &'a IntervalTeardownSet<KeyInterval<usize>>) -> Self {
             SetRefFilter { set: set }
         }
     }
@@ -782,7 +782,7 @@ mod test_delete_interval {
 
     #[derive(Clone, Debug)]
     struct SetFilter {
-        set: IntervalTeardownTreeSet<KeyInterval<usize>>
+        set: IntervalTeardownSet<KeyInterval<usize>>
     }
 
     impl SetFilter {
@@ -791,7 +791,7 @@ mod test_delete_interval {
                 .map(|r| Iv::new(r.start, r.end))
                 .collect::<Vec<_>>();
 
-            let filter_set = IntervalTeardownTreeSet::new(items);
+            let filter_set = IntervalTeardownSet::new(items);
             SetFilter { set: filter_set }
         }
     }
@@ -815,9 +815,9 @@ mod test_delete_interval {
             flt_elems.swap_remove(pos);
         }
 
-        let mut orig = IntervalTeardownTreeSet::new(elems);
+        let mut orig = IntervalTeardownSet::new(elems);
         let mut output = Vec::with_capacity(orig.size());
-        let flt_tree = IntervalTeardownTreeSet::new(flt_elems);
+        let flt_tree = IntervalTeardownSet::new(flt_elems);
 
         for range in ranges.into_iter() {
             output.truncate(0);
@@ -874,7 +874,7 @@ mod test_delete_interval {
 mod test_query_interval {
     use applied::interval::{KeyInterval};
     use applied::interval_tree::{IvTree};
-    use external_api::{IntervalTeardownTreeSet, TreeWrapperAccess};
+    use external_api::{IntervalTeardownSet, TreeWrapperAccess};
     use base::sink::{RefCopyingSink, UncheckedVecRefSink};
     use super::common::{exhaustive_range_check, test_exhaustive_items};
 
@@ -894,12 +894,12 @@ mod test_query_interval {
     }
 
     fn query_overlap_exhaustive_with_tree(tree: Tree) {
-        let tree = IntervalTeardownTreeSet::from_internal(tree);
+        let tree = IntervalTeardownSet::from_internal(tree);
         let n = tree.size();
         let mut output = Vec::with_capacity(n);
         for i in 0..n+2 {
             for j in i..n+2 {
-                let tree_mod: IntervalTeardownTreeSet<_> = tree.clone();
+                let tree_mod: IntervalTeardownSet<_> = tree.clone();
                 output.truncate(0);
                 {
                     let sink = RefCopyingSink::new(UncheckedVecRefSink::new(&mut output));
