@@ -30,19 +30,25 @@ The tree does not use any kind of self-balancing and does not support insert ope
 Details
 -------
 
-The tree is implicit -- meaning that nodes do not store explicit pointers to their children. This is similar to how
-binary heaps work: all nodes in the tree reside in an array, the root always at index 0, and given a node with index i,
-its left/right children are found at indices ``2*i+1`` and ``2*i+2``. Thus no dynamic memory allocation or deallocation is
-done. This makes it possible to implement a fast **clone** operation: instead of traversing the tree, allocating and
-copying each node individually, we are able to allocate the whole array in a single call and efficiently copy the entire
-content.
+The tree is implicit -- meaning that nodes do not store explicit pointers to their children. The only thing we store in
+a node is your data. This is similar to how binary heaps work: all nodes in the tree reside in an array, the root always
+at index 0, and given a node with index i, its left/right children are found at indices ``2*i+1`` and ``2*i+2``. Thus no
+dynamic memory allocation or deallocation is required. This makes it possible to implement a fast **clone** operation:
+instead of traversing the tree, allocating and copying each node individually, we are able to allocate the whole array
+in a single call and efficiently copy the entire content. The tree also supports a **refill** operation (currently
+only implemented for T: Copy), which copies the contents of the master tree into ``self`` without allocating at all.
+
 
 As to **delete-range** operation, we use a custom algorithm running in ``O(k + log n)`` time, where k is the number of
 items deleted (and returned) and n is the initial size of the tree. `Detailed description <delete_range.md>`_.
  
-An exhaustive automated test for **delete-range** has been written and is found in ``lib.rs``. I have tested all trees up
-to the size n=10.
+An exhaustive automated test for **delete-range** has been written and is found in ``lib.rs``. I have tested all trees
+up to the size n=10. All the other supported operations have been tested extensively for every variation of the tree (we
+use slightly different algorithms for IntervalTree and for the filtered variants). In general, I feel the quality is
+already pretty good. If you find any bugs, please open an issue.
 
+The library has been optimized for speed based on profiling. A significant amount of unsafe code is employed. Every
+occurrence of unsafe code has been carefully reviewed, most have been annotated with comments elaborating on safety.
 
 -----
 Usage
@@ -97,9 +103,9 @@ I made straightforward modifications to ``Treap`` and ``SplayTree`` in order to 
 ``BTreeSet`` lacks an equivalent operation (it has an ``O(log n)`` ``split``, but not ``merge``, see
 `Rust #34666 <https://github.com/rust-lang/rust/issues/34666>`_), therefore ``BTreeSet::remove()`` is used instead.
 
-As the graph above shows, on my machine the whole clone/teardown sequence on a tree of 1,000,000 u64 items (we clone the
-tree, then delete 1000 items at a time until the tree is empty), is ~20 times faster with ``TeardownTree::delete_range()``
-than with ``BTreeSet::remove()``. It also uses 45% less memory.
+As the graph above shows, on my machine the whole refill/teardown sequence on a tree of 1,000,000 u64 items (we refill the
+tree with elements from the master copy, then delete 1000 items at a time until the tree is empty), is ~20 times faster
+with ``TeardownTree::delete_range()`` than with ``BTreeSet::remove()``. It also uses 45% less memory.
 
 |Benchmarks|_
 
