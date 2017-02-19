@@ -34,12 +34,12 @@ impl<'a> BenchJob<'a> {
 
 
 fn bench_table(batch_sz: usize, action: &str, jobs: &[BenchJob]) {
-    println!("\n\t\t\t\t, , {}", action);
-    print!("method\\N,\t\t\t");
+    println!("\n{:36}, {:10}, {}", "", "", action);
+    print!("{:36}, ", "method\\N");
     let ntimings = jobs[0].spec.len();
     let mut n = batch_sz;
     for _ in 0..ntimings {
-        print!("{},\t", n);
+        print!("{:10}, ", n);
         n *= 10;
     }
     println!();
@@ -50,9 +50,9 @@ fn bench_table(batch_sz: usize, action: &str, jobs: &[BenchJob]) {
 
         let (descr, timings) = f(batch_sz, spec);
 
-        print!("{},\t", descr);
+        print!("{:36}, ", descr);
         for time in timings.into_iter() {
-            print!("{},\t", time);
+            print!("{:10}, ", time);
         }
         println!();
     }
@@ -94,9 +94,9 @@ fn main() {
     bench_table(10, "Refill", &[
         BenchJob::new(&bench_refill_impl::<TreeBulk>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
         BenchJob::new(&bench_refill_impl::<IntervalTreeBulk>,    &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
-        BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[7000000,     460000,     48000,      5000,       300,    25,     3]),
-        BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[27000000,    3500000,    350000,     30000,      2300,   110,    10]),
-        BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[7000000,     540000,     50000,      4500,       400,    25,     3]),
+        BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[14000000,     1300000,     60000,      5000,       300,    25,     3]),
+        BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[27000000,     3500000,    350000,     30000,      2300,   110,    10]),
+        BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[14000000,     1000000,     50000,      4500,       400,    25,     3]),
     ]);
 
 
@@ -825,7 +825,7 @@ mod bench_delete_range {
 
 mod ts {
     use super::black_box;
-    use x86::bits64::time::{rdtsc, rdtscp};
+    use x86::bits64::time::rdtsc;
 
     pub type Timestamp = u64;
 
