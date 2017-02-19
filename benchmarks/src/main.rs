@@ -6,7 +6,7 @@ extern crate teardown_tree;
 extern crate splay;
 //extern crate wio;
 
-use bench_delete_range::{DataMaster, TreapMaster, TreeBulk, TeardownTreeSingle, TeardownSetFilter, IntervalSetFilter, BTreeSetMaster, SplayMaster, IntervalTreeBulk, FilteredIntervalTreeBulk};
+use bench_delete_range::{DataMaster, TreapMaster, TreeBulk, PlainSetSingle, FilteredPlainSet, FilteredIntervalSet, BTreeSetMaster, SplayMaster, IntervalSet};
 use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
 
 use std::time::Duration;
@@ -93,7 +93,7 @@ fn bench_refill_impl<M: DataMaster>(_: usize, spec: &[u64]) -> (String, Vec<u64>
 fn main() {
     bench_table(10, "Refill", &[
         BenchJob::new(&bench_refill_impl::<TreeBulk>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
-        BenchJob::new(&bench_refill_impl::<IntervalTreeBulk>,    &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
+        BenchJob::new(&bench_refill_impl::<IntervalSet>, &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
         BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[14000000,     1300000,     60000,      5000,       300,    25,     3]),
         BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[27000000,     3500000,    350000,     30000,      2300,   110,    10]),
         BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[14000000,     1000000,     50000,      4500,       400,    25,     3]),
@@ -102,10 +102,10 @@ fn main() {
 
     bench_table(10, "Teardown in bulks of 10 items", &[
         BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[32000000, 2000000,    120000,  5000,   350,   30, 3]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownSetFilter>,   &[24000000, 2000000,    170000, 10000,  1000,   70, 7]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[22000000, 1300000,    100000,  5000,   400,   25, 4]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSetFilter>,   &[17000000, 1100000,     80000,  5000,   400,   25, 4]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>, &[32000000, 2000000,    120000,  5000,   350,   30, 3]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>, &[24000000, 2000000,    170000, 10000,  1000,   70, 7]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>, &[22000000, 1300000,    100000,  5000,   400,   25, 4]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>,   &[17000000, 1100000,     80000,  5000,   400,   25, 4]),
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 2500000,  180000,     14000,  1300,    90,    6, 2]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[13000000,  600000,     32000,  2300,   190,   16, 3]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[ 3300000,  300000,     24000,  1800,   180,    9, 2]),
@@ -113,10 +113,10 @@ fn main() {
 
     bench_table(100, "Teardown in bulks of 100 items", &[
         BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[8000000, 700000, 70000,  4500,   400, 32]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[2200000, 150000, 6000,   500,    50,  5]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownSetFilter>,   &[3000000, 270000, 25000,  2000,   180, 28]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[6000000, 350000, 35000,  2200,   200, 16]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSetFilter>,   &[2000000, 200000, 20000,  1500,   150, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>, &[2200000, 150000, 6000,   500,    50,  5]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>, &[3000000, 270000, 25000,  2000,   180, 28]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>, &[6000000, 350000, 35000,  2200,   200, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>,   &[2000000, 200000, 20000,  1500,   150, 16]),
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[900000,  50000,  4000,   250,    20,  3]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[1000000, 50000,  4000,   350,    30,  4]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[1000000, 50000,  4000,   350,    30,  4]),
@@ -124,10 +124,10 @@ fn main() {
 
     bench_table(1000, "Teardown in bulks of 1000 items", &[
         BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[800000, 80000,  8000,   700,    70]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownTreeSingle>,  &[80000,   6000,   500,    60,     6]),
-        BenchJob::new(&bench_teardown_full_impl::<TeardownSetFilter>,   &[300000, 25000,  2500,   250,    25]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalTreeBulk>,    &[700000, 60000,  4800,   400,    50]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSetFilter>,   &[200000, 20000,  2000,   200,    25]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>, &[80000,   6000,   500,    60,     6]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>, &[300000, 25000,  2500,   250,    25]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>, &[700000, 60000,  4800,   400,    50]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>,   &[200000, 20000,  2000,   200,    25]),
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[50000,  5000,   400,    40,     3]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[100000, 6000,   600,    40,     4]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[50000,  6000,   600,    40,     4]),
@@ -151,8 +151,6 @@ fn main() {
 
 
 
-//---- unifying interfaces used in above benchmarks and its impls for 1) TeardownTree delete_range, 2) TeardownTree delete(), BTreeSet
-
 mod bench_delete_range {
     use std::collections::BTreeSet;
     use std::ops::Range;
@@ -163,14 +161,14 @@ mod bench_delete_range {
     use splay::SplaySet;
 
     use treap::TreapMap;
-    use teardown_tree::{IntervalTeardownSet, IntervalTeardownMap, KeyInterval, Interval, Refill, TeardownSet, TeardownMap, ItemFilter, NoopFilter};
+    use teardown_tree::{IntervalTeardownSet, IntervalTeardownMap, KeyInterval, Refill, TeardownSet, TeardownMap, ItemFilter};
     use teardown_tree::util::make_teardown_seq;
     use teardown_tree::sink::{UncheckedVecRefSink};
     use super::{nanos, black_box};
     use super::ts::{Timestamp, new_timestamp, next_elapsed};
 
     pub type Tree = TeardownSet<usize>;
-    pub type TreeBulk = TeardownTreeBulk;
+    pub type TreeBulk = PlainSet;
 
 
     pub fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
@@ -217,7 +215,7 @@ mod bench_delete_range {
 
         let elems: Vec<_> = (1..n+1).collect();
 
-        let tree = TeardownTreeBulk(Tree::new(elems));
+        let tree = PlainSet(Tree::new(elems));
         let mut copy = tree.clone();
         let mut output = Vec::with_capacity(tree.0.size());
 
@@ -349,15 +347,15 @@ mod bench_delete_range {
     }
 
 
-    /// for benchmarking TeardownSet::delete_range()
+    //----- TeardownSet::delete_range() ------------------------------------------------------------
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeBulk(TeardownSet<usize>);
+    pub struct PlainSet(TeardownSet<usize>);
 
-    impl DataMaster for TeardownTreeBulk {
-        type Cpy = TeardownTreeBulk;
+    impl DataMaster for PlainSet {
+        type Cpy = PlainSet;
 
         fn build(elems: Vec<usize>) -> Self {
-            TeardownTreeBulk(TeardownSet::new(elems))
+            PlainSet(TeardownSet::new(elems))
         }
 
         fn cpy(&self) -> Self {
@@ -377,8 +375,8 @@ mod bench_delete_range {
         }
     }
 
-    impl DataCopy for TeardownTreeBulk {
-        type Master = TeardownTreeBulk;
+    impl DataCopy for PlainSet {
+        type Master = PlainSet;
         type T = usize;
 
         fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
@@ -403,22 +401,22 @@ mod bench_delete_range {
         }
     }
 
-    impl Display for TeardownTreeBulk {
+    impl Display for PlainSet {
         fn fmt(&self, fmt: &mut Formatter) -> Result {
             Display::fmt(&self.0, fmt)
         }
     }
 
 
-    /// for benchmarking TeardownSet::delete()
+    //----- TeardownSet::delete() ------------------------------------------------------------------
     #[derive(Clone, Debug)]
-    pub struct TeardownTreeSingle(TeardownSet<usize>);
+    pub struct PlainSetSingle(TeardownSet<usize>);
 
-    impl DataMaster for TeardownTreeSingle {
-        type Cpy = TeardownTreeSingle;
+    impl DataMaster for PlainSetSingle {
+        type Cpy = PlainSetSingle;
 
         fn build(elems: Vec<usize>) -> Self {
-            TeardownTreeSingle(TeardownSet::new(elems))
+            PlainSetSingle(TeardownSet::new(elems))
         }
 
         fn cpy(&self) -> Self {
@@ -438,8 +436,8 @@ mod bench_delete_range {
         }
     }
 
-    impl DataCopy for TeardownTreeSingle {
-        type Master = TeardownTreeSingle;
+    impl DataCopy for PlainSetSingle {
+        type Master = PlainSetSingle;
         type T = usize;
 
         fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
@@ -468,17 +466,335 @@ mod bench_delete_range {
         }
     }
 
-    impl Display for TeardownTreeSingle {
+    impl Display for PlainSetSingle {
         fn fmt(&self, fmt: &mut Formatter) -> Result {
             Display::fmt(&self.0, fmt)
         }
     }
 
 
+
+    //----- TeardownSet::filter_range() ------------------------------------------------------------
+    #[derive(Clone, Debug)]
+    pub struct FilteredPlainSet(TeardownSet<usize>);
+
+    impl DataMaster for FilteredPlainSet {
+        type Cpy = FilteredPlainSet;
+
+        fn build(elems: Vec<usize>) -> Self {
+            FilteredPlainSet(TeardownSet::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "TeardownSet::filter_range()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "TeardownSet".to_string()
+        }
+    }
+
+    impl DataCopy for FilteredPlainSet {
+        type Master = FilteredPlainSet;
+        type T = usize;
+
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            self.0.filter_range(range, AcceptingFilter, UncheckedVecRefSink::new(output));
+        }
+
+        #[inline(never)]
+        fn refill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<Self::T> {
+            self.0.iter().cloned().collect()
+        }
+    }
+
+    impl Display for FilteredPlainSet {
+        fn fmt(&self, fmt: &mut Formatter) -> Result {
+            Display::fmt(&self.0, fmt)
+        }
+    }
+
+
+
+    //----- TeardownMap::delete_range() ------------------------------------------------------------
+    #[derive(Clone, Debug)]
+    pub struct PlainMap(TeardownMap<usize, usize>);
+
+    impl DataMaster for PlainMap {
+        type Cpy = PlainMap;
+
+        fn build(elems: Vec<usize>) -> Self {
+            let elems: Vec<_> = elems.into_iter().map(|x| (x,x)).collect();
+            PlainMap(TeardownMap::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "TeardownMap::delete_range()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "TeardownMap".to_string()
+        }
+    }
+
+    impl DataCopy for PlainMap {
+        type Master = PlainMap;
+        type T = (usize, usize);
+
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
+            self.0.filter_range(range, AcceptingFilter, UncheckedVecRefSink::new(output));
+        }
+
+        #[inline(never)]
+        fn refill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<Self::T> {
+            self.0.iter().cloned().collect()
+        }
+    }
+
+    impl Display for PlainMap {
+        fn fmt(&self, fmt: &mut Formatter) -> Result {
+            Display::fmt(&self.0, fmt)
+        }
+    }
+
+
+
+
+    //----- IntervalTeardownSet::delete_overlap() --------------------------------------------------
+    #[derive(Clone, Debug)]
+    pub struct IntervalSet(IntervalTeardownSet<KeyInterval<usize>>);
+
+    impl DataMaster for IntervalSet {
+        type Cpy = IntervalSet;
+
+        fn build(elems: Vec<usize>) -> Self {
+            let elems = elems.into_iter().map(|x| KeyInterval::new(x, x)).collect();
+            IntervalSet(IntervalTeardownSet::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "IntervalTeardownSet::delete_overlap()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "IntervalTeardownSet".to_string()
+        }
+    }
+
+    impl DataCopy for IntervalSet {
+        type Master = IntervalSet;
+        type T = KeyInterval<usize>;
+
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
+            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), UncheckedVecRefSink::new(output));
+        }
+
+        #[inline(never)]
+        fn refill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<Self::T> {
+            self.0.iter().cloned().collect()
+        }
+    }
+
+
+    impl Display for IntervalSet {
+        fn fmt(&self, fmt: &mut Formatter) -> Result {
+            Display::fmt(&self.0, fmt)
+        }
+    }
+
+
+
+    //----- IntervalTeardownSet::filter_overlap() --------------------------------------------------
+    #[derive(Clone, Debug)]
+    pub struct FilteredIntervalSet(IntervalTeardownSet<usize>);
+
+    impl DataMaster for FilteredIntervalSet {
+        type Cpy = FilteredIntervalSet;
+
+        fn build(elems: Vec<usize>) -> Self {
+            FilteredIntervalSet(IntervalTeardownSet::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "IntervalTeardownSet::filter_overlap()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "IntervalTeardownSet".to_string()
+        }
+    }
+
+    impl DataCopy for FilteredIntervalSet {
+        type Master = FilteredIntervalSet;
+        type T = usize;
+
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), AcceptingFilter, UncheckedVecRefSink::new(output));
+        }
+
+        #[inline(never)]
+        fn refill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<Self::T> {
+            self.0.iter().cloned().collect()
+        }
+    }
+
+    impl Display for FilteredIntervalSet {
+        fn fmt(&self, fmt: &mut Formatter) -> Result {
+            Display::fmt(&self.0, fmt)
+        }
+    }
+
+
+
+    //----- IntervalTeardownMap::filter_overlap() --------------------------------------------------
+    #[derive(Clone, Debug)]
+    pub struct IntervalMap(IntervalTeardownMap<usize, usize>);
+
+    impl DataMaster for IntervalMap {
+        type Cpy = IntervalMap;
+
+        fn build(elems: Vec<usize>) -> Self {
+            let elems: Vec<_> = elems.into_iter().map(|x| (x,2*x)).collect();
+            IntervalMap(IntervalTeardownMap::new(elems))
+        }
+
+        fn cpy(&self) -> Self {
+            self.clone()
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "IntervalTeardownMap::delete_overlap()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "IntervalTeardownMap".to_string()
+        }
+    }
+
+    impl DataCopy for IntervalMap {
+        type Master = IntervalMap;
+        type T = (usize, usize);
+
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
+            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), UncheckedVecRefSink::new(output));
+        }
+
+        #[inline(never)]
+        fn refill(&mut self, master: &Self::Master) {
+            self.0.refill(&master.0)
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<Self::T> {
+            self.0.iter().cloned().collect()
+        }
+    }
+
+    impl Display for IntervalMap {
+        fn fmt(&self, fmt: &mut Formatter) -> Result {
+            Display::fmt(&self.0, fmt)
+        }
+    }
+
+
+
+
+
     #[derive(Debug)]
     pub struct BTreeSetMaster(BTreeSet<usize>);
 
-    /// for benchmarking BTreeSet::remove()
+    //---- BTreeSet::remove() ----------------------------------------------------------------------
     impl DataMaster for BTreeSetMaster {
         type Cpy = BTreeSetCopy;
 
@@ -558,7 +874,7 @@ mod bench_delete_range {
     }
 
 
-    //---- benchmarking Treap split/join ---------------------------------------------------------------
+    //---- Treap::remove_range() -------------------------------------------------------------------
     pub struct TreapMaster(TreapMap<usize, ()>);
 
     pub struct TreapCopy(TreapMap<usize, ()>);
@@ -580,7 +896,7 @@ mod bench_delete_range {
         }
 
         fn descr_cycle() -> String {
-            "Treap::delete_range()".to_string()
+            "Treap::remove_range()".to_string()
         }
 
         fn descr_refill() -> String {
@@ -633,7 +949,7 @@ mod bench_delete_range {
     }
 
 
-    //---- benchmarking SplayTree split/join ---------------------------------------------------------------
+    //---- SplayTree::remove_range -----------------------------------------------------------------
     pub struct SplayMaster(SplaySet<usize>);
 
     pub struct SplayCopy(SplaySet<usize>);
@@ -707,256 +1023,6 @@ mod bench_delete_range {
     }
 
 
-    /// for benchmarking IntervalTeardownSet::delete_range()
-    #[derive(Clone, Debug)]
-    pub struct IntervalTreeBulk(IntervalTeardownSet<KeyInterval<usize>>);
-
-    impl DataMaster for IntervalTreeBulk {
-        type Cpy = IntervalTreeBulk;
-
-        fn build(elems: Vec<usize>) -> Self {
-            let elems = elems.into_iter().map(|x| KeyInterval::new(x, x)).collect();
-            IntervalTreeBulk(IntervalTeardownSet::new(elems))
-        }
-
-        fn cpy(&self) -> Self {
-            self.clone()
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn descr_cycle() -> String {
-            "IntervalTeardownSet::delete_range()".to_string()
-        }
-
-        fn descr_refill() -> String {
-            "IntervalTeardownSet".to_string()
-        }
-    }
-
-    impl DataCopy for IntervalTreeBulk {
-        type Master = IntervalTreeBulk;
-        type T = KeyInterval<usize>;
-
-        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.delete_overlap(&KeyInterval::new(range.start, range.end), UncheckedVecRefSink::new(output));
-        }
-
-        #[inline(never)]
-        fn refill(&mut self, master: &Self::Master) {
-            self.0.refill(&master.0)
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn clear(&mut self) {
-            self.0.clear();
-        }
-
-        fn as_vec(&self) -> Vec<Self::T> {
-            self.0.iter().cloned().collect()
-        }
-    }
-
-
-    impl Display for IntervalTreeBulk {
-        fn fmt(&self, fmt: &mut Formatter) -> Result {
-            Display::fmt(&self.0, fmt)
-        }
-    }
-
-    /// for benchmarking IntervalTeardownSet::filter_range()
-    #[derive(Clone, Debug)]
-    pub struct FilteredIntervalTreeBulk(IntervalTeardownSet<KeyInterval<usize>>);
-
-    impl DataMaster for FilteredIntervalTreeBulk {
-        type Cpy = FilteredIntervalTreeBulk;
-
-        fn build(elems: Vec<usize>) -> Self {
-            let elems = elems.into_iter().map(|x| KeyInterval::new(x, x)).collect();
-            FilteredIntervalTreeBulk(IntervalTeardownSet::new(elems))
-        }
-
-        fn cpy(&self) -> Self {
-            self.clone()
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn descr_cycle() -> String {
-            "IntervalTeardownSet::filter_range()".to_string()
-        }
-
-        fn descr_refill() -> String {
-            "IntervalTeardownSet".to_string()
-        }
-    }
-
-    impl DataCopy for FilteredIntervalTreeBulk {
-        type Master = FilteredIntervalTreeBulk;
-        type T = KeyInterval<usize>;
-
-        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
-            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), NoopFilter, UncheckedVecRefSink::new(output));
-        }
-
-        #[inline(never)]
-        fn refill(&mut self, master: &Self::Master) {
-            self.0.refill(&master.0)
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn clear(&mut self) {
-            self.0.clear();
-        }
-
-        fn as_vec(&self) -> Vec<Self::T> {
-            self.0.iter().cloned().collect()
-        }
-    }
-
-
-    impl Display for FilteredIntervalTreeBulk {
-        fn fmt(&self, fmt: &mut Formatter) -> Result {
-            Display::fmt(&self.0, fmt)
-        }
-    }
-
-
-
-    /// for benchmarking TeardownSet::filter_range()
-    #[derive(Clone, Debug)]
-    pub struct TeardownSetFilter(TeardownSet<usize>);
-
-    impl DataMaster for TeardownSetFilter {
-        type Cpy = TeardownSetFilter;
-
-        fn build(elems: Vec<usize>) -> Self {
-            TeardownSetFilter(TeardownSet::new(elems))
-        }
-
-        fn cpy(&self) -> Self {
-            self.clone()
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn descr_cycle() -> String {
-            "TeardownSet::filter_range()".to_string()
-        }
-
-        fn descr_refill() -> String {
-            "TeardownSet".to_string()
-        }
-    }
-
-    impl DataCopy for TeardownSetFilter {
-        type Master = TeardownSetFilter;
-        type T = usize;
-
-        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
-            self.0.filter_range(range, AcceptingFilter, UncheckedVecRefSink::new(output));
-        }
-
-        #[inline(never)]
-        fn refill(&mut self, master: &Self::Master) {
-            self.0.refill(&master.0)
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn clear(&mut self) {
-            self.0.clear();
-        }
-
-        fn as_vec(&self) -> Vec<Self::T> {
-            self.0.iter().cloned().collect()
-        }
-    }
-
-    impl Display for TeardownSetFilter {
-        fn fmt(&self, fmt: &mut Formatter) -> Result {
-            Display::fmt(&self.0, fmt)
-        }
-    }
-
-
-
-    /// for benchmarking IntervalTeardownSet::filter_overlap()
-    #[derive(Clone, Debug)]
-    pub struct IntervalSetFilter(IntervalTeardownSet<usize>);
-
-    impl DataMaster for IntervalSetFilter {
-        type Cpy = IntervalSetFilter;
-
-        fn build(elems: Vec<usize>) -> Self {
-            IntervalSetFilter(IntervalTeardownSet::new(elems))
-        }
-
-        fn cpy(&self) -> Self {
-            self.clone()
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn descr_cycle() -> String {
-            "IntervalTeardownSet::filter_overlap()".to_string()
-        }
-
-        fn descr_refill() -> String {
-            "IntervalTeardownSet".to_string()
-        }
-    }
-
-    impl DataCopy for IntervalSetFilter {
-        type Master = IntervalSetFilter;
-        type T = usize;
-
-        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
-            self.0.filter_overlap(&KeyInterval::new(range.start, range.end), AcceptingFilter, UncheckedVecRefSink::new(output));
-        }
-
-        #[inline(never)]
-        fn refill(&mut self, master: &Self::Master) {
-            self.0.refill(&master.0)
-        }
-
-        fn size(&self) -> usize {
-            self.0.size()
-        }
-
-        fn clear(&mut self) {
-            self.0.clear();
-        }
-
-        fn as_vec(&self) -> Vec<Self::T> {
-            self.0.iter().cloned().collect()
-        }
-    }
-
-    impl Display for IntervalSetFilter {
-        fn fmt(&self, fmt: &mut Formatter) -> Result {
-            Display::fmt(&self.0, fmt)
-        }
-    }
-
-
-
 
     #[derive(Clone, Debug)]
     pub struct AcceptingFilter;
@@ -974,7 +1040,6 @@ mod bench_delete_range {
 
 
 mod ts {
-    use super::black_box;
     use x86::bits64::time::rdtsc;
 
     pub type Timestamp = u64;
