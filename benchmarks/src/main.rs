@@ -6,8 +6,8 @@ extern crate teardown_tree;
 extern crate splay;
 //extern crate wio;
 
-use bench_delete_range::{DataMaster, TreapMaster, TreeBulk, PlainSetSingle, FilteredPlainSet, FilteredIntervalSet, BTreeSetMaster, SplayMaster, IntervalSet};
-use bench_delete_range::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
+use bench_teardown::{DataMaster, TreapMaster, PlainSet, PlainMap, PlainSetSingle, FilteredPlainSet, FilteredIntervalSet, BTreeSetMaster, SplayMaster, IntervalSet, IntervalMap};
+use bench_teardown::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
 
 use std::time::Duration;
 
@@ -34,8 +34,8 @@ impl<'a> BenchJob<'a> {
 
 
 fn bench_table(batch_size: usize, action: &str, jobs: &[BenchJob]) {
-    println!("\n{:36}, {:10}, {}", "", "", action);
-    print!("{:36}, ", "method\\N");
+    println!("\n{:37}, {:10}, {}", "", "", action);
+    print!("{:37}, ", "method\\N");
     let ntimings = jobs[0].spec.len();
     let mut n = batch_size;
     for _ in 0..ntimings {
@@ -50,7 +50,7 @@ fn bench_table(batch_size: usize, action: &str, jobs: &[BenchJob]) {
 
         let (descr, timings) = f(batch_size, spec);
 
-        print!("{:36}, ", descr);
+        print!("{:37}, ", descr);
         for time in timings.into_iter() {
             print!("{:10}, ", time);
         }
@@ -86,51 +86,62 @@ fn bench_refill_impl<M: DataMaster>(_: usize, spec: &[u64]) -> (String, Vec<u64>
         })
         .collect();
 
-    (M::descr_cycle(), timings)
+    (M::descr_refill(), timings)
 }
 
 
 fn main() {
     bench_table(10, "Refill", &[
-        BenchJob::new(&bench_refill_impl::<TreeBulk>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
-        BenchJob::new(&bench_refill_impl::<IntervalSet>, &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
-        BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[14000000,     1300000,     60000,      5000,       300,    25,     3]),
-        BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[27000000,     3500000,    350000,     30000,      2300,   110,    10]),
-        BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[14000000,     1000000,     50000,      4500,       400,    25,     3]),
+        BenchJob::new(&bench_refill_impl::<PlainSet>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
+        BenchJob::new(&bench_refill_impl::<PlainMap>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
+        BenchJob::new(&bench_refill_impl::<IntervalSet>,         &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
+        BenchJob::new(&bench_refill_impl::<IntervalMap>,         &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
+        BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[ 14000000,    1300000,      60000,      5000,      300,    25,     3]),
+        BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[ 27000000,    3500000,     350000,     30000,     2300,   110,    10]),
+        BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[ 14000000,    1000000,      50000,      4500,      400,    25,     3]),
     ]);
 
 
     bench_table(10, "Teardown in bulks of 10 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
-        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>, &[32000000, 2000000,    120000,  5000,   350,   30, 3]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>, &[24000000, 2000000,    170000, 10000,  1000,   70, 7]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>, &[22000000, 1300000,    100000,  5000,   400,   25, 4]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>,   &[17000000, 1100000,     80000,  5000,   400,   25, 4]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[24000000, 2000000,    170000, 10000,  1000,   70, 7]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>,      &[32000000, 2000000,    120000,  5000,   350,   30, 3]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>,         &[22000000, 1300000,    100000,  5000,   400,   25, 4]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalMap>,         &[22000000, 1300000,    100000,  5000,   400,   25, 4]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>, &[17000000, 1100000,     80000,  5000,   400,   25, 4]),
+
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 2500000,  180000,     14000,  1300,    90,    6, 2]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[13000000,  600000,     32000,  2300,   190,   16, 3]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[ 3300000,  300000,     24000,  1800,   180,    9, 2]),
     ]);
 
     bench_table(100, "Teardown in bulks of 100 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[8000000, 700000, 70000,  4500,   400, 32]),
-        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>, &[2200000, 150000, 6000,   500,    50,  5]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>, &[3000000, 270000, 25000,  2000,   180, 28]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>, &[6000000, 350000, 35000,  2200,   200, 16]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>,   &[2000000, 200000, 20000,  1500,   150, 16]),
-        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[900000,  50000,  4000,   250,    20,  3]),
-        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[1000000, 50000,  4000,   350,    30,  4]),
-        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[1000000, 50000,  4000,   350,    30,  4]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[8000000, 700000, 70000,  4500,   400, 32]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[8000000, 700000, 70000,  4500,   400, 32]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[3000000, 270000, 25000,  2000,   180, 28]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>,      &[2200000, 150000,  6000,   500,    50,  5]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>,         &[6000000, 350000, 35000,  2200,   200, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalMap>,         &[6000000, 350000, 35000,  2200,   200, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>, &[2000000, 200000, 20000,  1500,   150, 16]),
+
+        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 900000,  50000,  4000,   250,    20,  3]),
+        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[1000000,  50000,  4000,   350,    30,  4]),
+        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[1000000,  50000,  4000,   350,    30,  4]),
     ]);
 
     bench_table(1000, "Teardown in bulks of 1000 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<TreeBulk>,            &[800000, 80000,  8000,   700,    70]),
-        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>, &[80000,   6000,   500,    60,     6]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>, &[300000, 25000,  2500,   250,    25]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>, &[700000, 60000,  4800,   400,    50]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>,   &[200000, 20000,  2000,   200,    25]),
-        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[50000,  5000,   400,    40,     3]),
-        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[100000, 6000,   600,    40,     4]),
-        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[50000,  6000,   600,    40,     4]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[800000, 80000,  8000,   700,    70]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[800000, 80000,  8000,   700,    70]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[300000, 25000,  2500,   250,    25]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>,      &[ 80000,  6000,   500,    60,     6]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>,         &[700000, 60000,  4800,   400,    50]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalMap>,         &[700000, 60000,  4800,   400,    50]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>, &[200000, 20000,  2000,   200,    25]),
+
+        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 50000,  5000,   400,    40,     3]),
+        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[100000,  6000,   600,    40,     4]),
+        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[ 50000,  6000,   600,    40,     4]),
     ]);
 
 
@@ -151,7 +162,7 @@ fn main() {
 
 
 
-mod bench_delete_range {
+mod bench_teardown {
     use std::collections::BTreeSet;
     use std::ops::Range;
     use std::time;
@@ -166,9 +177,6 @@ mod bench_delete_range {
     use teardown_tree::sink::{UncheckedVecRefSink};
     use super::{nanos, black_box};
     use super::ts::{Timestamp, new_timestamp, next_elapsed};
-
-    pub type Tree = TeardownSet<usize>;
-    pub type TreeBulk = PlainSet;
 
 
     pub fn btree_single_delete_n(n: usize, rm_items: usize, iters: u64) {
@@ -215,7 +223,7 @@ mod bench_delete_range {
 
         let elems: Vec<_> = (1..n+1).collect();
 
-        let tree = PlainSet(Tree::new(elems));
+        let tree = PlainSet(TeardownSet::new(elems));
         let mut copy = tree.clone();
         let mut output = Vec::with_capacity(tree.0.size());
 
@@ -666,12 +674,13 @@ mod bench_delete_range {
 
     //----- IntervalTeardownSet::filter_overlap() --------------------------------------------------
     #[derive(Clone, Debug)]
-    pub struct FilteredIntervalSet(IntervalTeardownSet<usize>);
+    pub struct FilteredIntervalSet(IntervalTeardownSet<KeyInterval<usize>>);
 
     impl DataMaster for FilteredIntervalSet {
         type Cpy = FilteredIntervalSet;
 
         fn build(elems: Vec<usize>) -> Self {
+            let elems = elems.into_iter().map(|x| KeyInterval::new(x, x)).collect();
             FilteredIntervalSet(IntervalTeardownSet::new(elems))
         }
 
@@ -694,9 +703,9 @@ mod bench_delete_range {
 
     impl DataCopy for FilteredIntervalSet {
         type Master = FilteredIntervalSet;
-        type T = usize;
+        type T = KeyInterval<usize>;
 
-        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
             self.0.filter_overlap(&KeyInterval::new(range.start, range.end), AcceptingFilter, UncheckedVecRefSink::new(output));
         }
 
@@ -726,15 +735,15 @@ mod bench_delete_range {
 
 
 
-    //----- IntervalTeardownMap::filter_overlap() --------------------------------------------------
+    //----- IntervalTeardownMap::delete_overlap() --------------------------------------------------
     #[derive(Clone, Debug)]
-    pub struct IntervalMap(IntervalTeardownMap<usize, usize>);
+    pub struct IntervalMap(IntervalTeardownMap<KeyInterval<usize>, usize>);
 
     impl DataMaster for IntervalMap {
         type Cpy = IntervalMap;
 
         fn build(elems: Vec<usize>) -> Self {
-            let elems: Vec<_> = elems.into_iter().map(|x| (x,2*x)).collect();
+            let elems: Vec<_> = elems.into_iter().map(|x| (KeyInterval::new(x,x), 2*x)).collect();
             IntervalMap(IntervalTeardownMap::new(elems))
         }
 
@@ -757,7 +766,7 @@ mod bench_delete_range {
 
     impl DataCopy for IntervalMap {
         type Master = IntervalMap;
-        type T = (usize, usize);
+        type T = (KeyInterval<usize>, usize);
 
         fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<Self::T>) {
             self.0.delete_overlap(&KeyInterval::new(range.start, range.end), UncheckedVecRefSink::new(output));
