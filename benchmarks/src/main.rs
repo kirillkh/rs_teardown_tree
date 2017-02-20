@@ -33,11 +33,11 @@ impl<'a> BenchJob<'a> {
 }
 
 
-fn bench_table(batch_size: usize, action: &str, jobs: &[BenchJob]) {
+fn bench_table(action: &str, jobs: &[BenchJob]) {
     println!("\n{:37}, {:10}, {}", "", "", action);
     print!("{:37}, ", "method\\N");
     let ntimings = jobs[0].spec.len();
-    let mut n = batch_size;
+    let mut n = 10;
     for _ in 0..ntimings {
         print!("{:10}, ", n);
         n *= 10;
@@ -47,10 +47,14 @@ fn bench_table(batch_size: usize, action: &str, jobs: &[BenchJob]) {
     for job in jobs.iter() {
         let f = job.f;
         let spec = job.spec;
+        let nzeros = spec.iter().position(|&x| x!=0).unwrap();
 
-        let (descr, timings) = f(batch_size, spec);
+        let batch_size = 10u64.pow(1+nzeros as u32) as usize;
+        let (descr, timings) = f(batch_size, &spec[nzeros..]);
 
         print!("{:37}, ", descr);
+        spec.iter().take(nzeros).map(|_| print!("{:10}, ", "")).count();
+
         for time in timings.into_iter() {
             print!("{:10}, ", time);
         }
@@ -75,7 +79,7 @@ fn bench_teardown_full_impl<M: DataMaster>(batch_size: usize, spec: &[u64]) -> (
 }
 
 
-fn bench_refill_impl<M: DataMaster>(_: usize, spec: &[u64]) -> (String, Vec<u64>) {
+fn bench_refill_impl<M: DataMaster>(_: u64, spec: &[u64]) -> (String, Vec<u64>) {
     let mut n = 10;
 
     let timings: Vec<u64> = spec.iter()
@@ -91,7 +95,7 @@ fn bench_refill_impl<M: DataMaster>(_: usize, spec: &[u64]) -> (String, Vec<u64>
 
 
 fn main() {
-    bench_table(10, "Refill", &[
+    bench_table("Refill", &[
         BenchJob::new(&bench_refill_impl::<PlainSet>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
         BenchJob::new(&bench_refill_impl::<PlainMap>,            &[170000000,   80000000,   12000000,   1100000,    65000,  2400,   230]),
         BenchJob::new(&bench_refill_impl::<IntervalSet>,         &[150000000,   70000000,   11000000,   1000000,    60000,  2200,   210]),
@@ -102,7 +106,7 @@ fn main() {
     ]);
 
 
-    bench_table(10, "Teardown in bulks of 10 items", &[
+    bench_table("Full refill/teardown in bulks of 10 items", &[
         BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
         BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[40000000, 3100000,    300000, 12000,  1100,   70, 7]),
         BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[24000000, 2000000,    170000, 10000,  1000,   70, 7]),
@@ -116,32 +120,32 @@ fn main() {
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[ 3300000,  300000,     24000,  1800,   180,    9, 2]),
     ]);
 
-    bench_table(100, "Teardown in bulks of 100 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[8000000, 700000, 70000,  4500,   400, 32]),
-        BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[8000000, 700000, 70000,  4500,   400, 32]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[3000000, 270000, 25000,  2000,   180, 28]),
-        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>,      &[2200000, 150000,  6000,   500,    50,  5]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>,         &[6000000, 350000, 35000,  2200,   200, 16]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalMap>,         &[6000000, 350000, 35000,  2200,   200, 16]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>, &[2000000, 200000, 20000,  1500,   150, 16]),
+    bench_table("Full refill/teardown in bulks of 100 items", &[
+        BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[0, 8000000, 700000, 70000,  4500,   400, 32]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[0, 8000000, 700000, 70000,  4500,   400, 32]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[0, 3000000, 270000, 25000,  2000,   180, 28]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>,      &[0, 2200000, 150000,  6000,   500,    50,  5]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>,         &[0, 6000000, 350000, 35000,  2200,   200, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalMap>,         &[0, 6000000, 350000, 35000,  2200,   200, 16]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>, &[0, 2000000, 200000, 20000,  1500,   150, 16]),
 
-        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 900000,  50000,  4000,   250,    20,  3]),
-        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[1000000,  50000,  4000,   350,    30,  4]),
-        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[1000000,  50000,  4000,   350,    30,  4]),
+        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[0,  900000,  50000,  4000,   250,    20,  3]),
+        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[0, 1000000,  50000,  4000,   350,    30,  4]),
+        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[0, 1000000,  50000,  4000,   350,    30,  4]),
     ]);
 
-    bench_table(1000, "Teardown in bulks of 1000 items", &[
-        BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[800000, 80000,  8000,   700,    70]),
-        BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[800000, 80000,  8000,   700,    70]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[300000, 25000,  2500,   250,    25]),
-        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>,      &[ 80000,  6000,   500,    60,     6]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>,         &[700000, 60000,  4800,   400,    50]),
-        BenchJob::new(&bench_teardown_full_impl::<IntervalMap>,         &[700000, 60000,  4800,   400,    50]),
-        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>, &[200000, 20000,  2000,   200,    25]),
+    bench_table("Full refill/teardown in bulks of 1000 items", &[
+        BenchJob::new(&bench_teardown_full_impl::<PlainSet>,            &[0, 0, 800000, 80000,  8000,   700,    70]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainMap>,            &[0, 0, 800000, 80000,  8000,   700,    70]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredPlainSet>,    &[0, 0, 300000, 25000,  2500,   250,    25]),
+        BenchJob::new(&bench_teardown_full_impl::<PlainSetSingle>,      &[0, 0,  80000,  6000,   500,    60,     6]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalSet>,         &[0, 0, 700000, 60000,  4800,   400,    50]),
+        BenchJob::new(&bench_teardown_full_impl::<IntervalMap>,         &[0, 0, 700000, 60000,  4800,   400,    50]),
+        BenchJob::new(&bench_teardown_full_impl::<FilteredIntervalSet>, &[0, 0, 200000, 20000,  2000,   200,    25]),
 
-        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 50000,  5000,   400,    40,     3]),
-        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[100000,  6000,   600,    40,     4]),
-        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[ 50000,  6000,   600,    40,     4]),
+        BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[0, 0,  50000,  5000,   400,    40,     3]),
+        BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[0, 0, 100000,  6000,   600,    40,     4]),
+        BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[0, 0,  50000,  6000,   600,    40,     4]),
     ]);
 
 

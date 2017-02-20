@@ -19,7 +19,8 @@ pattern is to build a master copy of the tree, then
 2. tear the tree down with a series of **delete-range** operations (and do something with the retrieved items), interspersed with range queries
 3. rinse, repeat
 
-Two variations are currently implemented: **TeardownTree** and **IntervalTeardownTree** (an |IntervalTree|_).
+Two data structures are currently implemented: **TeardownTree** and **IntervalTeardownTree** (an |IntervalTree|_), both
+with conventional ``Map`` and ``Set`` interfaces.
 
 The tree does not use any kind of self-balancing and does not support insert operation.
 
@@ -30,17 +31,17 @@ The tree does not use any kind of self-balancing and does not support insert ope
 Details
 -------
 
-The tree is implicit -- meaning that nodes do not store explicit pointers to their children. The only thing we store in
+The tree is **implicit**, meaning that nodes do not store explicit pointers to their children. The only thing we store in
 a node is your data. This is similar to how binary heaps work: all nodes in the tree reside in an array, the root always
 at index 0, and given a node with index i, its left/right children are found at indices ``2*i+1`` and ``2*i+2``. Thus no
 dynamic memory allocation or deallocation is required. This makes it possible to implement a fast **clone** operation:
 instead of traversing the tree, allocating and copying each node individually, we are able to allocate the whole array
 in a single call and efficiently copy the entire content. The tree also supports a **refill** operation (currently
-only implemented for T: Copy), which copies the contents of the master tree into ``self`` without allocating at all.
+only implemented for ``T: Copy``), which copies the contents of the master tree into ``self`` without allocating at all.
 
 
-As to **delete-range** operation, we use a custom algorithm running in ``O(k + log n)`` time, where k is the number of
-items deleted (and returned) and n is the initial size of the tree. `Detailed description <delete_range.md>`_.
+As to **delete-range** operation, we use a custom algorithm running in ``O(k + log n)`` time, where ``k`` is the number
+of items deleted (and returned) and ``n`` is the initial size of the tree. `Detailed description <delete_range.md>`_.
  
 An exhaustive automated test for **delete-range** has been written and is found in ``lib.rs``. I have tested all trees
 up to the size n=10. All the other supported operations have been tested extensively for every variation of the tree (we
@@ -59,7 +60,7 @@ As a library
 | Add to your Cargo.toml:
 |
 |     ``[dependencies]``
-|     ``teardown_tree = "0.6.4"``
+|     ``teardown_tree = "0.6.5"``
 |
 
 | And to your crate's root:
@@ -75,21 +76,36 @@ To run the benchmarks
 
 
 
+-----------
+Performance
+-----------
+
+Complexity
 ----------
+
+All query and delete operations work in `O(k + log n)` time, where `k` is the number of items queried/deleted/returned
+and ``n`` is the initial size of the tree. Note that if you have already deleted ``m`` items, the next `delete_range`
+operation will still take `O(n)`, not `O(n-m)` time as in many other data structures. However, this distinction only
+matters in practice when `delete`'s are interspersed with `insert`'s, and `TeardownTree` does not support `insert`'s.
+
+The amount of memory consumed by a `TeardownTree` built with `n` items, each of size ``s`` is ``n*s + n + 2*log_2(n) + z``
+bytes, where `z` is a small constant. (The first term is the size of an array holding just your data; the second -- of an array of flags
+that are unset for removed items; the third -- of two auxiliary arrays used internally by the `delete_range` algorithm).
+
+
 Benchmarks
 ----------
 
-.. image:: benchmarks/full_refill_teardown_1000.png
+.. image:: benchmarks/ds_full_refill_teardown_1000.svg
     :alt: TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000
     :align: center
 
-I have performed a set of benchmarks, comparing ``TeardownTree::delete_range()`` against
+The first set of benchmarks compares ``TeardownTree::delete_range()`` against:
 
-1. ``IntervalTeardownTree::delete_range()``, an Interval Tree based on TeardownTree (using (x,x) points in place of intervals)
-2. ``BTreeSet::remove()`` in Rust's standard library
-3. |treap|_
-4. |splay|_
-5. ``TeardownTree::delete()``, which deletes a single element
+1. ``BTreeSet::remove()`` in Rust's standard library
+2. |treap|_
+3. |splay|_
+4. ``TeardownSet::delete()``, which deletes a single element
 
 .. |treap| replace:: ``Treap``
 .. _treap: https://github.com/kirillkh/treap-rs
@@ -97,17 +113,41 @@ I have performed a set of benchmarks, comparing ``TeardownTree::delete_range()``
 .. |splay| replace:: ``SplayTree``
 .. _splay: https://github.com/kirillkh/splay-rs
 
-
-
 I made straightforward modifications to ``Treap`` and ``SplayTree`` in order to add support for **delete_range**, however
 ``BTreeSet`` lacks an equivalent operation (it has an ``O(log n)`` ``split``, but not ``merge``, see
 `Rust #34666 <https://github.com/rust-lang/rust/issues/34666>`_), therefore ``BTreeSet::remove()`` is used instead.
 
 As the graph above shows, on my machine the whole refill/teardown sequence on a tree of 1,000,000 u64 items (we refill the
 tree with elements from the master copy, then delete 1000 items at a time until the tree is empty), is ~20 times faster
-with ``TeardownTree::delete_range()`` than with ``BTreeSet::remove()``. It also uses 45% less memory.
+with ``TeardownTreeSet<usize>::delete_range()`` than with ``BTreeSet<usize>::remove()``. It also consumes 45% less memory.
 
-|Benchmarks|_
 
-.. |Benchmarks| replace:: **All benchmarks**
+
+
+.. image:: benchmarks/var_full_refill_teardown_1000.svg
+    :alt: Variations of TeardownTree: full refill/teardown cycle in bulks of 1000
+    :align: center
+
+Another set of benchmarks exposes the overhead of several variations of the data structure and its algorithms.
+
+For details, please see |Benchmarks|_.
+
+
+---------
+Drawbacks
+---------
+
+1. No ``insert`` operation (yet?..)
+2. The storage is not deallocated until the structure is dropped.
+3. Fine print regarding complexity: ``delete_range`` works in ``O(k + log n)`` time, where ``n`` is the **initial**
+   size of the tree, not its current size (if you have already deleted ``m`` items, the next ``delete_range`` operation
+   will still take `O(log n)` time in the worst case, not necessarily `O(log(n-m))`). The same applies to the other
+   logarithmic operations.
+4. Performance is sensitive to the size of your data. Starting from a certain size, it is faster to use a
+   `TeardownSet<Box<(Key,Value)>>` or store the key-value pairs separately and use external handles as keys (e.g.
+   `TeardownSet<INDEX_INTO_EXTERNAL_VEC>` or `TeardownSet<&MyKey>`). It's probably a good idea to run some benchmarks to
+   know what's best in your case.
+
+
+.. |Benchmarks| replace:: **the benchmarks page**
 .. _Benchmarks:  benchmarks/benchmarks.md
