@@ -9,7 +9,7 @@ teardown_tree
 .. |crates| image:: http://meritbadge.herokuapp.com/teardown_tree
 .. _crates: https://crates.io/crates/teardown_tree
 
-.. |travis| image:: https://travis-ci.org/kirillkh/rs_teardown_tree.svg?branch=master
+.. |travis| image:: https://travis-ci.org/kirillkh/rs_teardown_tree.png?branch=master
 .. _travis: https://travis-ci.org/kirillkh/rs_teardown_tree
 
 A BST (binary search tree) written in Rust that supports efficient query and **teardown** scenarios, i.e. the typical usage
@@ -96,7 +96,7 @@ that are unset for removed items; the third -- of two auxiliary arrays used inte
 Benchmarks
 ----------
 
-.. image:: benchmarks/ds_full_refill_teardown_1000.svg
+.. image:: benchmarks/ds_full_refill_teardown_1000.png
     :alt: TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000
     :align: center
 
@@ -124,7 +124,7 @@ with ``TeardownTreeSet<usize>::delete_range()`` than with ``BTreeSet<usize>::rem
 
 
 
-.. image:: benchmarks/var_full_refill_teardown_1000.svg
+.. image:: benchmarks/var_full_refill_teardown_1000.png
     :alt: Variations of TeardownTree: full refill/teardown cycle in bulks of 1000
     :align: center
 

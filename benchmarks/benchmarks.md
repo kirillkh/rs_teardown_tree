@@ -23,11 +23,11 @@ We measure the average time it takes to perform the steps above with two paramet
 in the master copy) and `B` (number of items removed by a single `delete_range` operation). Each graph shows 
 how much slower the given the operation was on average relative to `TeardownTree::delete_range()` (used as baseline).
 
-![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 10](ds_full_refill_teardown_10.svg?raw=true "full cycle/10")
+![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 10](ds_full_refill_teardown_10.png?raw=true "full cycle/10")
 
-![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 100](ds_full_refill_teardown_100.svg?raw=true "full cycle/100")
+![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 100](ds_full_refill_teardown_100.png?raw=true "full cycle/100")
 
-![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000](ds_full_refill_teardown_1000.svg?raw=true "full cycle/1000")
+![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 1000](ds_full_refill_teardown_1000.png?raw=true "full cycle/1000")
 
 <br>
 <br>
@@ -38,11 +38,11 @@ The graphs below are based on the same data as above, except we subtract from ea
 takes to refill the data structure. This allows to compare the time it takes to tear down the data structure
 separately from the time it takes to `refill` it.
 
-![TeardownTree vs other data structures: teardown in bulks of 10](ds_teardown_10.svg?raw=true "teardown/10")
+![TeardownTree vs other data structures: teardown in bulks of 10](ds_teardown_10.png?raw=true "teardown/10")
 
-![TeardownTree vs other data structures: teardown in bulks of 100](ds_teardown_100.svg?raw=true "teardown/100")
+![TeardownTree vs other data structures: teardown in bulks of 100](ds_teardown_100.png?raw=true "teardown/100")
 
-![TeardownTree vs other data structures: teardown in bulks of 1000](ds_teardown_1000.svg?raw=true "teardown/1000")
+![TeardownTree vs other data structures: teardown in bulks of 1000](ds_teardown_1000.png?raw=true "teardown/1000")
 
 
 TeardownTree variations
@@ -59,19 +59,19 @@ We repeat the same benchmarks as above, but this time we compare 6 variations of
 
 **Refill/teardown**
 
-![TeardownTree variations: full refill/teardown cycle in bulks of 10](var_full_refill_teardown_10.svg?raw=true "full cycle/10")
+![TeardownTree variations: full refill/teardown cycle in bulks of 10](var_full_refill_teardown_10.png?raw=true "full cycle/10")
 
-![TeardownTree variations: full refill/teardown cycle in bulks of 100](var_full_refill_teardown_100.svg?raw=true "full cycle/100")
+![TeardownTree variations: full refill/teardown cycle in bulks of 100](var_full_refill_teardown_100.png?raw=true "full cycle/100")
 
-![TeardownTree variations: full refill/teardown cycle in bulks of 1000](var_full_refill_teardown_1000.svg?raw=true "full cycle/1000")
+![TeardownTree variations: full refill/teardown cycle in bulks of 1000](var_full_refill_teardown_1000.png?raw=true "full cycle/1000")
 
 <br>
 <br>
     
 **Teardown**
 
-![TeardownTree variations: teardown in bulks of 10](var_teardown_10.svg?raw=true "teardown/10")
+![TeardownTree variations: teardown in bulks of 10](var_teardown_10.png?raw=true "teardown/10")
 
-![TeardownTree variations: teardown in bulks of 100](var_teardown_100.svg?raw=true "teardown/100")
+![TeardownTree variations: teardown in bulks of 100](var_teardown_100.png?raw=true "teardown/100")
 
-![TeardownTree variations: teardown in bulks of 1000](var_teardown_1000.svg?raw=true "teardown/1000")
+![TeardownTree variations: teardown in bulks of 1000](var_teardown_1000.png?raw=true "teardown/1000")
