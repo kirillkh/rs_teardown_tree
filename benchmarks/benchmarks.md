@@ -13,15 +13,16 @@ TeardownTree vs other data structures
 
 **Refill/teardown**
 
-In the benchmarks below, we initialize the master copy of the data structure, clone it and repeatedly:
+In the benchmarks below, we initialize the master copy of the data structure with `N` `usize` items, clone it and 
+repeatedly:
 
 1. Tear down the data structure by a random series of `delete_range` (or equivalent) operations.
 1. Refill the copy so that its internal state is again equivalent to the master.
 1. Rinse, repeat.
 
 We measure the average time it takes to perform the steps above with two parameters: `N` (the number of items 
-in the master copy) and `B` (number of items removed by a single `delete_range` operation). Each graph shows 
-how much slower the given the operation was on average relative to `TeardownTree::delete_range()` (used as baseline).
+in the master copy) and `B` (the number of items removed by a single `delete_range` operation). Each graph shows 
+how much slower the given operation was on average relative to `TeardownTree::delete_range()` (used as baseline).
 
 ![TeardownTree vs other data structures: full refill/teardown cycle in bulks of 10](ds_full_refill_teardown_10.png?raw=true "full cycle/10")
 
@@ -48,7 +49,7 @@ separately from the time it takes to `refill` it.
 TeardownTree variations
 =====================================
 
-We repeat the same benchmarks as above, but this time we compare 6 variations of the TeardownTree:
+We repeat the same benchmarks as above, but this time we compare 6 variations of `TeardownTree::delete_range()`:
 
 1. `TeardownSet::delete_range()`: the baseline. Each item stores a single `usize` value.
 1. `TeardownMap::delete_range()`: same as above, but each item stores a key-value pair: `(usize, usize)`
