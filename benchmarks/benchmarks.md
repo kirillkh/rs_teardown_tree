@@ -20,7 +20,7 @@ repeatedly:
 1. Refill the copy so that its internal state is again equivalent to the master.
 1. Rinse, repeat.
 
-We measure the average time it takes to perform the steps above with two parameters: `N` (the number of items 
+We measure the mean time it takes to perform the steps above with two parameters: `N` (the number of items 
 in the master copy) and `B` (the number of items removed by a single `delete_range` operation). Each graph shows 
 how much slower the given operation was on average relative to `TeardownTree::delete_range()` (used as baseline).
 
@@ -35,9 +35,8 @@ how much slower the given operation was on average relative to `TeardownTree::de
     
 **Teardown**
 
-The graphs below are based on the same data as above, except we subtract from each average time the time it 
-takes to refill the data structure. This allows to compare the time it takes to tear down the data structure
-separately from the time it takes to `refill` it.
+The graphs below are based on the same data as above, except we subtract the time it takes to refill the data structure
+from each mean time. This allows to compare the performance of the teardown sequence separately from `refill`.
 
 ![TeardownTree vs other data structures: teardown in bulks of 10](ds_teardown_10.png?raw=true "teardown/10")
 
