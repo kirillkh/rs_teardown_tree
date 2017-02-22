@@ -331,7 +331,13 @@ mod plain {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next().map(|entry| entry.as_tuple())
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<'a, K: Ord+Clone+'a, V: 'a> ExactSizeIterator for MapIter<'a, K, V> {}
 
 
     #[derive(new)]
@@ -345,7 +351,13 @@ mod plain {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next().map(|entry| entry.key())
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<'a, T: Ord+Clone+'a> ExactSizeIterator for SetIter<'a, T> {}
 
 
     impl<K: Ord+Clone, V> IntoIterator for TeardownMap<K, V> {
@@ -368,7 +380,13 @@ mod plain {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next()
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<K: Ord+Clone, V> ExactSizeIterator for MapIntoIter<K, V> {}
 
 
 
@@ -392,7 +410,13 @@ mod plain {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next().map(|(item, _)| item)
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<T: Ord+Clone> ExactSizeIterator for SetIntoIter<T> {}
 }
 
 
@@ -695,7 +719,13 @@ mod interval {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next().map(|entry| entry.as_tuple())
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<'a, Iv: Interval+'a, V: 'a> ExactSizeIterator for IntervalMapIter<'a, Iv, V> {}
 
 
     #[derive(new)]
@@ -709,7 +739,13 @@ mod interval {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next().map(|entry| entry.key())
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<'a, Iv: Interval+'a> ExactSizeIterator for IntervalSetIter<'a, Iv> {}
 
 
     impl<Iv: Interval, V> IntoIterator for IntervalTeardownMap<Iv, V> {
@@ -732,7 +768,13 @@ mod interval {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next()
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<Iv: Interval, V> ExactSizeIterator for IntervalMapIntoIter<Iv, V> {}
 
 
 
@@ -756,7 +798,13 @@ mod interval {
         fn next(&mut self) -> Option<Self::Item> {
             self.inner.next().map(|(item, _)| item)
         }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            self.inner.size_hint()
+        }
     }
+
+    impl<Iv: Interval> ExactSizeIterator for IntervalSetIntoIter<Iv> {}
 }
 
 #[inline(always)]

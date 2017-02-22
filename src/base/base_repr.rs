@@ -711,13 +711,14 @@ fn right_enclosing(idx: usize) -> usize {
 
 pub struct Iter<'a, N: Node> where N: 'a, N::K: 'a, N::V: 'a {
     tree: &'a TreeRepr<N>,
-    next_idx: usize
+    next_idx: usize,
+    remaining: usize
 }
 
 impl <'a, N: Node> Iter<'a, N> where N::K: 'a, N::V: 'a {
     fn new(tree: &'a TreeRepr<N>) -> Iter<'a, N> {
         let next_idx = tree.find_min(0);
-        Iter { tree:tree, next_idx:next_idx }
+        Iter { tree:tree, next_idx:next_idx, remaining:tree.size }
     }
 }
 
@@ -732,11 +733,18 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
             self.next_idx =
                 iter_next_idx(self.next_idx, self.tree)
                     .map_or_else(|| self.tree.data.capacity(), |x| x);
+            self.remaining -= 1;
             Some(self.tree.node(curr).deref())
         }
     }
+
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.remaining, Some(self.remaining))
+    }
 }
 
+impl<'a, N: Node> ExactSizeIterator for Iter<'a, N> {}
 
 
 pub struct IntoIter<N: Node> {
@@ -768,7 +776,13 @@ impl<N: Node> Iterator for IntoIter<N> {
             Some(self.tree.take(curr).into_tuple())
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.tree.size, Some(self.tree.size))
+    }
 }
+
+impl<N: Node> ExactSizeIterator for IntoIter<N> {}
 
 
 

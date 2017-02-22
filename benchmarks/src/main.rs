@@ -79,7 +79,7 @@ fn bench_teardown_full_impl<M: DataMaster>(batch_size: usize, spec: &[u64]) -> (
 }
 
 
-fn bench_refill_impl<M: DataMaster>(_: u64, spec: &[u64]) -> (String, Vec<u64>) {
+fn bench_refill_impl<M: DataMaster>(_: usize, spec: &[u64]) -> (String, Vec<u64>) {
     let mut n = 10;
 
     let timings: Vec<u64> = spec.iter()
