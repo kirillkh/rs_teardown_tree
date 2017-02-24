@@ -1,5 +1,4 @@
 use std::mem;
-use std::marker::PhantomData;
 
 pub use applied::interval::{Interval, KeyInterval};
 
@@ -19,7 +18,7 @@ pub mod iter {
 mod plain {
     use base::{Refill, Sink, ItemFilter};
     use applied::plain_tree::{PlTree, PlNode};
-    use super::{SinkAdapter, RefSinkAdapter};
+    use super::sink::{SinkAdapter, RefSinkAdapter};
 
     use std::fmt;
     use std::fmt::{Debug, Display, Formatter};
@@ -426,7 +425,7 @@ mod interval {
     use std::fmt::{Debug, Display, Formatter};
 
     use base::{Refill, ItemFilter, Sink};
-    use super::{SinkAdapter, RefSinkAdapter};
+    use super::sink::{SinkAdapter, RefSinkAdapter};
 
     use applied::AppliedTree;
     use applied::interval::{Interval, IvNode};
@@ -811,49 +810,6 @@ mod interval {
 fn conv_to_tuple_vec<K>(items: Vec<K>) -> Vec<(K, ())> {
     unsafe { mem::transmute(items) }
 }
-
-
-
-struct SinkAdapter<T, S: Sink<T>> {
-    sink: S,
-    _ph: PhantomData<T>
-}
-
-impl<T, S: Sink<T>> SinkAdapter<T, S> {
-    #[inline]
-    fn new(sink: S) -> Self {
-        SinkAdapter { sink: sink, _ph: PhantomData }
-    }
-}
-
-impl<T, S: Sink<T>> Sink<(T, ())> for SinkAdapter<T, S> {
-    #[inline(always)]
-    fn consume(&mut self, entry: (T, ())) {
-        self.sink.consume(entry.0)
-    }
-}
-
-
-
-struct RefSinkAdapter<'a, T: 'a, S: Sink<&'a T>> {
-    sink: S,
-    _ph: PhantomData<&'a T>
-}
-
-impl<'a, T: 'a, S: Sink<&'a T>> RefSinkAdapter<'a, T, S> {
-    #[inline]
-    fn new(sink: S) -> Self {
-        RefSinkAdapter { sink: sink, _ph: PhantomData }
-    }
-}
-
-impl<'a, T: 'a, S: Sink<&'a T>> Sink<&'a (T, ())> for RefSinkAdapter<'a, T, S> {
-    #[inline]
-    fn consume(&mut self, entry: &'a (T, ())) {
-        self.sink.consume(&entry.0)
-    }
-}
-
 
 
 #[cfg(test)]

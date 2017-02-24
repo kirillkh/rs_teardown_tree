@@ -42,14 +42,12 @@ impl<N: Node> TreeRepr<N> {
     pub fn with_sorted(mut sorted: Vec<(N::K, N::V)>) -> TreeRepr<N> {
         let size = sorted.len();
 
-        let capacity = size;
-
-        let mut data = Vec::with_capacity(capacity);
+        let mut data = Vec::with_capacity(size);
         // We use manual management of `data`'s memory. To ensure nothing bad is going on, we
         // analyze each access to `data`.
-        unsafe { data.set_len(capacity); }
+        unsafe { data.set_len(size); }
 
-        let mask: Vec<bool> = vec![true; capacity];
+        let mask: Vec<bool> = vec![true; size];
         let height = Self::build(&mut sorted, 0, &mut data);
         // As per contract with `build()`, we safely dispose of the contents of `sorted` without dropping them.
         unsafe { sorted.set_len(0); }
@@ -731,7 +729,7 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
             None
         } else {
             self.next_idx =
-                iter_next_idx(self.next_idx, self.tree)
+                iter_next_idx(curr, self.tree)
                     .map_or_else(|| self.tree.data.capacity(), |x| x);
             self.remaining -= 1;
             Some(self.tree.node(curr).deref())

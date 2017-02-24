@@ -4,9 +4,13 @@ extern crate rand;
 extern crate treap;
 extern crate teardown_tree;
 extern crate splay;
+#[macro_use] extern crate derive_new;
 //extern crate wio;
 
-use bench_teardown::{DataMaster, TreapMaster, PlainSet, PlainMap, PlainSetSingle, FilteredPlainSet, FilteredIntervalSet, BTreeSetMaster, SplayMaster, IntervalSet, IntervalMap};
+mod bst;
+
+
+use bench_teardown::{DataMaster, TreapMaster, PlainSet, PlainMap, PlainSetSingle, FilteredPlainSet, FilteredIntervalSet, BTreeSetMaster, SplayMaster, IntervalSet, IntervalMap, BSTMaster};
 use bench_teardown::{bench_refill_teardown_cycle, bench_refill, imptree_single_elem_range_n, btree_single_delete_n};
 
 use std::time::Duration;
@@ -103,6 +107,7 @@ fn main() {
         BenchJob::new(&bench_refill_impl::<TreapMaster>,         &[ 14000000,    1300000,      60000,      5000,      300,    25,     3]),
         BenchJob::new(&bench_refill_impl::<BTreeSetMaster>,      &[ 27000000,    3500000,     350000,     30000,     2300,   110,    10]),
         BenchJob::new(&bench_refill_impl::<SplayMaster>,         &[ 14000000,    1000000,      50000,      4500,      400,    25,     3]),
+        BenchJob::new(&bench_refill_impl::<BSTMaster>,           &[ 14000000,    1000000,      50000,      4500,      400,    25,     3]),
     ]);
 
 
@@ -118,6 +123,7 @@ fn main() {
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[ 2500000,  180000,     14000,  1300,    90,    6, 2]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[13000000,  600000,     32000,  2300,   190,   16, 3]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[ 3300000,  300000,     24000,  1800,   180,    9, 2]),
+        BenchJob::new(&bench_teardown_full_impl::<BSTMaster>,           &[ 3300000,  300000,     24000,  1800,   180,    9, 2]),
     ]);
 
     bench_table("Full refill/teardown in bulks of 100 items", &[
@@ -132,6 +138,7 @@ fn main() {
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[0,  900000,  50000,  4000,   250,    20,  3]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[0, 1000000,  50000,  4000,   350,    30,  4]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[0, 1000000,  50000,  4000,   350,    30,  4]),
+        BenchJob::new(&bench_teardown_full_impl::<BSTMaster>,           &[0, 1000000,  50000,  4000,   350,    30,  4]),
     ]);
 
     bench_table("Full refill/teardown in bulks of 1000 items", &[
@@ -146,6 +153,7 @@ fn main() {
         BenchJob::new(&bench_teardown_full_impl::<TreapMaster>,         &[0, 0,  50000,  5000,   400,    40,     3]),
         BenchJob::new(&bench_teardown_full_impl::<BTreeSetMaster>,      &[0, 0, 100000,  6000,   600,    40,     4]),
         BenchJob::new(&bench_teardown_full_impl::<SplayMaster>,         &[0, 0,  50000,  6000,   600,    40,     4]),
+        BenchJob::new(&bench_teardown_full_impl::<BSTMaster>,           &[0, 0,  50000,  6000,   600,    40,     4]),
     ]);
 
 
@@ -178,8 +186,9 @@ mod bench_teardown {
     use treap::TreapMap;
     use teardown_tree::{IntervalTeardownSet, IntervalTeardownMap, KeyInterval, Refill, TeardownSet, TeardownMap, ItemFilter};
     use teardown_tree::util::make_teardown_seq;
-    use teardown_tree::sink::{UncheckedVecRefSink};
+    use teardown_tree::sink::{UncheckedVecRefSink, SinkAdapter};
     use super::{nanos, black_box};
+    use super::bst::BST;
     use super::ts::{Timestamp, new_timestamp, next_elapsed};
 
 
@@ -296,7 +305,7 @@ mod bench_teardown {
 
         let tree = build::<M>(elems);
         let mut copy = tree.cpy();
-        let mut output = Vec::with_capacity(tree.size());
+        let mut output = Vec::with_capacity(n);
         copy.delete_range(0..n, &mut output);
         output.truncate(0);
 
@@ -311,7 +320,7 @@ mod bench_teardown {
                 let expected_len = ranges[i].end - ranges[i].start;
                 assert!(output.len() == expected_len, "range={:?}, expected: {}, len: {}, iter={}, i={}, output={:?}, copy={:?}, {}", ranges[i], expected_len, output.len(), iter, i, output, &copy, &copy);
             }
-            assert!(copy.size() == 0);
+            assert_eq!(copy.size(), 0);
         }
         let elapsed_cycles = next_elapsed(&mut ts);
         let avg_cycles = elapsed_cycles/iters;
@@ -1034,6 +1043,88 @@ mod bench_teardown {
             unimplemented!()
         }
     }
+
+
+
+
+    //---- BST::delete_range -----------------------------------------------------------------------
+    pub struct BSTMaster(BST<usize, ()>);
+
+    pub struct BSTCopy(BST<usize, ()>);
+
+    impl DataMaster for BSTMaster {
+        type Cpy = BSTCopy;
+
+        fn build(mut elems: Vec<usize>) -> Self {
+            elems.sort();
+            let elems = elems.into_iter().map(|x| (x,())).collect();
+            BSTMaster(BST::with_sorted(elems))
+        }
+
+        fn cpy(&self) -> Self::Cpy {
+            BSTCopy(self.0.clone())
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn descr_cycle() -> String {
+            "BST::remove_range()".to_string()
+        }
+
+        fn descr_refill() -> String {
+            "BST".to_string()
+        }
+    }
+
+    impl DataCopy for BSTCopy {
+        type Master = BSTMaster;
+        type T = usize;
+
+        fn delete_range(&mut self, range: Range<usize>, output: &mut Vec<usize>) {
+            self.0.delete_range(range, SinkAdapter::new(UncheckedVecRefSink::new(output)));
+        }
+
+        #[inline(never)]
+        fn refill(&mut self, master: &Self::Master) {
+            self.0 = master.0.clone()
+        }
+
+        fn size(&self) -> usize {
+            self.0.size()
+        }
+
+        fn clear(&mut self) {
+            self.0.clear();
+        }
+
+        fn as_vec(&self) -> Vec<Self::T> {
+            self.0.clone()
+                .into_iter()
+                .map(|(x, _)| x)
+                .collect()
+        }
+    }
+
+    impl Display for BSTMaster {
+        fn fmt(&self, _: &mut Formatter) -> Result {
+            unimplemented!()
+        }
+    }
+
+    impl Display for BSTCopy {
+        fn fmt(&self, _: &mut Formatter) -> Result {
+            unimplemented!()
+        }
+    }
+
+    impl Debug for BSTCopy {
+        fn fmt(&self, _: &mut Formatter) -> Result {
+            unimplemented!()
+        }
+    }
+
 
 
 
