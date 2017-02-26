@@ -75,7 +75,7 @@ Algorithm:
 
 
 The two algorithms above are, of course, only sketches, and the actual implementation
-has more details to consider. See [`delete_range.rs`][2] for the full
+has more details to consider. See [`plain_tree.rs`][2] for the full
 breakdown. It is also worth mentioning that the implementation can be significantly
 sped up by splitting `delete_range` into separate functions based on the
 following cases:
@@ -94,4 +94,4 @@ following cases:
 
 
 [1]: https://github.com/ocaml/ocaml/blob/trunk/stdlib/set.ml
-[2]: https://github.com/kirillkh/rs_teardown_tree/blob/master/src/delete_range.rs
+[2]: https://github.com/kirillkh/rs_teardown_tree/blob/master/src/applied/plain_tree.rs
