@@ -2,9 +2,10 @@
 teardown_tree
 =============
 
-`API docs <https://docs.rs/teardown_tree/>`_
+|docs|_ |crates|_ |travis|_
 
-|crates|_ |travis|_
+.. |docs| image:: https://docs.rs/teardown_tree/badge.svg
+.. _docs: https://docs.rs/teardown_tree
 
 .. |crates| image:: http://meritbadge.herokuapp.com/teardown_tree
 .. _crates: https://crates.io/crates/teardown_tree
@@ -42,7 +43,7 @@ only implemented for ``T: Copy``), which copies the contents of the master tree 
 
 As to **delete-range** operation, we use a custom algorithm running in ``O(k + log n)`` time, where ``k`` is the number
 of items deleted (and returned) and ``n`` is the initial size of the tree. `Detailed description <delete_range.md>`_.
- 
+
 An exhaustive automated test for **delete-range** has been written and is found in ``lib.rs``. I have tested all trees
 up to the size n=10. All the other supported operations have been tested extensively for every variation of the tree (we
 use slightly different algorithms for IntervalTree and for the filtered variants). In general, I feel the quality is
