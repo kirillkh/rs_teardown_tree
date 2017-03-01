@@ -261,7 +261,7 @@ impl<Iv: Interval, V> AppliedTree<IvNode<Iv, V>> for IvTree<Iv, V> {
         let mut tree = Self::with_nodes(nodes);
 
         // initialize maxb values
-        for i in (1..tree.data.len()).rev() {
+        for i in (1..tree.capacity()).rev() {
             if !tree.is_nil(i) {
                 tree.update_parent_maxb(i);
             }

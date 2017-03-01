@@ -15,9 +15,6 @@ pub use self::drivers::*;
 pub use self::base_repr::*;
 pub use self::node::*;
 
-use std::ptr;
-
-
 pub trait Sink<T> {
     fn consume(&mut self, x: T);
 }
@@ -26,20 +23,6 @@ pub trait Sink<T> {
 /// A fast way to refill the tree from a master copy; adds the requirement for T to implement Copy.
 pub trait Refill {
     fn refill(&mut self, master: &Self);
-}
-
-
-
-impl<N: Node> Refill for TreeRepr<N> where N::K: Copy, N::V: Copy {
-    fn refill(&mut self, master: &TreeRepr<N>) {
-        let len = self.data.len();
-        debug_assert!(len == master.data.len());
-        unsafe {
-            ptr::copy_nonoverlapping(master.data.as_ptr(), self.data.as_mut_ptr(), len);
-            ptr::copy_nonoverlapping(master.mask.as_ptr(), self.mask.as_mut_ptr(), len);
-        }
-        self.size = master.size;
-    }
 }
 
 
@@ -150,9 +133,9 @@ pub mod validation {
     pub fn check_integrity<N: Node>(tree: &Tree<N>) -> Result<(), isize> {
         let mut noccupied = 0;
 
-        for i in 0..tree.data.len() {
-            if tree.mask[i] {
-                if i != 0 && !tree.mask[parenti(i)] {
+        for i in 0..tree.capacity() {
+            if tree.mask(i) {
+                if i != 0 && !tree.mask(parenti(i)) {
                     return Err(i as isize);
                 }
 

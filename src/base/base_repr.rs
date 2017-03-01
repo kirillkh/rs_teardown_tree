@@ -1,4 +1,4 @@
-use base::{Node, Entry, Sink, lefti, righti, parenti, SlotStack};
+use base::{Node, Entry, Sink, lefti, righti, parenti, SlotStack, Refill};
 use base::bulk_delete::DeleteRangeCache;
 use std::fmt::{Debug, Formatter};
 use std::fmt;
@@ -21,11 +21,11 @@ impl<N: Node, T> TreeDerefMut<N> for T where T: Deref<Target=TreeRepr<N>> + Dere
 
 #[derive(Clone)]
 pub struct TreeRepr<N: Node> {
-    pub data: Vec<N>,
-    pub mask: Vec<bool>,
+    data: Vec<N>,
+    mask: Vec<bool>,
     pub size: usize,
 
-    pub delete_range_cache: DeleteRangeCache,
+    delete_range_cache: DeleteRangeCache,
 }
 
 
@@ -119,6 +119,10 @@ impl<N: Node> TreeRepr<N> {
     pub fn clear(&mut self) {
         self.drop_items();
     }
+
+    pub fn capacity(&self) -> usize {
+        self.data.len()
+    }
 }
 
 
@@ -126,7 +130,7 @@ impl<N: Node> TreeRepr<N> {
 impl<N: Node> TreeRepr<N> {
     // The caller must make sure idx is inside bounds.
     #[inline(always)]
-    fn mask(&self, idx: usize) -> bool {
+    pub fn mask(&self, idx: usize) -> bool {
         debug_assert!(idx < self.data.len());
         unsafe {
             *self.mask.get_unchecked(idx)
@@ -135,7 +139,7 @@ impl<N: Node> TreeRepr<N> {
 
     // The caller must make sure idx is inside bounds.
     #[inline(always)]
-    fn mask_mut(&mut self, idx: usize) -> &mut bool {
+    pub fn mask_mut(&mut self, idx: usize) -> &mut bool {
         debug_assert!(idx < self.data.len());
         unsafe {
             self.mask.get_unchecked_mut(idx)
@@ -672,6 +676,19 @@ pub trait TraverseMut<N: Node>: Traverse<N> {
 impl<N: Node> Traverse<N> for TreeRepr<N> {}
 impl<N: Node> TraverseMut<N> for TreeRepr<N> {}
 
+
+
+impl<N: Node> Refill for TreeRepr<N> where N::K: Copy, N::V: Copy {
+    fn refill(&mut self, master: &TreeRepr<N>) {
+        let len = self.data.len();
+        debug_assert!(len == master.data.len());
+        unsafe {
+            ptr::copy_nonoverlapping(master.data.as_ptr(), self.data.as_mut_ptr(), len);
+            ptr::copy_nonoverlapping(master.mask.as_ptr(), self.mask.as_mut_ptr(), len);
+        }
+        self.size = master.size;
+    }
+}
 
 
 /// Returns the closest subtree A enclosing `idx`, such that A is the left child (or 0 if no such
