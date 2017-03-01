@@ -1,24 +1,16 @@
 `delete_range`
 --------------
 
-There are many cases where we might wish to delete (and return) a consecutive
-range of values from a binary search tree (BST), but somehow it seems to
-be overlooked in the literature. I was able to find a single reference
-to such an algorithm, namely the combination of `split`/`merge` functions
-as implemented in the [Set module][1] (which is an AVL tree under the hood)
-of the OCaml standard library, which both work in `O(k + log n)` time (where `k`
-is the number of deleted elements).
+There are many cases where one might wish to delete (and return) a consecutive
+range of values from a binary search tree (BST), but I have not found any references
+to such an algorithm in literature, except by using the combination of `split`/`merge` 
+operations as implemented in the [Set module][1] (an AVL tree under the hood) of the 
+OCaml standard library, which works in `O(k + log n)` time (where `k` is the number 
+of deleted elements).
 
-However, I cannot make use of `split`/`merge` in a straightforward manner
-in this project, considering that it requires explicit detaching and recombining
-subtrees, which takes `O(n)` time with an implicit tree representation.
-While my case is admittedly niche, it is still surprising that I have not
-been able to find any other description of a `delete_range` algorithm on
-the web.
-
-This document describes a `delete_range` algorithm that can be used in
-any BST, not just in the implicit variant. It is quite a simple idea, really.
-Can I be the first one to think of it?
+However, we cannot make use of `split`/`merge` in a straightforward manner in this 
+project, considering that it requires explicit detaching and recombining subtrees, 
+which would take `O(n)` time.
 
 Algorithm
 ---------
@@ -74,11 +66,10 @@ Algorithm:
       and use its value to fill `item(X)`
 
 
-The two algorithms above are, of course, only sketches, and the actual implementation
-has more details to consider. See [`plain_tree.rs`][2] for the full
-breakdown. It is also worth mentioning that the implementation can be significantly
-sped up by splitting `delete_range` into separate functions based on the
-following cases:
+The above is a sketch of the algorithm, for implementation details see 
+[`plain_tree.rs`][2]. It is worth mentioning that the implementation can be 
+significantly sped up by splitting `delete_range` into separate functions based on 
+the following cases:
 
 1. The whole subtree is inside the search range. This means we can just
    traverse the subtree, moving every element to the output. Nothing else
@@ -89,9 +80,11 @@ following cases:
    and `fill_slots_max` for this task.
 1. Use the general algorithm in the other cases.
 
-**TODO**: implement the algorithm for a normal BST with explicit representation
-(child node pointers) and compare against split/merge.
+As far as pointer-based unbalanced BSTs are concerned, it is possible to implement 
+a much simpler version of the above algorithm. See [`this module`][3]. While 
+outperforming balanced trees, it is far behind `teardown_tree` in benchmarks.
 
 
 [1]: https://github.com/ocaml/ocaml/blob/trunk/stdlib/set.ml
 [2]: https://github.com/kirillkh/rs_teardown_tree/blob/master/src/applied/plain_tree.rs
+[3]: https://github.com/kirillkh/rs_teardown_tree/tree/master/benchmarks/src/bst

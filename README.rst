@@ -32,13 +32,14 @@ The tree does not use any kind of self-balancing and does not support insert ope
 Details
 -------
 
-The tree is **implicit**, meaning that nodes do not store explicit pointers to their children. The only thing we store in
-a node is your data. This is similar to how binary heaps work: all nodes in the tree reside in an array, the root always
-at index 0, and given a node with index i, its left/right children are found at indices ``2*i+1`` and ``2*i+2``. Thus no
-dynamic memory allocation or deallocation is required. This makes it possible to implement a fast **clone** operation:
-instead of traversing the tree, allocating and copying each node individually, we are able to allocate the whole array
-in a single call and efficiently copy the entire content. The tree also supports a **refill** operation (currently
-only implemented for ``T: Copy``), which copies the contents of the master tree into ``self`` without allocating at all.
+The tree is **pointer-free**, meaning that nodes do not store explicit pointers to their children. The only thing we
+store in a node is your data. This is similar to how binary heaps work: all nodes in the tree reside in an array, the
+root always at index 0, and given a node with index i, its left/right children are found at indices ``2*i+1`` and
+``2*i+2``. Thus no dynamic memory allocation or deallocation is required. This makes it possible to implement a fast
+**clone** operation: instead of traversing the tree, allocating and copying each node individually, we are able to
+allocate the whole array in a single call and efficiently copy the entire content. The tree also supports a **refill**
+operation (currently only implemented for ``T: Copy``), which copies the contents of the master tree into ``self``
+without allocating at all.
 
 
 As to **delete-range** operation, we use a custom algorithm running in ``O(k + log n)`` time, where ``k`` is the number
