@@ -29,7 +29,7 @@ pub struct TreeRepr<N: Node> {
 }
 
 
-// entry points
+//---- Entry points --------------------------------------------------------------------------------
 impl<N: Node> TreeRepr<N> {
     pub fn new(mut items: Vec<(N::K, N::V)>) -> TreeRepr<N> {
         items.sort_by(|a, b| a.0.cmp(&b.0));
@@ -121,7 +121,170 @@ impl<N: Node> TreeRepr<N> {
     }
 }
 
-// helpers
+
+//---- Accessors -----------------------------------------------------------------------------------
+impl<N: Node> TreeRepr<N> {
+    // The caller must make sure idx is inside bounds.
+    #[inline(always)]
+    fn mask(&self, idx: usize) -> bool {
+        debug_assert!(idx < self.data.len());
+        unsafe {
+            *self.mask.get_unchecked(idx)
+        }
+    }
+
+    // The caller must make sure idx is inside bounds.
+    #[inline(always)]
+    fn mask_mut(&mut self, idx: usize) -> &mut bool {
+        debug_assert!(idx < self.data.len());
+        unsafe {
+            self.mask.get_unchecked_mut(idx)
+        }
+    }
+
+
+    #[inline(always)]
+    pub fn key<'a>(&'a self, idx: usize) -> &'a N::K where N: 'a {
+        self.node(idx).key()
+    }
+
+    #[inline(always)]
+    pub fn key_mut<'a>(&'a mut self, idx: usize) -> &'a mut N::K where N: 'a {
+        self.node_mut(idx).key_mut()
+    }
+
+    // Spoofs the lifetime of the reference to self.key(idx), which is required to work around the
+    // borrow checker on some occasions. The caller must ensure the reference does not outlive the
+    // content.
+    #[inline(always)]
+    pub fn key_unsafe<'a>(&self, idx: usize) -> &'a N::K where N: 'a {
+        self.node_unsafe(idx).key()
+    }
+
+    // Spoofs the lifetime of the reference to self.key_mut(idx), which is required to work around
+    // the borrow checker on some occasions. The caller must ensure the reference does not outlive
+    // the content and there is no race condition in access to the content.
+    #[inline(always)]
+    pub fn key_mut_unsafe<'a>(&mut self, idx: usize) -> &'a mut N::K where N: 'a {
+        self.node_mut_unsafe(idx).key_mut()
+    }
+
+
+    #[inline(always)]
+    pub fn val<'a>(&'a self, idx: usize) -> &'a N::V where N: 'a {
+        self.node(idx).val()
+    }
+
+
+    #[inline(always)]
+    pub fn node(&self, idx: usize) -> &N {
+        &self.data[idx]
+    }
+
+    #[inline(always)]
+    pub fn node_opt(&self, idx: usize) -> Option<&N> {
+        if self.is_nil(idx) { None } else { Some(self.node(idx)) }
+    }
+
+    #[inline(always)]
+    pub fn node_mut(&mut self, idx: usize) -> &mut N {
+        &mut self.data[idx]
+    }
+
+    // Spoofs the lifetime of the reference to self.node(idx), which is required to work around the
+    // borrow checker on some occasions. The caller must ensure the reference does not outlive the
+    // content.
+    #[inline(always)]
+    pub fn node_unsafe<'a>(&self, idx: usize) -> &'a N where N: 'a {
+        debug_assert!(idx < self.data.len());
+        unsafe {
+            mem::transmute(self.data.get_unchecked(idx))
+        }
+    }
+
+    // Spoofs the lifetime of the reference to self.node_mut(idx), which is required to work around
+    // the borrow checker on some occasions. The caller must ensure the reference does not outlive
+    // the content and there is no race condition in access to the content.
+    #[inline(always)]
+    pub fn node_mut_unsafe<'a>(&mut self, idx: usize) -> &'a mut N where N: 'a {
+        unsafe {
+            mem::transmute(self.data.get_unchecked_mut(idx))
+        }
+    }
+
+
+    #[inline(always)]
+    pub fn parent(&self, idx: usize) -> &N {
+        debug_assert!(idx > 0 && !self.is_nil(idx));
+        self.node(parenti(idx))
+    }
+
+    #[inline(always)]
+    pub fn parent_opt(&self, idx: usize) -> Option<&N> {
+        if idx == 0 {
+            None
+        } else {
+            Some(self.parent(idx))
+        }
+    }
+
+
+    #[inline(always)]
+    pub fn left(&self, idx: usize) -> &N {
+        let lefti = lefti(idx);
+        debug_assert!(!self.is_nil(lefti));
+        self.node(lefti)
+    }
+
+    #[inline(always)]
+    pub fn left_opt(&self, idx: usize) -> Option<&N> {
+        let lefti = lefti(idx);
+        if self.is_nil(lefti) {
+            None
+        } else {
+            Some(self.node(lefti))
+        }
+    }
+
+
+    #[inline(always)]
+    pub fn right(&self, idx: usize) -> &N {
+        let righti = righti(idx);
+        debug_assert!(!self.is_nil(righti));
+        self.node(righti)
+    }
+
+    #[inline(always)]
+    pub fn right_opt(&self, idx: usize) -> Option<&N> {
+        let righti = righti(idx);
+        if self.is_nil(righti) {
+            None
+        } else {
+            Some(self.node(righti))
+        }
+    }
+
+
+
+    #[inline(always)]
+    pub fn has_left(&self, idx: usize) -> bool {
+        !self.is_nil(lefti(idx))
+    }
+
+    #[inline(always)]
+    pub fn has_right(&self, idx: usize) -> bool {
+        !self.is_nil(righti(idx))
+    }
+
+    #[inline(always)]
+    pub fn is_nil(&self, idx: usize) -> bool {
+        // This is safe, as we check that idx is in bounds just before reading from it.
+        idx >= self.data.len() || !self.mask(idx)
+    }
+}
+
+
+//---- Helpers -------------------------------------------------------------------------------------
 impl<N: Node> TreeRepr<N> {
     fn calc_height(nodes: &Vec<Option<N>>, idx: usize) -> usize {
         if idx < nodes.len() && nodes[idx].is_some() {
@@ -175,8 +338,6 @@ impl<N: Node> TreeRepr<N> {
         }
     }
 
-
-
     pub fn succ(&self, idx: usize) -> usize {
         if self.has_right(idx) {
             righti(idx)
@@ -221,155 +382,6 @@ impl<N: Node> TreeRepr<N> {
         }
     }
 
-    // The caller must make sure idx is inside bounds.
-    #[inline(always)]
-    fn mask(&self, idx: usize) -> bool {
-        debug_assert!(idx < self.data.len());
-        unsafe {
-            *self.mask.get_unchecked(idx)
-        }
-    }
-
-    // The caller must make sure idx is inside bounds.
-    #[inline(always)]
-    fn mask_mut(&mut self, idx: usize) -> &mut bool {
-        debug_assert!(idx < self.data.len());
-        unsafe {
-            self.mask.get_unchecked_mut(idx)
-        }
-    }
-
-    // Spoofs the lifetime of the reference to self.node(idx), which is required to work around the
-    // borrow checker on some occasions. The caller must ensure the reference does not outlive the
-    // content.
-    #[inline(always)]
-    pub fn node_unsafe<'b>(&self, idx: usize) -> &'b N {
-        debug_assert!(idx < self.data.len());
-        unsafe {
-            mem::transmute(self.data.get_unchecked(idx))
-        }
-    }
-
-    // Spoofs the lifetime of the reference to self.key(idx), which is required to work around the
-    // borrow checker on some occasions. The caller must ensure the reference does not outlive the
-    // content.
-    #[inline(always)]
-    pub fn key_unsafe<'b>(&self, idx: usize) -> &'b N::K where N: 'b {
-        self.node_unsafe(idx).key()
-    }
-
-    #[inline(always)]
-    pub fn key<'a>(&'a self, idx: usize) -> &'a N::K where N: 'a {
-        self.node(idx).key()
-    }
-
-    #[inline(always)]
-    pub fn val<'a>(&'a self, idx: usize) -> &'a N::V where N: 'a {
-        self.node(idx).val()
-    }
-
-    #[inline(always)]
-    pub fn node(&self, idx: usize) -> &N {
-        &self.data[idx]
-    }
-
-    #[inline(always)]
-    pub fn node_opt(&self, idx: usize) -> Option<&N> {
-        if self.is_nil(idx) { None } else { Some(self.node(idx)) }
-    }
-
-    #[inline(always)]
-    pub fn parent_opt(&self, idx: usize) -> Option<&N> {
-        if idx == 0 {
-            None
-        } else {
-            Some(self.parent(idx))
-        }
-    }
-
-    #[inline(always)]
-    pub fn left_opt(&self, idx: usize) -> Option<&N> {
-        let lefti = lefti(idx);
-        if self.is_nil(lefti) {
-            None
-        } else {
-            Some(self.node(lefti))
-        }
-    }
-
-    #[inline(always)]
-    pub fn right_opt(&self, idx: usize) -> Option<&N> {
-        let righti = righti(idx);
-        if self.is_nil(righti) {
-            None
-        } else {
-            Some(self.node(righti))
-        }
-    }
-
-
-    #[inline(always)]
-    pub fn parent(&self, idx: usize) -> &N {
-        debug_assert!(idx > 0 && !self.is_nil(idx));
-        self.node(parenti(idx))
-    }
-
-    #[inline(always)]
-    pub fn left(&self, idx: usize) -> &N {
-        let lefti = lefti(idx);
-        debug_assert!(!self.is_nil(lefti));
-        self.node(lefti)
-    }
-
-    #[inline(always)]
-    pub fn right(&self, idx: usize) -> &N {
-        let righti = righti(idx);
-        debug_assert!(!self.is_nil(righti));
-        self.node(righti)
-    }
-
-
-    #[inline(always)]
-    pub fn has_left(&self, idx: usize) -> bool {
-        !self.is_nil(lefti(idx))
-    }
-
-    #[inline(always)]
-    pub fn has_right(&self, idx: usize) -> bool {
-        !self.is_nil(righti(idx))
-    }
-
-    #[inline(always)]
-    pub fn is_nil(&self, idx: usize) -> bool {
-        // This is safe, as we check that idx is in bounds just before reading from it.
-        idx >= self.data.len() || !self.mask(idx)
-    }
-
-    // Spoofs the lifetime of the reference to self.node_mut(idx), which is required to work around
-    // the borrow checker on some occasions. The caller must ensure the reference does not outlive
-    // the content and there is no race condition in access to the content.
-    #[inline(always)]
-    pub fn node_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut N {
-        unsafe {
-            mem::transmute(self.data.get_unchecked_mut(idx))
-        }
-    }
-
-    // Spoofs the lifetime of the reference to self.key_mut(idx), which is required to work around
-    // the borrow checker on some occasions. The caller must ensure the reference does not outlive
-    // the content and there is no race condition in access to the content.
-    #[inline(always)]
-    pub fn key_mut_unsafe<'b>(&mut self, idx: usize) -> &'b mut N::K {
-        unsafe {
-            mem::transmute(self.node_mut_unsafe(idx).key_mut())
-        }
-    }
-
-    #[inline(always)]
-    pub fn key_mut<'a>(&'a mut self, idx: usize) -> &'a mut N::K where N: 'a {
-        self.node_mut(idx).key_mut()
-    }
-
     #[inline]
     pub fn find_max(&self, mut idx: usize) -> usize {
         while self.has_right(idx) {
@@ -384,11 +396,6 @@ impl<N: Node> TreeRepr<N> {
             idx = lefti(idx);
         }
         idx
-    }
-
-    #[inline(always)]
-    pub fn node_mut(&mut self, idx: usize) -> &mut N {
-        &mut self.data[idx]
     }
 
     // The caller must make sure that `!self.is_nil(idx)`
