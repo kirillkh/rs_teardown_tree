@@ -85,14 +85,14 @@ Performance
 Complexity
 ----------
 
-All query and delete operations work in `O(k + log n)` time, where `k` is the number of items queried/deleted/returned
-and ``n`` is the initial size of the tree. Note that if you have already deleted ``m`` items, the next `delete_range`
-operation will still take `O(n)`, not `O(n-m)` time as in many other data structures. However, this distinction only
-matters in practice when `delete`'s are interspersed with `insert`'s, and `TeardownTree` does not support `insert`'s.
+All query and delete operations work in ``O(k + log n)`` time, where `k` is the number of items queried/deleted/returned
+and ``n`` is the initial size of the tree. Note that if you have already deleted ``m`` items, the next ``delete_range``
+operation will still take ``O(n)``, not ``O(n-m)`` time as in many other data structures. However, this distinction only
+matters in practice when ``delete``s are interspersed with ``insert``s, and ``TeardownTree`` does not support ``insert``.
 
-The amount of memory consumed by a `TeardownTree` built with `n` items, each of size ``s`` is ``n*s + n + 2*log_2(n) + z``
+The amount of memory consumed by a ``TeardownTree`` built with ``n`` items, each of size ``s`` is ``n*s + n + 2*log_2(n) + z``
 bytes, where `z` is a small constant. (The first term is the size of an array holding just your data; the second -- of an array of flags
-that are unset for removed items; the third -- of two auxiliary arrays used internally by the `delete_range` algorithm).
+that are unset for removed items; the third -- of two auxiliary arrays used internally by the ``delete_range`` algorithm).
 
 
 Benchmarks
@@ -143,12 +143,12 @@ Drawbacks
 2. The storage is not deallocated until the structure is dropped.
 3. Fine print regarding complexity: ``delete_range`` works in ``O(k + log n)`` time, where ``n`` is the **initial**
    size of the tree, not its current size (if you have already deleted ``m`` items, the next ``delete_range`` operation
-   will still take `O(log n)` time in the worst case, not necessarily `O(log(n-m))`). The same applies to the other
+   will still take ``O(log n)`` time in the worst case, not necessarily ``O(log(n-m))``). The same applies to the other
    logarithmic operations.
 4. Performance is sensitive to the size of your data. Starting from a certain size, it is faster to use a
-   `TeardownSet<Box<(Key,Value)>>` or store the key-value pairs separately and use external handles as keys (e.g.
-   `TeardownSet<INDEX_INTO_EXTERNAL_VEC>` or `TeardownSet<&MyKey>`). It's probably a good idea to run some benchmarks to
-   know what's best in your case.
+   ``TeardownSet<Box<(Key,Value)>>`` or store the key-value pairs separately and use external handles as keys (e.g.
+   ``TeardownSet<INDEX_INTO_EXTERNAL_VEC>`` or ``TeardownSet<&MyKey>``). Use a profiler to find out what's best in your
+   case.
 
 
 .. |Benchmarks| replace:: **the benchmarks page**
