@@ -13,6 +13,10 @@ impl<K, V> Entry<K, V> {
         Entry { item: (key, val) }
     }
 
+    pub fn from_tuple(t: (K,V)) -> Self {
+        Entry { item: t }
+    }
+
     #[inline(always)]
     pub fn into_tuple(self) -> (K, V) {
         self.into()
@@ -68,6 +72,7 @@ pub trait Node: Deref<Target= Entry<<Self as Node>::K,
     type V;
 
     #[inline] fn new(key: Self::K, val: Self::V) -> Self;
+    #[inline] fn from_tuple(t: (Self::K, Self::V)) -> Self;
     #[inline] fn into_entry(self) -> Entry<Self::K, Self::V>;
     #[inline] fn into_tuple(self) -> (Self::K, Self::V);
 }

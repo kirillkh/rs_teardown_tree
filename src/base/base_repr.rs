@@ -1,4 +1,4 @@
-use base::{Node, Entry, Sink, lefti, righti, parenti, SlotStack, Refill};
+use base::{Node, Entry, Sink, lefti, righti, parenti, SlotStack, Refill, depth_of};
 use base::bulk_delete::DeleteRangeCache;
 use std::fmt::{Debug, Formatter};
 use std::fmt;
@@ -43,12 +43,16 @@ impl<N: Node> TreeRepr<N> {
         let size = sorted.len();
 
         let mut data = Vec::with_capacity(size);
-        // We use manual management of `data`'s memory. To ensure nothing bad is going on, we
-        // analyze each access to `data`.
-        unsafe { data.set_len(size); }
+        let mut mask = Vec::with_capacity(size);
 
-        let mask: Vec<bool> = vec![true; size];
-        let height = Self::build(&mut sorted, 0, &mut data);
+        // We use manual management of `data`'s  and `mask`'s memory. To ensure nothing bad is going on, we
+        // analyze each access to `data`.
+        unsafe {
+            data.set_len(size);
+            mask.set_len(size);
+        }
+
+        let height = Self::build(&mut sorted, 0, &mut data, &mut mask, &Self::build_select_root, &|item| N::from_tuple(item));
         // As per contract with `build()`, we safely dispose of the contents of `sorted` without dropping them.
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
@@ -316,14 +320,17 @@ impl<N: Node> TreeRepr<N> {
 
     /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
     /// make sure the contents are never reused or dropped after this call returns.
-    fn build(sorted: &mut [(N::K, N::V)], idx: usize, data: &mut [N]) -> usize {
+    // TODO: might be faster to implement without recursion
+    fn build<T, U, F, G>(sorted: &[T], idx: usize, data: &mut [U], mask: &mut [bool], select: &F, convert: &G) -> usize
+        where F: Fn(usize) -> usize, G: Fn(T) -> U
+    {
         match sorted.len() {
             0 => 0,
             n => {
-                let mid = Self::build_select_root(n);
+                let mid = select(n);
                 let (lefti, righti) = (lefti(idx), righti(idx));
-                let lh = Self::build(&mut sorted[..mid], lefti, data);
-                let rh = Self::build(&mut sorted[mid+1..], righti, data);
+                let lh = Self::build(&sorted[..mid], lefti, data, mask, select, convert);
+                let rh = Self::build(&sorted[mid+1..], righti, data, mask, select, convert);
 
                 // This is safe because:
                 //   a) we read each element in `sorted` exactly once
@@ -332,8 +339,9 @@ impl<N: Node> TreeRepr<N> {
                 //   d) the caller of `build` makes sure the contents are never reused or dropped after this call returns
                 unsafe {
                     let p = sorted.get_unchecked(mid);
-                    let (k, v) = ptr::read(p);
-                    ptr::write(data.get_unchecked_mut(idx), N::new(k, v));
+                    let item = ptr::read(p);
+                    ptr::write(data.get_unchecked_mut(idx), convert(item));
+                    *mask.get_unchecked_mut(idx) = true;
                 }
 
                 debug_assert!(rh <= lh);
@@ -342,14 +350,169 @@ impl<N: Node> TreeRepr<N> {
         }
     }
 
-    pub fn succ(&self, idx: usize) -> usize {
-        if self.has_right(idx) {
-            righti(idx)
+    #[inline]
+    pub fn successor(&self, curr: usize) -> Option<usize> {
+        let next = if self.has_right(curr) {
+            self.find_min(righti(curr))
         } else {
-            let left = left_enclosing(idx+1);
-            return if left == 0 { self.data.len() }
-                   else         { parenti(left-1) };
+            let l_enclosing = left_enclosing(curr+1);
+
+            if l_enclosing <= 1 {
+                // done
+                return None
+            }
+
+            parenti(l_enclosing-1)
+        };
+
+        Some(next)
+    }
+
+
+
+//    pub fn double_and_rebuild(&mut self, item: (N::K, N::V)) {
+//        let base = self.capacity();
+//        let capacity = base * 2 + 1;
+//        let mut data = Vec::with_capacity(capacity);
+//        let mut mask = vec![false; capacity];
+//
+//        // copy the nodes in-order into the leaves of the new tree
+//
+//        let pdst: *mut N = unsafe { data.as_mut_ptr().offset(base as isize) };
+//        let psrc: *const N = unsafe { self.data.as_ptr() };
+//
+//        let mut inorder_offs = 0;
+//        let mut prev_idx = 0;
+//
+//        Self::traverse_inorder_mut(self, 0, &mut inorder_offs, |_, inorder_offs, idx| {
+//            unsafe {
+//                let node = ptr::read(psrc.offset(idx as isize));
+//                prev_idx = idx;
+//                if &item.0 < node.key() {
+//                    return true;
+//                }
+//                ptr::write(pdst.offset(*inorder_offs), node);
+//            }
+//            *inorder_offs += 1;
+//            false
+//        });
+//
+//        unsafe {
+//            ptr::write(pdst.offset(inorder_offs), N::from_tuple(item));
+//        }
+//        inorder_offs += 1;
+//
+//        Self::traverse_inorder_from_mut(self, prev_idx, 0, &mut inorder_offs, |_, inorder_offs, idx| {
+//            unsafe {
+//                let node = ptr::read(psrc.offset(idx as isize));
+//                ptr::write(pdst.offset(*inorder_offs), node);
+//            }
+//            *inorder_offs += 1;
+//            false
+//        });
+//
+//        let mut old_data = mem::replace(&mut self.data, data);
+//        unsafe {
+//            self.data.set_len(capacity);
+//            // the items have been moved to the new storage, don't drop them
+//            old_data.set_len(0);
+//        }
+//        self.mask = mask;
+//        self.size += 1;
+//
+//        // build the tree
+//        {
+//            let src: &mut [N] = unsafe { mem::transmute(&mut self.data[base .. base+self.size]) };
+//            let dst: &mut [N] = &mut self.data;
+//            Self::build(src, 0, dst, &mut self.mask, &|n| n >> 1, &|node| node);
+//        }
+//    }
+    pub fn layout_inorder_for_insert(&mut self, root: usize, dst: &mut Vec<N>, count: usize, item: (N::K, N::V)) {
+        let mut inorder_offs: usize = 0;
+        let mut prev_idx = 0;
+
+        let psrc: *const N = unsafe { self.data.as_ptr() };
+        let pdst: *mut N = unsafe { dst.as_mut_ptr().offset(dst.len() as isize) };
+
+        Self::traverse_inorder_mut(self, root, &mut inorder_offs, |_, inorder_offs, idx| {
+            unsafe {
+                let node = ptr::read(psrc.offset(idx as isize));
+                prev_idx = idx;
+                if &item.0 < node.key() {
+                    return true;
+                }
+                ptr::write(pdst.offset(*inorder_offs as isize), node);
+            }
+            *inorder_offs += 1;
+            false
+        });
+
+        unsafe {
+            ptr::write(pdst.offset(inorder_offs as isize), N::from_tuple(item));
         }
+        inorder_offs += 1;
+
+        if inorder_offs < count {
+            Self::traverse_inorder_from_mut(self, prev_idx, root, &mut inorder_offs, |_, inorder_offs, idx| {
+                unsafe {
+                    let node = ptr::read(psrc.offset(idx as isize));
+                    ptr::write(pdst.offset(*inorder_offs as isize), node);
+                }
+                *inorder_offs += 1;
+                false
+            });
+        }
+
+        unsafe {
+            let len = dst.len();
+            dst.set_len(len + inorder_offs);
+        }
+    }
+
+    pub fn rebuild_subtree(&mut self, root: usize, insert_offs: usize, count: usize, item: (N::K, N::V)) {
+        // copy the items from the tree to a sorted array
+        let mut inorder_items = Vec::with_capacity(count);
+        self.layout_inorder_for_insert(root, &mut inorder_items, count, item);
+
+        // reset the mask, because build re-initializes it
+        Self::traverse_inorder_mut(self, root, &mut (), |this, _, idx| {
+            *this.mask_mut(idx) = false;
+            false
+        });
+
+        Self::build(&inorder_items, root, &mut self.data, &mut self.mask, &|n| n >> 1, &|node| node);
+
+        self.size += 1;
+
+        // drop the storage, but not the contents: the items have been moved into the tree
+        unsafe { inorder_items.set_len(0); }
+    }
+
+    pub fn double_and_rebuild(&mut self, item: (N::K, N::V)) {
+        let base = self.capacity();
+        let capacity = base * 2 + 1;
+        let mut data = Vec::with_capacity(capacity);
+        let mut mask = vec![false; capacity];
+        self.size += 1;
+
+        // copy the nodes in-order into the leaves of the new tree
+        let pdst: *mut N = unsafe { data.as_mut_ptr().offset(base as isize) };
+        let mut inorder_items = unsafe { Vec::from_raw_parts(pdst, 0, self.size) };
+        let size = self.size;
+        self.layout_inorder_for_insert(0, &mut inorder_items, size, item);
+
+        let mut old_data = mem::replace(&mut self.data, data);
+        unsafe {
+            self.data.set_len(capacity);
+            // the items have been moved to the new storage, don't drop them
+            old_data.set_len(0);
+        }
+        self.mask = mask;
+
+        // build the tree
+        Self::build(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|n| n >> 1, &|node| node);
+
+        mem::forget(inorder_items);
     }
 
     /// Returns either the index of the first element equal to `query` if it is contained in the tree;
@@ -357,14 +520,11 @@ impl<N: Node> TreeRepr<N> {
     pub fn index_of<Q>(&self, query: &Q) -> usize
         where Q: PartialOrd<N::K>
     {
-        if self.data.is_empty() {
+        if self.data.is_empty() || !self.mask(0) {
             return 0;
         }
 
         let mut idx = 0;
-        debug_assert!(self.mask[idx]);
-
-
         loop {
             // TODO: this is faster for some benchmarks (10M items/1000 bulks), but slower for very
             // small ones. might want to introduce a heuristic based on n
@@ -405,7 +565,7 @@ impl<N: Node> TreeRepr<N> {
     // The caller must make sure that `!self.is_nil(idx)`
     #[inline(always)]
     pub fn take(&mut self, idx: usize) -> N {
-        debug_assert!(!self.is_nil(idx), "idx={}, mask[idx]={}", idx, self.mask[idx]);
+        debug_assert!(!self.is_nil(idx), "idx={}", idx);
         let node = unsafe {
             let p: &N = self.node_unsafe(idx);
             // We take care to set `mask[idx]` to `false`, so we must not drop the content of `p`.
@@ -441,23 +601,27 @@ impl<N: Node> TreeRepr<N> {
         ptr::write(pdst, x);
     }
 
-//    // The caller must make sure that idx is inside bounds.
-//    #[inline(always)]
-//    pub fn place(&mut self, idx: usize, node: N) {
-//        // TODO: we could remove bounds checks in accesses to self.mask below
-//        if self.mask[idx] {
-//            // The old content of `data[idx]` is correctly dropped after being overwritten.
-//            self.data[idx] = node;
-//        } else {
-//            self.mask[idx] = true;
-//            self.size += 1;
-//            unsafe {
-//                let p = self.data.get_unchecked_mut(idx);
-//                // We must not drop the old content of `data[idx]`, as it was garbage.
-//                ptr::write(p, node);
-//            };
-//        }
-//    }
+    // The caller must make sure that idx is inside bounds.
+    #[inline(always)]
+    pub fn place(&mut self, idx: usize, node: N) -> Option<N> {
+        debug_assert!(idx < self.data.capacity());
+
+        if self.mask(idx) {
+            let p: &mut N = unsafe { self.data.get_unchecked_mut(idx) };
+            let old = mem::replace(p, node);
+            Some(old)
+        } else {
+            *self.mask_mut(idx) = true;
+            self.size += 1;
+            unsafe {
+                let p = self.data.get_unchecked_mut(idx);
+                // We must not drop the old content of `data[idx]`, as it was garbage.
+                ptr::write(p, node);
+            };
+
+            None
+        }
+    }
 
     fn drop_items(&mut self) {
         let p = self.data.as_mut_ptr();
@@ -495,6 +659,21 @@ impl<N: Node> TreeRepr<N> {
 
     pub fn iter<'a>(&'a self) -> Iter<'a, N> {
         Iter::new(self)
+    }
+
+    pub fn count_nodes(&self, root: usize) -> usize {
+        let mut count = 0;
+        TreeRepr::traverse_inorder(self, root, &mut count, |this, count, idx| {
+            *count += 1;
+            false
+        });
+
+        count
+    }
+
+    #[inline]
+    pub fn complete_height(&self) -> usize {
+        depth_of(self.capacity())
     }
 }
 
@@ -753,7 +932,7 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
             None
         } else {
             self.next_idx =
-                iter_next_idx(curr, self.tree)
+                self.tree.successor(curr)
                     .map_or_else(|| self.tree.data.capacity(), |x| x);
             self.remaining -= 1;
             Some(self.tree.node(curr).deref())
@@ -792,7 +971,7 @@ impl<N: Node> Iterator for IntoIter<N> {
         } else {
             debug_assert!(!self.tree.is_nil(curr));
             self.next_idx =
-                iter_next_idx(self.next_idx, &self.tree)
+                self.tree.successor(self.next_idx)
                     .map_or_else(|| done, |x| x);
 
             Some(self.tree.take(curr).into_tuple())
@@ -805,27 +984,6 @@ impl<N: Node> Iterator for IntoIter<N> {
 }
 
 impl<N: Node> ExactSizeIterator for IntoIter<N> {}
-
-
-
-#[inline]
-fn iter_next_idx<N: Node>(curr: usize, tree: &TreeRepr<N>) -> Option<usize> {
-    let next = if tree.has_right(curr) {
-        tree.find_min(righti(curr))
-    } else {
-        let l_enclosing = left_enclosing(curr+1);
-
-        if l_enclosing <= 1 {
-            // done
-            return None
-        }
-
-        parenti(l_enclosing-1)
-    };
-
-    Some(next)
-}
-
 
 
 
@@ -912,5 +1070,75 @@ impl<N: Node> TreeRepr<N> where N: fmt::Debug {
         }
 
         Ok(())
+    }
+}
+
+
+
+#[inline]
+pub fn inorder_to_idx_h(inorder: usize, tree_height: usize) -> usize {
+    let offs = 1 << tree_height;
+    a025480(offs+inorder) - 1
+}
+
+#[inline]
+pub fn inorder_to_idx_n(inorder: usize, complete_tree_n: usize) -> usize {
+    debug_assert!(inorder < complete_tree_n, "inorder = {}, complete_tree_n = {}", inorder, complete_tree_n);
+
+    let offs = complete_tree_n + 1;
+    a025480(offs+inorder) - 1
+}
+
+// We use this sequence to implement inorder_to_idx: http://oeis.org/A025480
+#[inline]
+fn a025480(k: usize) -> usize {
+    let shift = (!k).trailing_zeros();
+    k >> (shift+1)
+}
+
+
+
+#[cfg(test)]
+mod tests {
+    use applied::plain_tree::PlTree;
+
+    #[test]
+    fn test_a025480() {
+        let a = &super::a025480;
+        assert_eq!(a(0), 0);
+        assert_eq!(a(1), 0);
+        assert_eq!(a(2), 1);
+        assert_eq!(a(3), 0);
+        assert_eq!(a(4), 2);
+        assert_eq!(a(5), 1);
+        assert_eq!(a(6), 3);
+        assert_eq!(a(7), 0);
+        assert_eq!(a(8), 4);
+        assert_eq!(a(9), 2);
+        assert_eq!(a(10), 5);
+    }
+
+    #[test]
+    fn test_inorder_to_idx() {
+        let f = &super::inorder_to_idx_h;
+        assert_eq!(f(0, 1), 0);
+
+        assert_eq!(f(0, 2), 1);
+        assert_eq!(f(1, 2), 0);
+        assert_eq!(f(2, 2), 2);
+    }
+
+    #[test]
+    fn test_inorder_to_idx_exhaustive() {
+        for h in 1..18 {
+            let n = (1 << h) - 1;
+            let items = (0..n).map(|x| (x, ())).collect();
+            let tree = PlTree::new(items);
+
+            for i in 0..n {
+                let idx = super::inorder_to_idx_n(i, n);
+                assert_eq!(tree.key(idx), &i);
+            }
+        }
     }
 }

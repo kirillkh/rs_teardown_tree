@@ -102,6 +102,7 @@ impl<Iv: Interval, V> IvTree<Iv, V> {
 
     // The caller must make sure that `!is_nil(idx)`.
     #[inline]
+    // TODO: this can be done without recursion, we could use the same delete_idx as PlainTree does (how would that impact performance?)
     fn delete_idx(&mut self, idx: usize) -> Entry<Iv, V> {
         debug_assert!(!self.is_nil(idx));
 

@@ -15,6 +15,8 @@ pub use self::drivers::*;
 pub use self::base_repr::*;
 pub use self::node::*;
 
+use std::mem;
+
 pub trait Sink<T> {
     fn consume(&mut self, x: T);
 }
@@ -57,6 +59,15 @@ pub fn righti(idx: usize) -> usize {
     (idx<<1) + 2
 }
 
+#[inline(always)]
+pub fn leaves_in_complete_tree(mut idx: usize) -> usize {
+    1 << depth_of(idx)
+}
+
+#[inline(always)]
+pub fn depth_of(mut idx: usize) -> usize {
+    8*mem::size_of::<usize>() - 1 - ((idx+1).leading_zeros() as usize)
+}
 
 
 pub trait ItemFilter<K: Key> {
@@ -186,5 +197,23 @@ pub mod validation {
         output[idx] = Some(items[root].clone());
         gen_subtree_keys(&items[..root], lefti(idx), output, rng);
         gen_subtree_keys(&items[root+1..], righti(idx), output, rng);
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::depth_of;
+
+    #[test]
+    fn test_depth_of() {
+        assert_eq!(depth_of(0), 0);
+        assert_eq!(depth_of(1), 1);
+        assert_eq!(depth_of(2), 1);
+        assert_eq!(depth_of(3), 2);
+        assert_eq!(depth_of(4), 2);
+        assert_eq!(depth_of(5), 2);
+        assert_eq!(depth_of(6), 2);
+        assert_eq!(depth_of(7), 3);
     }
 }

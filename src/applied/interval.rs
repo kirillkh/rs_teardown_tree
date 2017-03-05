@@ -96,6 +96,12 @@ impl<Iv: Interval, V> Node for IvNode<Iv, V> {
         IvNode { entry: Entry::new(key, val), maxb:maxb }
     }
 
+    fn from_tuple(t: (Iv, V)) -> Self {
+        let maxb = t.0.b().clone();
+        IvNode { entry: Entry::from_tuple(t), maxb:maxb }
+    }
+
+
     #[inline(always)]
     fn into_entry(self) -> Entry<Iv, V> {
         self.entry
