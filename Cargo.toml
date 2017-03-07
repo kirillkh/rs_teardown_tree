@@ -16,9 +16,9 @@ members = [".", "benchmarks"]
 name = "teardown_tree"
 path = "src/lib.rs"
 
-[[bin]]
-name = "testins"
-path = "src/testins.rs"
+#[[bin]]
+#name = "testins"
+#path = "src/testins.rs"
 
 [dependencies]
 rand = "0.3.14"

@@ -30,7 +30,7 @@ mod test_delete_plain {
     use base::sink::UncheckedVecRefSink;
     use base::{ItemFilter, NoopFilter};
     use base::util::make_teardown_seq;
-    use base::validation::{check_bst_del_range, check_integrity_del_range};
+    use base::validation::{check_bst_del_range, check_integrity_del_range, to_vec};
     use applied::plain_tree::{PlTree, PlNode};
     use external_api::{TeardownSet, TreeWrapperAccess};
     use super::common::{conv_from_tuple_vec, check_tree, test_exhaustive_items, exhaustive_range_check, mk_prebuilt};
@@ -43,13 +43,20 @@ mod test_delete_plain {
     type Tree = PlTree<usize, ()>;
 
 
+    fn test_build_tree(n: usize) {
+        let items = (0..n)
+            .map(|x| (x,()))
+            .collect::<Vec<_>>();
+        let tree = Tree::new(items);
+        assert_eq!(to_vec(tree.repr()), (0..n).collect::<Vec<_>>());
+    }
+
     #[test]
     fn build() {
-        TeardownSet::new(vec![1]);
-        TeardownSet::new(vec![1, 2]);
-        TeardownSet::new(vec![1, 2, 3]);
-        TeardownSet::new(vec![1, 2, 3, 4]);
-        TeardownSet::new(vec![1, 2, 3, 4, 5]);
+        let n = 50;
+        for i in 0..n {
+            test_build_tree(i);
+        }
     }
 
     #[test]

@@ -60,12 +60,7 @@ pub fn righti(idx: usize) -> usize {
 }
 
 #[inline(always)]
-pub fn leaves_in_complete_tree(mut idx: usize) -> usize {
-    1 << depth_of(idx)
-}
-
-#[inline(always)]
-pub fn depth_of(mut idx: usize) -> usize {
+pub fn depth_of(idx: usize) -> usize {
     8*mem::size_of::<usize>() - 1 - ((idx+1).leading_zeros() as usize)
 }
 
@@ -94,6 +89,13 @@ pub mod validation {
     use base::{Key, TreeRepr, Node, lefti, righti, parenti};
 
     type Tree<N> = TreeRepr<N>;
+
+    pub fn to_vec<N: Node>(tree: &TreeRepr<N>) -> Vec<N::K> {
+        tree.iter()
+            .map(|entry| entry.key())
+            .cloned()
+            .collect()
+    }
 
     /// Validates the BST property.
     pub fn check_bst<'a, N: Node>(tree: &'a Tree<N>, idx: usize) ->  Result<Option<(&'a N::K, &'a N::K)>, (usize, N::K, N::K)> {
@@ -203,7 +205,7 @@ pub mod validation {
 
 #[cfg(test)]
 mod tests {
-    use super::depth_of;
+    use super::{depth_of};
 
     #[test]
     fn test_depth_of() {

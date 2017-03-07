@@ -52,7 +52,7 @@ impl<N: Node> TreeRepr<N> {
             mask.set_len(size);
         }
 
-        let height = Self::build(&mut sorted, 0, &mut data, &mut mask, &Self::build_select_root, &|item| N::from_tuple(item));
+        let height = Self::build(&mut sorted, 0, &mut data, &mut mask, &|item| N::from_tuple(item));
         // As per contract with `build()`, we safely dispose of the contents of `sorted` without dropping them.
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
@@ -303,51 +303,47 @@ impl<N: Node> TreeRepr<N> {
         }
     }
 
-    /// Finds the point to partition n keys for a nearly-complete binary tree
-    /// http://stackoverflow.com/a/26896494/3646645
-    fn build_select_root(n: usize) -> usize {
-        // the highest power of two <= n
-        let x = if n.is_power_of_two() { n }
-            else { n.next_power_of_two() / 2 };
-
-        if x/2 <= (n-x) + 1 {
-            debug_assert!(x >= 1, "x={}, n={}", x, n);
-            x - 1
-        } else {
-            n - x/2
-        }
-    }
 
     /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
     /// make sure the contents are never reused or dropped after this call returns.
-    // TODO: might be faster to implement without recursion
-    fn build<T, U, F, G>(sorted: &[T], idx: usize, data: &mut [U], mask: &mut [bool], select: &F, convert: &G) -> usize
-        where F: Fn(usize) -> usize, G: Fn(T) -> U
+    pub fn build<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
+        where G: Fn(T) -> U
     {
-        match sorted.len() {
-            0 => 0,
-            n => {
-                let mid = select(n);
-                let (lefti, righti) = (lefti(idx), righti(idx));
-                let lh = Self::build(&sorted[..mid], lefti, data, mask, select, convert);
-                let rh = Self::build(&sorted[mid+1..], righti, data, mask, select, convert);
+        let len = sorted.len();
+        if len  == 0 {
+            return 0;
+        }
 
-                // This is safe because:
-                //   a) we read each element in `sorted` exactly once
-                //   b) we write to each index in `data` exactly once
-                //   c) `data` is initially filled with garbage (therefore we must not drop its contents before overwriting)
-                //   d) the caller of `build` makes sure the contents are never reused or dropped after this call returns
+        let height = depth_of(len-1) + 1;
+        let complete_count = (1 << height) - 1;
+
+        let psrc = sorted.as_ptr();
+        let pdst = data.as_mut_ptr();
+
+        let mut skipped = 0;
+        let mut src_offs = 0;
+        while src_offs < len {
+//            let local_idx = inorder_to_idx_n(src_offs+skipped, complete_count);
+            let inorder = src_offs+skipped;
+            let local_idx = a025480(complete_count+1+inorder) - 1;
+
+
+            if local_idx < len {
+                let local_depth = depth_of(local_idx);
+                let global_idx = local_idx + (root << local_depth);
+
                 unsafe {
-                    let p = sorted.get_unchecked(mid);
-                    let item = ptr::read(p);
-                    ptr::write(data.get_unchecked_mut(idx), convert(item));
-                    *mask.get_unchecked_mut(idx) = true;
+                    let item = ptr::read(psrc.offset(src_offs as isize));
+                    ptr::write(pdst.offset(global_idx as isize), convert(item));
+                    *mask.get_unchecked_mut(global_idx) = true;
                 }
-
-                debug_assert!(rh <= lh);
-                1 + lh
+                src_offs += 1;
+            } else {
+                skipped += 1;
             }
         }
+
+        height
     }
 
     #[inline]
@@ -431,7 +427,7 @@ impl<N: Node> TreeRepr<N> {
         let mut inorder_offs: usize = 0;
         let mut prev_idx = 0;
 
-        let psrc: *const N = unsafe { self.data.as_ptr() };
+        let psrc: *const N = self.data.as_ptr();
         let pdst: *mut N = unsafe { dst.as_mut_ptr().offset(dst.len() as isize) };
 
         Self::traverse_inorder_mut(self, root, &mut inorder_offs, |_, inorder_offs, idx| {
@@ -480,7 +476,7 @@ impl<N: Node> TreeRepr<N> {
             false
         });
 
-        Self::build(&inorder_items, root, &mut self.data, &mut self.mask, &|n| n >> 1, &|node| node);
+        Self::build(&inorder_items, root, &mut self.data, &mut self.mask, &|node| node);
 
         self.size += 1;
 
@@ -492,7 +488,7 @@ impl<N: Node> TreeRepr<N> {
         let base = self.capacity();
         let capacity = base * 2 + 1;
         let mut data = Vec::with_capacity(capacity);
-        let mut mask = vec![false; capacity];
+        let mask = vec![false; capacity];
         self.size += 1;
 
         // copy the nodes in-order into the leaves of the new tree
@@ -510,7 +506,7 @@ impl<N: Node> TreeRepr<N> {
         self.mask = mask;
 
         // build the tree
-        Self::build(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|n| n >> 1, &|node| node);
+        Self::build(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|node| node);
 
         mem::forget(inorder_items);
     }
@@ -663,7 +659,7 @@ impl<N: Node> TreeRepr<N> {
 
     pub fn count_nodes(&self, root: usize) -> usize {
         let mut count = 0;
-        TreeRepr::traverse_inorder(self, root, &mut count, |this, count, idx| {
+        TreeRepr::traverse_inorder(self, root, &mut count, |_, count, _| {
             *count += 1;
             false
         });
@@ -1076,12 +1072,6 @@ impl<N: Node> TreeRepr<N> where N: fmt::Debug {
 
 
 #[inline]
-pub fn inorder_to_idx_h(inorder: usize, tree_height: usize) -> usize {
-    let offs = 1 << tree_height;
-    a025480(offs+inorder) - 1
-}
-
-#[inline]
 pub fn inorder_to_idx_n(inorder: usize, complete_tree_n: usize) -> usize {
     debug_assert!(inorder < complete_tree_n, "inorder = {}, complete_tree_n = {}", inorder, complete_tree_n);
 
@@ -1119,16 +1109,6 @@ mod tests {
     }
 
     #[test]
-    fn test_inorder_to_idx() {
-        let f = &super::inorder_to_idx_h;
-        assert_eq!(f(0, 1), 0);
-
-        assert_eq!(f(0, 2), 1);
-        assert_eq!(f(1, 2), 0);
-        assert_eq!(f(2, 2), 2);
-    }
-
-    #[test]
     fn test_inorder_to_idx_exhaustive() {
         for h in 1..18 {
             let n = (1 << h) - 1;
@@ -1140,5 +1120,106 @@ mod tests {
                 assert_eq!(tree.key(idx), &i);
             }
         }
+    }
+}
+
+
+
+#[cfg(all(feature = "unstable", test))]
+mod bench {
+    extern crate test;
+
+    use applied::plain_tree::{PlTree, PlNode};
+    use self::test::Bencher;
+
+    use base::{TreeRepr};
+    use base::node::Node;
+
+    type Nd = PlNode<usize, ()>;
+    type Tree = TreeRepr<Nd>;
+
+    fn bench_build(n: usize, bencher: &mut Bencher) {
+        let mut items = (0..n)
+            .map(|x| (x,()))
+            .collect::<Vec<_>>();
+
+        let mut data = Vec::with_capacity(n);
+        let mut mask = Vec::with_capacity(n);
+
+        bencher.iter(|| {
+            let height = TreeRepr::<Nd>::build(&mut items, 0, &mut data, &mut mask, &|item| Nd::from_tuple(item));
+            test::black_box(height);
+        });
+    }
+
+    #[bench]
+    fn bench_build_00010000(bencher: &mut Bencher) {
+        bench_build(10_000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_00020000(bencher: &mut Bencher) {
+        bench_build(20_000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_00030000(bencher: &mut Bencher) {
+        bench_build(30_000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_00040000(bencher: &mut Bencher) {
+        bench_build(40_000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_00050000(bencher: &mut Bencher) {
+        bench_build(50_000, bencher);
+    }
+
+
+    #[bench]
+    fn bench_build_01000000(bencher: &mut Bencher) {
+        bench_build(1_000_000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_02000000(bencher: &mut Bencher) {
+        bench_build(2_000_000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_03000000(bencher: &mut Bencher) {
+        bench_build(3000000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_04000000(bencher: &mut Bencher) {
+        bench_build(4000000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_05000000(bencher: &mut Bencher) {
+        bench_build(5000000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_06000000(bencher: &mut Bencher) {
+        bench_build(6000000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_07000000(bencher: &mut Bencher) {
+        bench_build(7000000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_08000000(bencher: &mut Bencher) {
+        bench_build(8000000, bencher);
+    }
+
+    #[bench]
+    fn bench_build_09000000(bencher: &mut Bencher) {
+        bench_build(9000000, bencher);
     }
 }

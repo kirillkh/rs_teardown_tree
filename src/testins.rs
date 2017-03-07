@@ -1,4 +1,4 @@
-#[cfg(test)] #[macro_use] extern crate quickcheck;
+#![cfg_attr(feature = "unstable", feature(test))]
 
 
 extern crate rand;

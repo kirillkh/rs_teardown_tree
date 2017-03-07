@@ -1,5 +1,5 @@
 use applied::AppliedTree;
-use base::{Key, Node, TreeRepr, Traverse, TraverseMut, Sink, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti, parenti, depth_of, leaves_in_complete_tree, inorder_to_idx_n};
+use base::{Key, Node, TreeRepr, Traverse, Sink, BulkDeleteCommon, ItemVisitor, Entry, righti, lefti, parenti, depth_of};
 use base::{ItemFilter, TraversalDriver, TraversalDecision, RangeRefDriver, RangeDriver, NoopFilter};
 
 use std::ops::Range;
@@ -8,7 +8,6 @@ use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
 use std::cell::UnsafeCell;
 use std::{fmt, ptr, mem};
-use std::collections::VecDeque;
 
 pub struct PlTree<K: Key, V> {
     pub repr: UnsafeCell<TreeRepr<PlNode<K, V>>>,
@@ -102,13 +101,13 @@ impl<K: Key, V> PlTree<K, V> {
     }
 
 
-    fn repr(&self) -> &TreeRepr<Nd<K, V>> {
+    pub fn repr(&self) -> &TreeRepr<Nd<K, V>> {
         // This is safe according to UnsafeCell::get(), because there are no mutable aliases to
         // self.repr possible at the time when &self is taken.
         unsafe { &*self.repr.get() }
     }
 
-    fn repr_mut(&mut self) -> &mut TreeRepr<Nd<K, V>> {
+    pub fn repr_mut(&mut self) -> &mut TreeRepr<Nd<K, V>> {
         // This is safe according to UnsafeCell::get(), because the access to self.repr is unique at
         // the time when &mut self is taken.
         unsafe { &mut *self.repr.get() }
@@ -143,7 +142,7 @@ impl<K: Key, V> PlTree<K, V> {
             self.partial_rebuild(idx, item);
         } else {
             // full rebuild required
-            println!("double: size={}, capacity={}", self.size(), self.capacity());
+//            println!("double: size={}, capacity={}", self.size(), self.capacity());
             self.double_and_rebuild(item);
 //            let target_idx = self.index_of(&item.0);
 //            debug_assert!(target_idx < self.capacity() && self.is_nil(target_idx));
@@ -673,14 +672,14 @@ impl<K, V, D, Flt> BulkDeleteCommon<Nd<K, V>> for PlWorker<K, V, D, Flt>
 
 
 
-//#[cfg(test)]
+#[cfg(test)]
 pub mod tests {
     use super::*;
+    use base::validation::to_vec;
 
     type Tree = PlTree<usize, usize>;
 
-    fn ins(tree: &mut Tree, x: usize) {
-//        println!("inserting {}", x);
+    pub fn ins(tree: &mut Tree, x: usize) {
         let old = tree.insert((x, x));
         assert_eq!(None, old);
     }
@@ -691,34 +690,205 @@ pub mod tests {
     }
 
 
-    fn to_vec(tree: &Tree) -> Vec<usize> {
-        tree.iter()
-            .map(|entry| *entry.key())
-            .collect()
-    }
-
-//    #[test]
-    pub fn test_insert(n: usize) {
-//        let tree = &mut PlTree::new(vec![]);
-//        for i in 0..n {
-//            ins(tree, i);
-////            assert_eq!(to_vec(tree), (0..i+1).collect::<Vec<_>>());
-//        }
-//        assert_eq!(tree.size(), n);
-
-//        let tree = &mut PlTree::new(vec![]);
-//        for i in (0..n).rev() {
-//            ins(tree, i);
-////            assert_eq!(to_vec(tree), (i..n).collect::<Vec<_>>());
-//        }
-
+    #[test]
+    pub fn test_insert() {
+        let n = 1000;
 
         let tree = &mut PlTree::new(vec![]);
         for i in 0..n {
             ins(tree, i);
+            assert_eq!(to_vec(tree), (0..i+1).collect::<Vec<_>>());
         }
-        assert_eq!(to_vec(tree), (0..n).collect::<Vec<_>>());
 
-        assert_eq!(tree.size(), n);
+        let tree = &mut PlTree::new(vec![]);
+        for i in (0..n).rev() {
+            ins(tree, i);
+            assert_eq!(to_vec(tree), (i..n).collect::<Vec<_>>());
+        }
     }
+}
+
+
+#[cfg(all(feature = "unstable", test))]
+mod bench {
+    extern crate test;
+
+    use super::*;
+    use super::tests::ins;
+
+    use self::test::Bencher;
+
+
+    pub fn bench_inc(bencher: &mut Bencher, n: usize) {
+        bencher.iter(|| {
+            let tree = &mut PlTree::new(vec![]);
+            for i in 0..n {
+                ins(tree, i);
+            }
+            assert_eq!(tree.size(), n);
+        });
+    }
+
+    pub fn bench_dec(bencher: &mut Bencher, n: usize) {
+        bencher.iter(|| {
+            let tree = &mut PlTree::new(vec![]);
+            for i in (0..n).rev() {
+                ins(tree, i);
+            }
+            assert_eq!(tree.size(), n);
+        });
+    }
+
+
+
+    #[bench]
+    pub fn bench_insert_inc_01_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 1_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_02_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 2_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_03_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 3_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_04_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 4_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_05_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 5_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_06_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 6_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_07_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 7_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_08_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 8_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_09_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 9_000);
+    }
+
+
+    #[bench]
+    pub fn bench_insert_inc_10_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 10_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_20_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 20_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_30_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 30_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_40_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 40_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_50_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 50_000);
+    }
+
+
+
+
+    #[bench]
+    pub fn bench_insert_dec_01_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 1_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_02_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 2_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_03_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 3_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_04_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 4_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_05_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 5_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_06_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 6_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_07_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 7_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_08_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 8_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_09_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 9_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_10_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 10_000);
+    }
+
+
+
+//    #[bench]
+//    pub fn bench_insert_dec_10_000(bencher: &mut Bencher) {
+//        bench_dec(bencher, 10_000);
+//    }
+//
+//    #[bench]
+//    pub fn bench_insert_dec_20_000(bencher: &mut Bencher) {
+//        bench_dec(bencher, 20_000);
+//    }
+//
+//    #[bench]
+//    pub fn bench_insert_dec_30_000(bencher: &mut Bencher) {
+//        bench_dec(bencher, 30_000);
+//    }
+//
+//    #[bench]
+//    pub fn bench_insert_dec_40_000(bencher: &mut Bencher) {
+//        bench_dec(bencher, 40_000);
+//    }
+//
+//    #[bench]
+//    pub fn bench_insert_dec_50_000(bencher: &mut Bencher) {
+//        bench_dec(bencher, 50_000);
+//    }
 }
