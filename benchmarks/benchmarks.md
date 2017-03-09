@@ -1,4 +1,4 @@
-*Benchmarks last updated for teardown_tree v0.6.5 / Rust 1.17.0-nightly.*
+*Benchmarks last updated for teardown_tree v0.6.6 / Rust 1.17.0-nightly.*
 
 
 [Download the data][1].
