@@ -674,7 +674,10 @@ impl<K, V, D, Flt> BulkDeleteCommon<Nd<K, V>> for PlWorker<K, V, D, Flt>
 
 #[cfg(test)]
 pub mod tests {
+    use rand::{Rng, XorShiftRng};
+
     use super::*;
+    use util::make_permutation;
     use base::validation::to_vec;
 
     type Tree = PlTree<usize, usize>;
@@ -706,6 +709,19 @@ pub mod tests {
             assert_eq!(to_vec(tree), (i..n).collect::<Vec<_>>());
         }
     }
+
+    #[test]
+    pub fn test_insert_rng() {
+        let n = 100000;
+        let mut rng = XorShiftRng::new_unseeded();
+
+        let seq = make_permutation(n, &mut rng);
+        let tree = &mut PlTree::new(vec![]);
+        for i in 0..n {
+            ins(tree, seq[i]);
+        }
+        assert_eq!(to_vec(tree), (0..n).collect::<Vec<_>>());
+    }
 }
 
 
@@ -715,8 +731,11 @@ mod bench {
 
     use super::*;
     use super::tests::ins;
+    use util::make_permutation;
 
     use self::test::Bencher;
+
+    use rand::{Rng, SeedableRng, XorShiftRng, thread_rng};
 
 
     pub fn bench_inc(bencher: &mut Bencher, n: usize) {
@@ -734,6 +753,21 @@ mod bench {
             let tree = &mut PlTree::new(vec![]);
             for i in (0..n).rev() {
                 ins(tree, i);
+            }
+            assert_eq!(tree.size(), n);
+        });
+    }
+
+    pub fn bench_rng(bencher: &mut Bencher, n: usize) {
+        let mut trng = thread_rng();
+        let seed = [trng.gen(), trng.gen(), trng.gen(), trng.gen()];
+        let mut rng = XorShiftRng::from_seed(seed);
+
+        let seq = make_permutation(n, &mut rng);
+        bencher.iter(|| {
+            let tree = &mut PlTree::new(vec![]);
+            for i in 0..n {
+                ins(tree, seq[i]);
             }
             assert_eq!(tree.size(), n);
         });
@@ -863,6 +897,59 @@ mod bench {
     #[bench]
     pub fn bench_insert_dec_10_000(bencher: &mut Bencher) {
         bench_dec(bencher, 10_000);
+    }
+
+
+
+
+    #[bench]
+    pub fn bench_insert_rng_01_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 1_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_02_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 2_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_03_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 3_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_04_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 4_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_05_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 5_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_06_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 6_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_07_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 7_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_08_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 8_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_09_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 9_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_10_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 10_000);
     }
 
 

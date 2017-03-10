@@ -2,7 +2,7 @@ use std::ops::Range;
 use rand::{Rng, XorShiftRng};
 
 #[inline(never)]
-pub fn make_teardown_seq(n: usize, rm_items: usize, rng: &mut XorShiftRng) -> Vec<Range<usize>> {
+pub fn make_disjoint_range_permutation(n: usize, rm_items: usize, rng: &mut XorShiftRng) -> Vec<Range<usize>> {
     let nranges = n / rm_items +
         if n % rm_items != 0 { 1 } else { 0 };
 
@@ -19,4 +19,11 @@ pub fn make_teardown_seq(n: usize, rm_items: usize, rng: &mut XorShiftRng) -> Ve
     }
 
     ranges
+}
+
+pub fn make_permutation(n: usize, rng: &mut XorShiftRng) -> Vec<usize> {
+    make_disjoint_range_permutation(n, 1, rng)
+        .into_iter()
+        .map(|range| range.start)
+        .collect::<Vec<_>>()
 }

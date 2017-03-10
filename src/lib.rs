@@ -29,7 +29,7 @@ pub use self::base::util;
 mod test_delete_plain {
     use base::sink::UncheckedVecRefSink;
     use base::{ItemFilter, NoopFilter};
-    use base::util::make_teardown_seq;
+    use base::util::make_disjoint_range_permutation;
     use base::validation::{check_bst_del_range, check_integrity_del_range, to_vec};
     use applied::plain_tree::{PlTree, PlNode};
     use external_api::{TeardownSet, TreeWrapperAccess};
@@ -257,7 +257,7 @@ mod test_delete_plain {
         assert!(flt_items <= n);
         let mut rng = XorShiftRng::from_seed([96511, 42, 1423, 51984]);
         let elems: Vec<_> = (0..n).collect();
-        let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
+        let ranges: Vec<Range<usize>> = make_disjoint_range_permutation(n, rm_items, &mut rng);
         let mut flt_elems: Vec<_> = elems.clone();
 
         for i in 0..(n-flt_items) {
@@ -507,7 +507,7 @@ mod test_delete_interval {
     use base::sink::UncheckedVecRefSink;
     use base::{Node, ItemFilter, NoopFilter, lefti, righti};
     use base::validation::{check_bst_del_range, check_integrity_del_range, gen_tree_keys};
-    use base::util::make_teardown_seq;
+    use base::util::make_disjoint_range_permutation;
     use applied::AppliedTree;
     use applied::interval::{Interval, IvNode, KeyInterval};
     use applied::interval_tree::{IvTree};
@@ -744,7 +744,7 @@ mod test_delete_interval {
     fn full_teardown_n(n: usize, rm_items: usize) {
         let mut rng = XorShiftRng::from_seed([96511, 42, 1423, 51984]);
         let elems: Vec<_> = (0..n).map(|x| (KeyInterval::new(x,x))).collect();
-        let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
+        let ranges: Vec<Range<usize>> = make_disjoint_range_permutation(n, rm_items, &mut rng);
 
         let mut orig = IntervalTeardownSet::new(elems);
         let mut output = Vec::with_capacity(orig.size());
@@ -814,7 +814,7 @@ mod test_delete_interval {
         assert!(flt_items <= n);
         let mut rng = XorShiftRng::from_seed([96511, 42, 1423, 51984]);
         let elems: Vec<_> = (0..n).map(|x| (KeyInterval::new(x,x))).collect();
-        let ranges: Vec<Range<usize>> = make_teardown_seq(n, rm_items, &mut rng);
+        let ranges: Vec<Range<usize>> = make_disjoint_range_permutation(n, rm_items, &mut rng);
         let mut flt_elems: Vec<_> = elems.clone();
 
         for i in 0..(n-flt_items) {
