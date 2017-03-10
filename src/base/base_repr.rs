@@ -52,7 +52,7 @@ impl<N: Node> TreeRepr<N> {
             mask.set_len(size);
         }
 
-        let height = Self::build_complete(&mut sorted, 0, &mut data, &mut mask, &|item| N::from_tuple(item));
+        let height = Self::build_nearly_complete(&mut sorted, 0, &mut data, &mut mask, &|item| N::from_tuple(item));
         // As per contract with `build()`, we safely dispose of the contents of `sorted` without dropping them.
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
@@ -306,7 +306,7 @@ impl<N: Node> TreeRepr<N> {
 
     /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
     /// make sure the contents are never reused or dropped after this call returns.
-    pub fn build_complete<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
+    pub fn build_nearly_complete<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
         where G: Fn(T) -> U
     {
         let len = sorted.len();
@@ -348,7 +348,7 @@ impl<N: Node> TreeRepr<N> {
 
     /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
     /// make sure the contents are never reused or dropped after this call returns.
-    pub fn build_dispersed<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
+    pub fn build_with_dispersed_gaps<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
         where G: Fn(T) -> U
     {
         let len = sorted.len();
@@ -542,7 +542,7 @@ impl<N: Node> TreeRepr<N> {
             false
         });
 
-        Self::build_dispersed(&inorder_items, root, &mut self.data, &mut self.mask, &|node| node);
+        Self::build_with_dispersed_gaps(&inorder_items, root, &mut self.data, &mut self.mask, &|node| node);
 
         self.size += 1;
 
@@ -572,7 +572,7 @@ impl<N: Node> TreeRepr<N> {
         self.mask = mask;
 
         // build the tree
-        Self::build_dispersed(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|node| node);
+        Self::build_with_dispersed_gaps(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|node| node);
 
         mem::forget(inorder_items);
     }
@@ -1213,7 +1213,7 @@ mod bench {
         let mut mask = Vec::with_capacity(n);
 
         bencher.iter(|| {
-            let height = TreeRepr::<Nd>::build_complete(&mut items, 0, &mut data, &mut mask, &|item| Nd::from_tuple(item));
+            let height = TreeRepr::<Nd>::build_nearly_complete(&mut items, 0, &mut data, &mut mask, &|item| Nd::from_tuple(item));
             test::black_box(height);
         });
     }
