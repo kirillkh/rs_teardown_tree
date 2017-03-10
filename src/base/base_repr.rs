@@ -52,7 +52,7 @@ impl<N: Node> TreeRepr<N> {
             mask.set_len(size);
         }
 
-        let height = Self::build(&mut sorted, 0, &mut data, &mut mask, &|item| N::from_tuple(item));
+        let height = Self::build_complete(&mut sorted, 0, &mut data, &mut mask, &|item| N::from_tuple(item));
         // As per contract with `build()`, we safely dispose of the contents of `sorted` without dropping them.
         unsafe { sorted.set_len(0); }
         let cache = DeleteRangeCache::new(height);
@@ -306,7 +306,7 @@ impl<N: Node> TreeRepr<N> {
 
     /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
     /// make sure the contents are never reused or dropped after this call returns.
-    pub fn build<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
+    pub fn build_complete<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
         where G: Fn(T) -> U
     {
         let len = sorted.len();
@@ -329,6 +329,72 @@ impl<N: Node> TreeRepr<N> {
 
 
             if local_idx < len {
+                let local_depth = depth_of(local_idx);
+                let global_idx = local_idx + (root << local_depth);
+
+                unsafe {
+                    let item = ptr::read(psrc.offset(src_offs as isize));
+                    ptr::write(pdst.offset(global_idx as isize), convert(item));
+                    *mask.get_unchecked_mut(global_idx) = true;
+                }
+                src_offs += 1;
+            } else {
+                skipped += 1;
+            }
+        }
+
+        height
+    }
+
+    /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
+    /// make sure the contents are never reused or dropped after this call returns.
+    pub fn build_dispersed<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
+        where G: Fn(T) -> U
+    {
+        let len = sorted.len();
+        if len  == 0 {
+            return 0;
+        }
+
+        let height = depth_of(len-1) + 1;
+        let complete_count = (1 << height) - 1;
+
+        let complete_leaves = (complete_count+1) >> 1;
+        let internal_nodes = complete_count - complete_leaves;
+        let leaves = len - internal_nodes;
+        let nils = complete_leaves - leaves;
+
+        let full_gap = nils / leaves;
+        let mut remainder = nils % leaves;
+        let mut gap = 0;
+
+        let psrc = sorted.as_ptr();
+        let pdst = data.as_mut_ptr();
+
+        let mut skipped = 0;
+        let mut src_offs = 0;
+        while src_offs < len {
+            let inorder = src_offs+skipped;
+            let local_idx = a025480(complete_count+1+inorder) - 1;
+
+            let mut skip = local_idx >= internal_nodes;
+            if skip {
+                skip = if gap == 0 {
+                    gap = full_gap +
+                        if remainder != 0 {
+                            remainder -= 1;
+                            1
+                        } else {
+                            0
+                        };
+                    false
+                } else {
+                    gap -= 1;
+                    true
+                }
+            }
+
+            if !skip {
                 let local_depth = depth_of(local_idx);
                 let global_idx = local_idx + (root << local_depth);
 
@@ -476,7 +542,7 @@ impl<N: Node> TreeRepr<N> {
             false
         });
 
-        Self::build(&inorder_items, root, &mut self.data, &mut self.mask, &|node| node);
+        Self::build_dispersed(&inorder_items, root, &mut self.data, &mut self.mask, &|node| node);
 
         self.size += 1;
 
@@ -506,7 +572,7 @@ impl<N: Node> TreeRepr<N> {
         self.mask = mask;
 
         // build the tree
-        Self::build(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|node| node);
+        Self::build_dispersed(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|node| node);
 
         mem::forget(inorder_items);
     }
@@ -1147,7 +1213,7 @@ mod bench {
         let mut mask = Vec::with_capacity(n);
 
         bencher.iter(|| {
-            let height = TreeRepr::<Nd>::build(&mut items, 0, &mut data, &mut mask, &|item| Nd::from_tuple(item));
+            let height = TreeRepr::<Nd>::build_complete(&mut items, 0, &mut data, &mut mask, &|item| Nd::from_tuple(item));
             test::black_box(height);
         });
     }
