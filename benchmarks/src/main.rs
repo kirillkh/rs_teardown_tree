@@ -1070,11 +1070,11 @@ mod bench_teardown {
         }
 
         fn descr_cycle() -> String {
-            "BST::remove_range()".to_string()
+            "UnbalancedBST::remove_range()".to_string()
         }
 
         fn descr_refill() -> String {
-            "BST".to_string()
+            "UnbalancedBST".to_string()
         }
     }
 

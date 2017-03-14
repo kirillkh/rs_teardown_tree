@@ -108,12 +108,16 @@ The first set of benchmarks compares ``TeardownTree::delete_range()`` against:
 2. |treap|_
 3. |splay|_
 4. ``TeardownSet::delete()``, which deletes a single element
+5. |unbalanced|_, a pointer-based Binary Search Tree that uses an efficient delete_range() algorithm
 
 .. |treap| replace:: ``Treap``
 .. _treap: https://github.com/kirillkh/treap-rs
 
 .. |splay| replace:: ``SplayTree``
 .. _splay: https://github.com/kirillkh/splay-rs
+
+.. |unbalanced| replace:: ``UnbalancedBST``
+.. _unbalanced: https://github.com/kirillkh/rs_teardown_tree/tree/master/benchmarks/src/bst
 
 I made straightforward modifications to ``Treap`` and ``SplayTree`` in order to add support for **delete_range**, however
 ``BTreeSet`` lacks an equivalent operation (it has an ``O(log n)`` ``split``, but not ``merge``, see
