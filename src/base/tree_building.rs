@@ -1,4 +1,4 @@
-use base::{Node, TreeRepr, parenti, wparenti, lefti, righti, depth_of, TraverseMut, right_enclosing, left_enclosing};
+use base::{Node, TreeRepr, parenti, lefti, righti, depth_of, TraverseMut};
 
 use std::mem;
 use std::cmp::{max};
@@ -35,7 +35,7 @@ impl BuildIter {
 
 
 impl Iterator for BuildIter {
-    type Item = (usize, usize);
+    type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
         let (src_offs, count) = (self.src_offs, self.count);
@@ -54,7 +54,7 @@ impl Iterator for BuildIter {
                 if dst_idx < count {
                     self.src_offs += 1;
 //                    println!("count={}, returning {} -> {}", count, self.src_offs-1, dst_idx);
-                    return Some((dst_idx, depth_of(dst_idx)));
+                    return Some(dst_idx)
                 } else {
 //                    println!("count={}, skipping {} -> {}", count, self.src_offs-1, dst_idx);
                     self.skipped += 1;
@@ -72,83 +72,15 @@ impl Iterator for BuildIter {
 impl ExactSizeIterator for BuildIter {}
 
 
-struct FwdRebuildIter {
-    remaining: usize,
-    complete_height: usize,
+
+struct RebuildIter {
+    end: usize,
+    start: usize,
+    height: usize,
     complete_count: usize,
-
-    next: usize,
-    depth: usize,
 }
 
-impl FwdRebuildIter {
-    pub fn new(count: usize) -> Self {
-        let height =
-            if count == 0 {
-                0
-            } else {
-                depth_of(count - 1) + 1
-            };
-        let complete_count = (1 << height) - 1;
-        let fst = a025480(2*complete_count + 1 - count) - 1;
-        let depth = depth_of(fst);
-        FwdRebuildIter { remaining: count, complete_height: height, complete_count: complete_count, next: fst, depth: depth }
-    }
-
-    #[inline] fn complete_subtree_min(root: usize, complete_subtree_height: usize) -> usize {
-        ((root+1) << (complete_subtree_height-1)) - 1
-    }
-
-    pub fn relative_to(self, root: usize) -> GlobalBuildIter<Self> {
-        GlobalBuildIter { root:root, local: self }
-    }
-}
-
-
-impl Iterator for FwdRebuildIter {
-    type Item = (usize, usize);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining == 0 {
-            None
-        } else {
-            let ret = (self.next, self.depth);
-            if self.depth + 1 == self.complete_height {
-                let l_enclosing = left_enclosing(self.next+1);
-                self.next = parenti(l_enclosing.wrapping_sub(1));
-                self.depth = depth_of(self.next);
-            } else {
-                let right = righti(self.next);
-                self.next = Self::complete_subtree_min(right, self.complete_height - 1 - self.depth);
-                self.depth = self.complete_height - 1;
-            }
-
-            self.remaining -= 1;
-            Some(ret)
-        }
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remaining, Some(self.remaining))
-    }
-}
-
-impl ExactSizeIterator for FwdRebuildIter {}
-
-
-
-
-
-struct BckRebuildIter {
-    remaining: usize,
-    complete_height: usize,
-    complete_count: usize,
-
-    next: usize,
-    depth: usize,
-}
-
-impl BckRebuildIter {
+impl RebuildIter {
     pub fn new(count: usize) -> Self {
         let height =
             if count == 0 {
@@ -158,14 +90,7 @@ impl BckRebuildIter {
             };
         let complete_count = (1 << height) - 1;
 
-        let fst = Self::complete_subtree_max(0, height);
-        Self { remaining: count, complete_height: height, complete_count: complete_count, next: fst, depth: height-1 }
-    }
-
-    #[inline] fn complete_subtree_max(root: usize, complete_subtree_height: usize) -> usize {
-        let h = complete_subtree_height;
-        (root << (h-1)) +
-        ((1 << h) - 2)
+        RebuildIter { start: 0, end: count, height: height, complete_count: complete_count, }
     }
 
     pub fn relative_to(self, root: usize) -> GlobalBuildIter<Self> {
@@ -174,55 +99,58 @@ impl BckRebuildIter {
 }
 
 
-impl Iterator for BckRebuildIter {
-    type Item = (usize, usize);
+impl Iterator for RebuildIter {
+    type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.remaining == 0 {
+        if self.start == self.end {
             None
         } else {
-            let ret = (self.next, self.depth);
-            if self.depth + 1 == self.complete_height {
-                let r_enclosing = right_enclosing(self.next+1);
-                self.next = wparenti(r_enclosing.wrapping_sub(1));
-                self.depth = depth_of(self.next);
-            } else {
-                let left = lefti(self.next);
-                self.next = Self::complete_subtree_max(left, self.complete_height - 1 - self.depth);
-                self.depth = self.complete_height - 1;
-            }
-
-            self.remaining -= 1;
-            Some(ret)
+            let dst_idx = a025480(2*self.complete_count + 1 - self.end) - 1;
+            self.end -= 1;
+//            println!("complete_count={}, returning {} -> {}", self.complete_count, self.src_offs-1, dst_idx);
+            Some(dst_idx)
         }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (self.remaining, Some(self.remaining))
+        let remaining = self.end - self.start;
+        (remaining, Some(remaining))
     }
 }
 
-impl ExactSizeIterator for BckRebuildIter {}
+impl ExactSizeIterator for RebuildIter {}
+
+impl DoubleEndedIterator for RebuildIter {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.start == self.end {
+            None
+        } else {
+            self.start += 1;
+            let dst_idx = a025480(2*self.complete_count + 1 - self.start) - 1;
+//            println!("complete_count={}, returning {} -> {}", self.complete_count, self.src_offs-1, dst_idx);
+            Some(dst_idx)
+        }
+    }
+}
 
 
 
-
-
-
-struct GlobalBuildIter<I: Iterator<Item=(usize, usize)>> {
+struct GlobalBuildIter<I: Iterator<Item=usize>> {
     root: usize,
-    local: I,
+    local: I
 }
 
-impl<I: Iterator<Item=(usize, usize)>> GlobalBuildIter<I> {
-    #[inline] fn to_global(&self, local_idx: Option<(usize, usize)>) -> Option<usize> {
-        local_idx.map(|(local_idx, depth)| {
-            local_idx + (self.root << depth)
+impl<I: Iterator<Item=usize>> GlobalBuildIter<I> {
+    #[inline] fn to_global(&self, local_idx: Option<usize>) -> Option<usize> {
+        local_idx.map(|local_idx| {
+            let local_depth = depth_of(local_idx);
+            local_idx + (self.root << local_depth)
         })
     }
 }
 
-impl<I: Iterator<Item=(usize, usize)>> Iterator for GlobalBuildIter<I> {
+impl<I: Iterator<Item=usize>> Iterator for GlobalBuildIter<I> {
     type Item = usize;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -233,12 +161,19 @@ impl<I: Iterator<Item=(usize, usize)>> Iterator for GlobalBuildIter<I> {
     fn size_hint(&self) -> (usize, Option<usize>) { self.local.size_hint() }
 }
 
-impl<I: Iterator<Item=(usize, usize)>> ExactSizeIterator for GlobalBuildIter<I> {}
+impl<I: Iterator<Item=usize>> ExactSizeIterator for GlobalBuildIter<I> {}
+
+impl<I: Iterator<Item=usize>+DoubleEndedIterator> DoubleEndedIterator for GlobalBuildIter<I> {
+    fn next_back(&mut self) -> Option <Self::Item> {
+        let next = self.local.next_back();
+        self.to_global(next)
+    }
+}
 
 
 
 
-    // building and rebuilding
+// building and rebuilding
 impl<N: Node> TreeRepr<N> {
     #[inline(never)]
     pub fn rebuild_subtree2(&mut self, root: usize, insert_offs: usize, count: usize, item: (N::K, N::V))
@@ -246,9 +181,9 @@ impl<N: Node> TreeRepr<N> {
         let capacity = self.capacity();
 
         // 1. rebuild the subtree at the bottom right corner of the complete subtree's storage
-        let dst_iter = BckRebuildIter::new(count);
+        let dst_iter = RebuildIter::new(count);
 
-        let complete_subtree_height = dst_iter.complete_height;
+        let complete_subtree_height = dst_iter.height;
         let complete_tree_height = self.complete_height();
         let root_depth = depth_of(root);
 
@@ -260,7 +195,7 @@ impl<N: Node> TreeRepr<N> {
 
 //        println!("count={}, root={}, dst_root={}, subtree_height={}, sotrage_h={}, root_d={}", count, root, dst_root, subtree_height, storage_height, root_depth);
 
-        let mut dst_iter = dst_iter.relative_to(dst_root).enumerate();
+        let mut dst_iter = dst_iter.relative_to(dst_root).rev().enumerate();
         let rev_insert_offs = count - insert_offs - 1;
 
         let mut item = N::from_tuple(item);
@@ -334,7 +269,7 @@ impl<N: Node> TreeRepr<N> {
 //        });
 
         let src_root = dst_root;
-        let mut src_iter = FwdRebuildIter::new(count).relative_to(src_root);
+        let mut src_iter = RebuildIter::new(count).relative_to(src_root);
         let mut dst_iter = BuildIter::new(count).relative_to(root);
         let mut iter = src_iter.zip(dst_iter);
 
@@ -553,7 +488,7 @@ fn a025480(k: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use applied::plain_tree::PlTree;
-    use super::{FwdRebuildIter, BckRebuildIter};
+    use super::RebuildIter;
 
     #[test]
     fn test_a025480() {
@@ -587,29 +522,29 @@ mod tests {
 
     #[test]
     fn fwd_rebuild_iter() {
-        let mut iter = FwdRebuildIter::new(1).relative_to(0);
+        let mut iter = RebuildIter::new(1);
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), None);
 
-        let mut iter = FwdRebuildIter::new(2).relative_to(0);
+        let mut iter = RebuildIter::new(2);
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), None);
 
-        let mut iter = FwdRebuildIter::new(3).relative_to(0);
+        let mut iter = RebuildIter::new(3);
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), None);
 
-        let mut iter = FwdRebuildIter::new(4).relative_to(0);
+        let mut iter = RebuildIter::new(4);
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(5));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), None);
 
-        let mut iter = FwdRebuildIter::new(5).relative_to(0);
+        let mut iter = RebuildIter::new(5);
         assert_eq!(iter.next(), Some(4));
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(5));
@@ -617,7 +552,7 @@ mod tests {
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), None);
 
-        let mut iter = FwdRebuildIter::new(6).relative_to(0);
+        let mut iter = RebuildIter::new(6);
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(4));
         assert_eq!(iter.next(), Some(0));
@@ -626,7 +561,7 @@ mod tests {
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), None);
 
-        let mut iter = FwdRebuildIter::new(7).relative_to(0);
+        let mut iter = RebuildIter::new(7);
         assert_eq!(iter.next(), Some(3));
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), Some(4));
@@ -636,7 +571,7 @@ mod tests {
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), None);
 
-        let mut iter = FwdRebuildIter::new(8).relative_to(0);
+        let mut iter = RebuildIter::new(8);
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(11));
         assert_eq!(iter.next(), Some(5));
@@ -650,29 +585,29 @@ mod tests {
 
     #[test]
     fn bck_rebuild_iter() {
-        let mut iter = BckRebuildIter::new(1).relative_to(0);
+        let mut iter = RebuildIter::new(1).rev();
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), None);
 
-        let mut iter = BckRebuildIter::new(2).relative_to(0);
+        let mut iter = RebuildIter::new(2).rev();
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), None);
 
-        let mut iter = BckRebuildIter::new(3).relative_to(0);
+        let mut iter = RebuildIter::new(3).rev();
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), None);
 
-        let mut iter = BckRebuildIter::new(4).relative_to(0);
+        let mut iter = RebuildIter::new(4).rev();
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(5));
         assert_eq!(iter.next(), Some(0));
         assert_eq!(iter.next(), None);
 
-        let mut iter = BckRebuildIter::new(5).relative_to(0);
+        let mut iter = RebuildIter::new(5).rev();
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(5));
@@ -680,7 +615,7 @@ mod tests {
         assert_eq!(iter.next(), Some(4));
         assert_eq!(iter.next(), None);
 
-        let mut iter = BckRebuildIter::new(6).relative_to(0);
+        let mut iter = RebuildIter::new(6).rev();
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(5));
@@ -689,7 +624,7 @@ mod tests {
         assert_eq!(iter.next(), Some(1));
         assert_eq!(iter.next(), None);
 
-        let mut iter = BckRebuildIter::new(7).relative_to(0);
+        let mut iter = RebuildIter::new(7).rev();
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), Some(2));
         assert_eq!(iter.next(), Some(5));
@@ -699,7 +634,7 @@ mod tests {
         assert_eq!(iter.next(), Some(3));
         assert_eq!(iter.next(), None);
 
-        let mut iter = BckRebuildIter::new(8).relative_to(0);
+        let mut iter = RebuildIter::new(8).rev();
         assert_eq!(iter.next(), Some(14));
         assert_eq!(iter.next(), Some(6));
         assert_eq!(iter.next(), Some(13));
