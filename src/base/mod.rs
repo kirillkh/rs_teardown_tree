@@ -51,6 +51,11 @@ pub fn parenti(idx: usize) -> usize {
 }
 
 #[inline(always)]
+pub fn wparenti(idx: usize) -> usize {
+    (idx.wrapping_sub(1)) >> 1
+}
+
+#[inline(always)]
 pub fn lefti(idx: usize) -> usize {
     (idx<<1) + 1
 }

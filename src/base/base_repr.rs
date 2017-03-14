@@ -721,7 +721,7 @@ impl<N: Node> Refill for TreeRepr<N> where N::K: Copy, N::V: Copy {
 /// child.
 /// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
 #[inline(always)]
-fn left_enclosing(idx: usize) -> usize {
+pub fn left_enclosing(idx: usize) -> usize {
     if idx & 1 == 0 {
         idx
     } else if idx & 2 == 0 {
@@ -739,7 +739,7 @@ fn left_enclosing(idx: usize) -> usize {
 /// child.
 /// **Attention!** For efficiency reasons, idx and return value are both **1-based**.
 #[inline(always)]
-fn right_enclosing(idx: usize) -> usize {
+pub fn right_enclosing(idx: usize) -> usize {
     if idx & 1 == 1 {
         idx
     } else if idx & 2 == 1 {
@@ -779,9 +779,9 @@ impl<'a, N: Node> Iterator for Iter<'a, N> where N: 'a, N::K: 'a, N::V: 'a {
         } else {
             self.next_idx =
                 self.tree.successor(curr)
-                    .map_or_else(|| self.tree.data.capacity(), |x| x);
+                    .map_or_else(|| self.tree.capacity(), |x| x);
             self.remaining -= 1;
-            Some(self.tree.node(curr).deref())
+            Some(&*self.tree.node(curr))
         }
     }
 
