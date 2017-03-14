@@ -178,7 +178,7 @@ impl<K: Key, V> PlTree<K, V> {
             
             // TODO: we avoid floating-point division for numeric stability and speed, but it will cause overflow for extremely big trees
             if count * 2 * (h-1) <= complete_count * (h-1+d) {
-                self.rebuild_subtree(idx, insert_offs, count, item);
+                self.rebuild_subtree2(idx, insert_offs, count, item);
                 break;
             }
         }
@@ -379,13 +379,13 @@ impl<K: Key, V> PlTree<K, V> {
             }
         }
 
-        TreeRepr::traverse_inorder_from(self, from, 0, &mut sink, |this, sink, idx| {
+        TreeRepr::traverse_inorder_from(self, from, 0, &mut sink, (), |this, sink, idx| {
             let node = this.node(idx);
             if &query.end <= node.key() && &query.start != node.key() {
-                true
+                Some(())
             } else {
                 sink.consume(node.as_tuple());
-                false
+                None
             }
         })
     }
@@ -694,12 +694,21 @@ pub mod tests {
 
 
     #[test]
-    pub fn test_insert() {
+    pub fn insert_iter() {
         let n = 1000;
 
         let tree = &mut PlTree::new(vec![]);
-        for i in 0..n {
+        for i in (0..n).rev() {
+//            println!("i={}, tree={}", i, &tree);
             ins(tree, i);
+            assert_eq!(to_vec(tree), (i..n).collect::<Vec<_>>());
+        }
+
+        let tree = &mut PlTree::new(vec![]);
+        for i in 0..n {
+//            println!("i={}, tree={}", i, &tree);
+            ins(tree, i);
+            assert_eq!(tree.size(), i+1);
             assert_eq!(to_vec(tree), (0..i+1).collect::<Vec<_>>());
         }
 
@@ -711,16 +720,60 @@ pub mod tests {
     }
 
     #[test]
-    pub fn test_insert_rng() {
-        let n = 100000;
+    pub fn insert_rng() {
+        let n = 30;
         let mut rng = XorShiftRng::new_unseeded();
 
-        let seq = make_permutation(n, &mut rng);
-        let tree = &mut PlTree::new(vec![]);
-        for i in 0..n {
-            ins(tree, seq[i]);
+        for j in 0..1000 {
+            let seq = make_permutation(n, &mut rng);
+            let tree = &mut PlTree::new(vec![]);
+            for i in 0..n {
+//            println!("i={}, seq[i]={}, tree={}", i, seq[i], &tree);
+                ins(tree, seq[i]);
+                assert_eq!(tree.size(), i + 1);
+            }
+            assert_eq!(to_vec(tree), (0..n).collect::<Vec<_>>());
         }
-        assert_eq!(to_vec(tree), (0..n).collect::<Vec<_>>());
+    }
+
+    #[test]
+    pub fn insert_predef() {
+        let items: Vec<_> = (0..255).map(|x| (x, x)).collect();
+
+        let mut tree = &mut PlTree::new(items.clone());
+        tree.delete_range(0..items.len(), vec![]);
+        ins(tree, 9);
+        ins(tree, 0);
+        ins(tree, 8);
+        ins(tree, 1);
+        ins(tree, 2);
+        ins(tree, 6);
+        ins(tree, 7);
+        ins(tree, 5);
+        ins(tree, 3);
+        ins(tree, 4);
+        assert_eq!(tree.size(), 10);
+        assert_eq!(to_vec(tree), (0..10).collect::<Vec<_>>());
+
+        let mut tree = &mut PlTree::new(items.clone());
+        tree.delete_range(0..items.len(), vec![]);
+        ins(tree, 0);
+        ins(tree, 1);
+        ins(tree, 2);
+        ins(tree, 4);
+        ins(tree, 3);
+        assert_eq!(tree.size(), 5);
+        assert_eq!(to_vec(tree), (0..5).collect::<Vec<_>>());
+
+        let mut tree = &mut PlTree::new(items.clone());
+        tree.delete_range(0..items.len(), vec![]);
+        ins(tree, 4);
+        ins(tree, 3);
+        ins(tree, 2);
+        ins(tree, 0);
+        ins(tree, 1);
+        assert_eq!(tree.size(), 5);
+        assert_eq!(to_vec(tree), (0..5).collect::<Vec<_>>());
     }
 }
 

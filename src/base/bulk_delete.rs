@@ -59,9 +59,9 @@ pub trait BulkDeleteCommon<N: Node>: TreeDerefMut<N>+Sized  {
         // work around the borrow checker (this is completely safe)
         let sink: &mut Self::Sink = unsafe { mem::transmute(self.sink_mut()) };
 
-        TreeRepr::traverse_inorder_mut(self, root, sink, |this, sink, idx| {
+        TreeRepr::traverse_inorder_mut(self, root, &mut (), (), |this, _, idx| {
             this.move_to(idx, sink);
-            false
+            None
         });
     }
 

@@ -478,11 +478,11 @@ mod test_query_plain {
         check_output_sorted(&output, &*tree.internal(), &search);
 
         let mut expected = vec![];
-        TreeRepr::traverse_inorder(&*tree.internal(), 0, &mut (), |this, _, idx| {
+        TreeRepr::traverse_inorder(&*tree.internal(), 0, &mut (), (), |this, _, idx| {
             if this.key(idx).overlaps(&search) {
                 expected.push(this.key(idx).clone());
             }
-            false
+            None
         });
 
         assert_eq!(output, expected, "range={:?}, tree={}", &range, &tree);
@@ -1065,9 +1065,9 @@ mod common {
               Search: Interval<K=usize>+Debug,
               Flt: ItemFilter<K>
     {
-        TreeRepr::traverse_inorder(tree, 0, &mut (), |this, _, idx| {
+        TreeRepr::traverse_inorder(tree, 0, &mut (), (), |this, _, idx| {
             assert!(!this.key(idx).overlaps(search) || !flt.accept(this.key(idx)), "idx={}, key(idx)={:?}, search={:?}, tree={:?}, {}", idx, this.key(idx), search, this, this);
-            false
+            None
         });
     }
 

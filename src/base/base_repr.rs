@@ -21,8 +21,8 @@ impl<N: Node, T> TreeDerefMut<N> for T where T: Deref<Target=TreeRepr<N>> + Dere
 
 #[derive(Clone)]
 pub struct TreeRepr<N: Node> {
-    data: Vec<N>,
-    mask: Vec<bool>,
+    pub data: Vec<N>,
+    pub mask: Vec<bool>,
     pub size: usize,
 
     delete_range_cache: DeleteRangeCache,
@@ -52,9 +52,8 @@ impl<N: Node> TreeRepr<N> {
             mask.set_len(size);
         }
 
-        let height = Self::build_nearly_complete(&mut sorted, 0, &mut data, &mut mask, &|item| N::from_tuple(item));
-        // As per contract with `build()`, we safely dispose of the contents of `sorted` without dropping them.
-        unsafe { sorted.set_len(0); }
+        let iter = sorted.into_iter().map(|item| N::from_tuple(item));
+        let height = Self::build_nearly_complete(iter, size, 0, &mut data, &mut mask);
         let cache = DeleteRangeCache::new(height);
         TreeRepr { data: data, mask: mask, size: size, delete_range_cache: cache }
     }
@@ -294,127 +293,10 @@ impl<N: Node> TreeRepr<N> {
 
 //---- Helpers -------------------------------------------------------------------------------------
 impl<N: Node> TreeRepr<N> {
-    fn calc_height(nodes: &Vec<Option<N>>, idx: usize) -> usize {
-        if idx < nodes.len() && nodes[idx].is_some() {
-            1 + max(Self::calc_height(nodes, lefti(idx)),
-                    Self::calc_height(nodes, righti(idx)))
-        } else {
-            0
-        }
-    }
-
-
-    /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
-    /// make sure the contents are never reused or dropped after this call returns.
-    pub fn build_nearly_complete<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
-        where G: Fn(T) -> U
-    {
-        let len = sorted.len();
-        if len  == 0 {
-            return 0;
-        }
-
-        let height = depth_of(len-1) + 1;
-        let complete_count = (1 << height) - 1;
-
-        let psrc = sorted.as_ptr();
-        let pdst = data.as_mut_ptr();
-
-        let mut skipped = 0;
-        let mut src_offs = 0;
-        while src_offs < len {
-//            let local_idx = inorder_to_idx_n(src_offs+skipped, complete_count);
-            let inorder = src_offs+skipped;
-            let local_idx = a025480(complete_count+1+inorder) - 1;
-
-
-            if local_idx < len {
-                let local_depth = depth_of(local_idx);
-                let global_idx = local_idx + (root << local_depth);
-
-                unsafe {
-                    let item = ptr::read(psrc.offset(src_offs as isize));
-                    ptr::write(pdst.offset(global_idx as isize), convert(item));
-                    *mask.get_unchecked_mut(global_idx) = true;
-                }
-                src_offs += 1;
-            } else {
-                skipped += 1;
-            }
-        }
-
-        height
-    }
-
-    /// Returns the height of the tree. This consumes the contents of `data`, so the caller must
-    /// make sure the contents are never reused or dropped after this call returns.
-    pub fn build_with_dispersed_gaps<T, U, G>(sorted: &[T], root: usize, data: &mut [U], mask: &mut [bool], convert: G) -> usize
-        where G: Fn(T) -> U
-    {
-        let len = sorted.len();
-        if len  == 0 {
-            return 0;
-        }
-
-        let height = depth_of(len-1) + 1;
-        let complete_count = (1 << height) - 1;
-
-        let complete_leaves = (complete_count+1) >> 1;
-        let internal_nodes = complete_count - complete_leaves;
-        let leaves = len - internal_nodes;
-        let nils = complete_leaves - leaves;
-
-        let full_gap = nils / leaves;
-        let mut remainder = nils % leaves;
-        let mut gap = 0;
-
-        let psrc = sorted.as_ptr();
-        let pdst = data.as_mut_ptr();
-
-        let mut skipped = 0;
-        let mut src_offs = 0;
-        while src_offs < len {
-            let inorder = src_offs+skipped;
-            let local_idx = a025480(complete_count+1+inorder) - 1;
-
-            let mut skip = local_idx >= internal_nodes;
-            if skip {
-                skip = if gap == 0 {
-                    gap = full_gap +
-                        if remainder != 0 {
-                            remainder -= 1;
-                            1
-                        } else {
-                            0
-                        };
-                    false
-                } else {
-                    gap -= 1;
-                    true
-                }
-            }
-
-            if !skip {
-                let local_depth = depth_of(local_idx);
-                let global_idx = local_idx + (root << local_depth);
-
-                unsafe {
-                    let item = ptr::read(psrc.offset(src_offs as isize));
-                    ptr::write(pdst.offset(global_idx as isize), convert(item));
-                    *mask.get_unchecked_mut(global_idx) = true;
-                }
-                src_offs += 1;
-            } else {
-                skipped += 1;
-            }
-        }
-
-        height
-    }
 
     #[inline]
     pub fn successor(&self, curr: usize) -> Option<usize> {
-        let next = if self.has_right(curr) {
+        let succ = if self.has_right(curr) {
             self.find_min(righti(curr))
         } else {
             let l_enclosing = left_enclosing(curr+1);
@@ -427,154 +309,34 @@ impl<N: Node> TreeRepr<N> {
             parenti(l_enclosing-1)
         };
 
-        Some(next)
+        Some(succ)
     }
 
+    #[inline]
+    pub fn predecessor(&self, curr: usize) -> Option<usize> {
+        let pred = if self.has_left(curr) {
+            self.find_max(lefti(curr))
+        } else {
+            let r_enclosing = right_enclosing(curr+1);
 
-
-//    pub fn double_and_rebuild(&mut self, item: (N::K, N::V)) {
-//        let base = self.capacity();
-//        let capacity = base * 2 + 1;
-//        let mut data = Vec::with_capacity(capacity);
-//        let mut mask = vec![false; capacity];
-//
-//        // copy the nodes in-order into the leaves of the new tree
-//
-//        let pdst: *mut N = unsafe { data.as_mut_ptr().offset(base as isize) };
-//        let psrc: *const N = unsafe { self.data.as_ptr() };
-//
-//        let mut inorder_offs = 0;
-//        let mut prev_idx = 0;
-//
-//        Self::traverse_inorder_mut(self, 0, &mut inorder_offs, |_, inorder_offs, idx| {
-//            unsafe {
-//                let node = ptr::read(psrc.offset(idx as isize));
-//                prev_idx = idx;
-//                if &item.0 < node.key() {
-//                    return true;
-//                }
-//                ptr::write(pdst.offset(*inorder_offs), node);
-//            }
-//            *inorder_offs += 1;
-//            false
-//        });
-//
-//        unsafe {
-//            ptr::write(pdst.offset(inorder_offs), N::from_tuple(item));
-//        }
-//        inorder_offs += 1;
-//
-//        Self::traverse_inorder_from_mut(self, prev_idx, 0, &mut inorder_offs, |_, inorder_offs, idx| {
-//            unsafe {
-//                let node = ptr::read(psrc.offset(idx as isize));
-//                ptr::write(pdst.offset(*inorder_offs), node);
-//            }
-//            *inorder_offs += 1;
-//            false
-//        });
-//
-//        let mut old_data = mem::replace(&mut self.data, data);
-//        unsafe {
-//            self.data.set_len(capacity);
-//            // the items have been moved to the new storage, don't drop them
-//            old_data.set_len(0);
-//        }
-//        self.mask = mask;
-//        self.size += 1;
-//
-//        // build the tree
-//        {
-//            let src: &mut [N] = unsafe { mem::transmute(&mut self.data[base .. base+self.size]) };
-//            let dst: &mut [N] = &mut self.data;
-//            Self::build(src, 0, dst, &mut self.mask, &|n| n >> 1, &|node| node);
-//        }
-//    }
-    pub fn layout_inorder_for_insert(&mut self, root: usize, dst: &mut Vec<N>, count: usize, item: (N::K, N::V)) {
-        let mut inorder_offs: usize = 0;
-        let mut prev_idx = 0;
-
-        let psrc: *const N = self.data.as_ptr();
-        let pdst: *mut N = unsafe { dst.as_mut_ptr().offset(dst.len() as isize) };
-
-        Self::traverse_inorder_mut(self, root, &mut inorder_offs, |_, inorder_offs, idx| {
-            unsafe {
-                let node = ptr::read(psrc.offset(idx as isize));
-                prev_idx = idx;
-                if &item.0 < node.key() {
-                    return true;
-                }
-                ptr::write(pdst.offset(*inorder_offs as isize), node);
+            if r_enclosing <= 1 {
+                // done
+                return None
             }
-            *inorder_offs += 1;
-            false
-        });
 
-        unsafe {
-            ptr::write(pdst.offset(inorder_offs as isize), N::from_tuple(item));
-        }
-        inorder_offs += 1;
+            parenti(r_enclosing-1)
+        };
 
-        if inorder_offs < count {
-            Self::traverse_inorder_from_mut(self, prev_idx, root, &mut inorder_offs, |_, inorder_offs, idx| {
-                unsafe {
-                    let node = ptr::read(psrc.offset(idx as isize));
-                    ptr::write(pdst.offset(*inorder_offs as isize), node);
-                }
-                *inorder_offs += 1;
-                false
-            });
-        }
-
-        unsafe {
-            let len = dst.len();
-            dst.set_len(len + inorder_offs);
-        }
+        Some(pred)
     }
 
-    pub fn rebuild_subtree(&mut self, root: usize, insert_offs: usize, count: usize, item: (N::K, N::V)) {
-        // copy the items from the tree to a sorted array
-        let mut inorder_items = Vec::with_capacity(count);
-        self.layout_inorder_for_insert(root, &mut inorder_items, count, item);
-
-        // reset the mask, because build re-initializes it
-        Self::traverse_inorder_mut(self, root, &mut (), |this, _, idx| {
-            *this.mask_mut(idx) = false;
-            false
-        });
-
-        Self::build_with_dispersed_gaps(&inorder_items, root, &mut self.data, &mut self.mask, &|node| node);
-
-        self.size += 1;
-
-        // drop the storage, but not the contents: the items have been moved into the tree
-        unsafe { inorder_items.set_len(0); }
-    }
-
-    pub fn double_and_rebuild(&mut self, item: (N::K, N::V)) {
-        let base = self.capacity();
-        let capacity = base * 2 + 1;
-        let mut data = Vec::with_capacity(capacity);
-        let mask = vec![false; capacity];
-        self.size += 1;
-
-        // copy the nodes in-order into the leaves of the new tree
-        let pdst: *mut N = unsafe { data.as_mut_ptr().offset(base as isize) };
-        let mut inorder_items = unsafe { Vec::from_raw_parts(pdst, 0, self.size) };
-        let size = self.size;
-        self.layout_inorder_for_insert(0, &mut inorder_items, size, item);
-
-        let mut old_data = mem::replace(&mut self.data, data);
-        unsafe {
-            self.data.set_len(capacity);
-            // the items have been moved to the new storage, don't drop them
-            old_data.set_len(0);
+    fn calc_height(nodes: &Vec<Option<N>>, idx: usize) -> usize {
+        if idx < nodes.len() && nodes[idx].is_some() {
+            1 + max(Self::calc_height(nodes, lefti(idx)),
+                    Self::calc_height(nodes, righti(idx)))
+        } else {
+            0
         }
-        self.mask = mask;
-
-        // build the tree
-        Self::build_with_dispersed_gaps(&mut inorder_items, 0, &mut self.data, &mut self.mask, &|node| node);
-
-        mem::forget(inorder_items);
     }
 
     /// Returns either the index of the first element equal to `query` if it is contained in the tree;
@@ -653,7 +415,7 @@ impl<N: Node> TreeRepr<N> {
     ///   c) `is_nil(dst)`
     #[inline(always)]
     pub unsafe fn move_from_to(&mut self, src: usize, dst: usize) {
-        debug_assert!(!self.is_nil(src) && self.is_nil(dst), "is_nil(src)={}, is_nil(dst)={}", self.is_nil(src), self.is_nil(dst));
+        debug_assert!(!self.is_nil(src) && self.is_nil(dst) || src==dst, "is_nil(src)={}, is_nil(dst)={}, src={}, dst={}", self.is_nil(src), self.is_nil(dst), src, dst);
         let pdata = self.data.as_mut_ptr();
         let psrc: *mut N = pdata.offset(src as isize);
         let pdst: *mut N = pdata.offset(dst as isize);
@@ -725,9 +487,9 @@ impl<N: Node> TreeRepr<N> {
 
     pub fn count_nodes(&self, root: usize) -> usize {
         let mut count = 0;
-        TreeRepr::traverse_inorder(self, root, &mut count, |_, count, _| {
-            *count += 1;
-            false
+        TreeRepr::traverse_inorder(self, root, &mut (), (), |_, _, _| {
+            count += 1;
+            None
         });
 
         count
@@ -752,7 +514,7 @@ impl<N: Node> IntoIterator for TreeRepr<N> {
 
 
 macro_rules! traverse_preorder_block {
-    ($this:expr, $root:expr, $a:expr, $on_next:expr) => (
+    ($this:expr, $root:expr, $a:expr, $on_next:expr) => ({
         if $this.is_nil($root) {
             return;
         }
@@ -793,22 +555,18 @@ macro_rules! traverse_preorder_block {
                 }
             };
         }
-    )
+    })
 }
 
 macro_rules! traverse_inorder_block {
-    ($this:expr, $from:expr, $root:expr, $a:expr, $on_next:expr) => (
-        if $this.is_nil($root) {
-            return;
-        }
-
+    ($this:expr, $from:expr, $root:expr, $a:expr, $default:expr, $on_next:expr) => ({
         let mut next = $from;
 
         loop {
             next = {
                 let stop = $on_next($this, $a, next);
-                if stop {
-                    break;
+                if let Some(ret) = stop {
+                    return ret;
                 }
 
                 if $this.has_right(next) {
@@ -818,43 +576,42 @@ macro_rules! traverse_inorder_block {
 
                     if l_enclosing <= $root+1 {
                         // done
-                        break;
+                        return $default;
                     }
 
                     parenti(l_enclosing-1)
                 }
             }
         }
-    )
+    })
 }
 
 macro_rules! traverse_inorder_rev_block {
-    ($this:expr, $root:expr, $a:expr, $on_next:expr) => (
-        if $this.is_nil($root) {
-            return;
-        }
-
-        let mut next = $this.find_max($root);
+    ($this:expr, $from:expr, $root:expr, $a:expr, $default:expr, $on_next:expr) => ({
+        let mut next = $from;
 
         loop {
             next = {
-                $on_next($this, $a, next);
+                let stop = $on_next($this, $a, next);
+                if let Some(ret) = stop {
+                    return ret;
+                }
 
                 if $this.has_left(next) {
                     $this.find_max(lefti(next))
                 } else {
-                    let r_enclosing = right_enclosing(next);
+                    let r_enclosing = right_enclosing(next+1);
 
-                    if r_enclosing <= $root {
+                    if r_enclosing <= $root+1 {
                         // done
-                        return;
+                        return $default;
                     }
 
-                    parenti(r_enclosing)
+                    parenti(r_enclosing-1)
                 }
             }
         }
-    )
+    })
 }
 
 pub trait Traverse<N: Node> {
@@ -866,22 +623,35 @@ pub trait Traverse<N: Node> {
     }
 
     #[inline(always)]
-    fn traverse_inorder<'a, A, F>(tree: &'a TreeRepr<N>, root: usize, a: &mut A, on_next: F)
-        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> bool
+    fn traverse_inorder<'a, A, F, U>(tree: &'a TreeRepr<N>, root: usize, a: &mut A, default: U, on_next: F) -> U
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> Option<U>
     {
-        TreeRepr::traverse_inorder_from(tree, tree.find_min(root), root, a, on_next)
+        if tree.is_nil(root) {
+            return default;
+        }
+        TreeRepr::traverse_inorder_from(tree, tree.find_min(root), root, a, default, on_next)
     }
 
-    fn traverse_inorder_from<'a, A, F>(tree: &'a TreeRepr<N>, from: usize, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> bool
+    fn traverse_inorder_from<'a, A, F, U>(tree: &'a TreeRepr<N>, from: usize, root: usize, a: &mut A, default: U, mut on_next: F) -> U
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> Option<U>
     {
-        traverse_inorder_block!(tree, from, root, a, on_next);
+        traverse_inorder_block!(tree, from, root, a, default, on_next)
     }
 
-    fn traverse_inorder_rev<'a, A, F>(tree: &'a TreeRepr<N>, root: usize, a: &mut A, mut on_next: F)
-        where F: FnMut(&'a TreeRepr<N>, &mut A, usize)
+    fn traverse_inorder_rev<'a, A, F, U>(tree: &'a TreeRepr<N>, root: usize, a: &mut A, default: U, mut on_next: F) -> U
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> Option<U>
     {
-        traverse_inorder_rev_block!(tree, root, a, on_next);
+        if tree.is_nil(root) {
+            return default;
+        }
+        let from = tree.find_max(root);
+        Self::traverse_inorder_rev_from(tree, from, root, a, default, on_next)
+    }
+
+    fn traverse_inorder_rev_from<'a, A, F, U>(tree: &'a TreeRepr<N>, from: usize, root: usize, a: &mut A, default: U, mut on_next: F) -> U
+        where F: FnMut(&'a TreeRepr<N>, &mut A, usize) -> Option<U>
+    {
+        traverse_inorder_rev_block!(tree, from, root, a, default, on_next)
     }
 }
 
@@ -889,28 +659,42 @@ pub trait TraverseMut<N: Node>: Traverse<N> {
     fn traverse_preorder_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, mut on_next: F)
         where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize)
     {
-        traverse_preorder_block!(tree, root, a, on_next);
+        traverse_preorder_block!(tree, root, a, on_next)
     }
 
     #[inline(always)]
-    fn traverse_inorder_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, on_next: F)
-        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> bool
+    fn traverse_inorder_mut<'a, A, F, U>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, default: U, on_next: F) -> U
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> Option<U>
     {
+        if tree.is_nil(root) {
+            return default;
+        }
         let from = tree.find_min(root);
-        Self::traverse_inorder_from_mut(tree, from, root, a, on_next)
+        Self::traverse_inorder_from_mut(tree, from, root, a, default, on_next)
     }
 
-    fn traverse_inorder_from_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, from: usize, root: usize, a: &mut A, mut on_next: F)
-        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> bool
+    fn traverse_inorder_from_mut<'a, A, F, U>(tree: &'a mut TreeRepr<N>, from: usize, root: usize, a: &mut A, default: U, mut on_next: F) -> U
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> Option<U>
     {
-        traverse_inorder_block!(tree, from, root, a, on_next);
+        traverse_inorder_block!(tree, from, root, a, default, on_next)
     }
 
 
-    fn traverse_inorder_rev_mut<'a, A, F>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, mut on_next: F)
-        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize)
+    #[inline(always)]
+    fn traverse_inorder_rev_mut<'a, A, F, U>(tree: &'a mut TreeRepr<N>, root: usize, a: &mut A, default: U, on_next: F) -> U
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> Option<U>
     {
-        traverse_inorder_rev_block!(tree, root, a, on_next);
+        if tree.is_nil(root) {
+            return default;
+        }
+        let from = tree.find_max(root);
+        Self::traverse_inorder_rev_from_mut(tree, from, root, a, default, on_next)
+    }
+
+    fn traverse_inorder_rev_from_mut<'a, A, F, U>(tree: &'a mut TreeRepr<N>, from: usize, root: usize, a: &mut A, default: U, mut on_next: F) -> U
+        where for<'b> F: FnMut(&'b mut TreeRepr<N>, &mut A, usize) -> Option<U>
+    {
+        traverse_inorder_rev_block!(tree, from, root, a, default, on_next);
     }
 }
 
@@ -1132,160 +916,5 @@ impl<N: Node> TreeRepr<N> where N: fmt::Debug {
         }
 
         Ok(())
-    }
-}
-
-
-
-#[inline]
-pub fn inorder_to_idx_n(inorder: usize, complete_tree_n: usize) -> usize {
-    debug_assert!(inorder < complete_tree_n, "inorder = {}, complete_tree_n = {}", inorder, complete_tree_n);
-
-    let offs = complete_tree_n + 1;
-    a025480(offs+inorder) - 1
-}
-
-// We use this sequence to implement inorder_to_idx: http://oeis.org/A025480
-#[inline]
-fn a025480(k: usize) -> usize {
-    let shift = (!k).trailing_zeros();
-    k >> (shift+1)
-}
-
-
-
-#[cfg(test)]
-mod tests {
-    use applied::plain_tree::PlTree;
-
-    #[test]
-    fn test_a025480() {
-        let a = &super::a025480;
-        assert_eq!(a(0), 0);
-        assert_eq!(a(1), 0);
-        assert_eq!(a(2), 1);
-        assert_eq!(a(3), 0);
-        assert_eq!(a(4), 2);
-        assert_eq!(a(5), 1);
-        assert_eq!(a(6), 3);
-        assert_eq!(a(7), 0);
-        assert_eq!(a(8), 4);
-        assert_eq!(a(9), 2);
-        assert_eq!(a(10), 5);
-    }
-
-    #[test]
-    fn test_inorder_to_idx_exhaustive() {
-        for h in 1..18 {
-            let n = (1 << h) - 1;
-            let items = (0..n).map(|x| (x, ())).collect();
-            let tree = PlTree::new(items);
-
-            for i in 0..n {
-                let idx = super::inorder_to_idx_n(i, n);
-                assert_eq!(tree.key(idx), &i);
-            }
-        }
-    }
-}
-
-
-
-#[cfg(all(feature = "unstable", test))]
-mod bench {
-    extern crate test;
-
-    use applied::plain_tree::{PlTree, PlNode};
-    use self::test::Bencher;
-
-    use base::{TreeRepr};
-    use base::node::Node;
-
-    type Nd = PlNode<usize, ()>;
-    type Tree = TreeRepr<Nd>;
-
-    fn bench_build(n: usize, bencher: &mut Bencher) {
-        let mut items = (0..n)
-            .map(|x| (x,()))
-            .collect::<Vec<_>>();
-
-        let mut data = Vec::with_capacity(n);
-        let mut mask = Vec::with_capacity(n);
-
-        bencher.iter(|| {
-            let height = TreeRepr::<Nd>::build_nearly_complete(&mut items, 0, &mut data, &mut mask, &|item| Nd::from_tuple(item));
-            test::black_box(height);
-        });
-    }
-
-    #[bench]
-    fn bench_build_00010000(bencher: &mut Bencher) {
-        bench_build(10_000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_00020000(bencher: &mut Bencher) {
-        bench_build(20_000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_00030000(bencher: &mut Bencher) {
-        bench_build(30_000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_00040000(bencher: &mut Bencher) {
-        bench_build(40_000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_00050000(bencher: &mut Bencher) {
-        bench_build(50_000, bencher);
-    }
-
-
-    #[bench]
-    fn bench_build_01000000(bencher: &mut Bencher) {
-        bench_build(1_000_000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_02000000(bencher: &mut Bencher) {
-        bench_build(2_000_000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_03000000(bencher: &mut Bencher) {
-        bench_build(3000000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_04000000(bencher: &mut Bencher) {
-        bench_build(4000000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_05000000(bencher: &mut Bencher) {
-        bench_build(5000000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_06000000(bencher: &mut Bencher) {
-        bench_build(6000000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_07000000(bencher: &mut Bencher) {
-        bench_build(7000000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_08000000(bencher: &mut Bencher) {
-        bench_build(8000000, bencher);
-    }
-
-    #[bench]
-    fn bench_build_09000000(bencher: &mut Bencher) {
-        bench_build(9000000, bencher);
     }
 }

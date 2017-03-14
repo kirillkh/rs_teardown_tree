@@ -3,6 +3,7 @@ mod bulk_delete;
 mod unsafe_stack;
 mod base_repr;
 mod node;
+mod tree_building;
 
 pub mod util;
 pub mod drivers;
