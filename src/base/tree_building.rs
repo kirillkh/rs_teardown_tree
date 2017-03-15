@@ -191,7 +191,7 @@ impl GapIter {
         let full_gap = nils / leaves;
         let remainder = nils % leaves;
 
-        Self { gap:0, full_gap:full_gap, internal_nodes:internal_nodes, remainder:remainder, iter:iter }
+        GapIter { gap:0, full_gap:full_gap, internal_nodes:internal_nodes, remainder:remainder, iter:iter }
     }
 
     pub fn relative_to(self, root: usize) -> GlobalBuildIter<Self> {
