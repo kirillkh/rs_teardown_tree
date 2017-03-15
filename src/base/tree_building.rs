@@ -180,7 +180,7 @@ impl<N: Node> TreeRepr<N> {
     {
         let capacity = self.capacity();
 
-        // 1. rebuild the subtree at the bottom right corner of the complete subtree's storage
+        // 1. compact the subtree at the bottom right corner of the complete subtree's storage
         let dst_iter = RebuildIter::new(count);
 
         let complete_subtree_height = dst_iter.height;
@@ -195,43 +195,19 @@ impl<N: Node> TreeRepr<N> {
 
 //        println!("count={}, root={}, dst_root={}, subtree_height={}, sotrage_h={}, root_d={}", count, root, dst_root, subtree_height, storage_height, root_depth);
 
-        let mut dst_iter = dst_iter.relative_to(dst_root).rev().enumerate();
-        let rev_insert_offs = count - insert_offs - 1;
+        let mut dst_iter = dst_iter.relative_to(dst_root).rev();
 
         let mut item = N::from_tuple(item);
-        let mut from = TreeRepr::traverse_inorder_rev_mut(self, root, &mut item, capacity, |this, item, src_idx| {
-            let (i, dst_idx) = dst_iter.next().unwrap();
-//            println!("a src_idx={} dst_idx={}", src_idx, dst_idx);
-//            println!("i={}, insert_offs={}, src_idx={}, dst_idx={}", i, insert_offs, src_idx, dst_idx);
-            if i == rev_insert_offs {
-                let next = this.take(src_idx);
-                let prev = mem::replace(item, next);
-                debug_assert!(this.is_nil(dst_idx));
-                this.place(dst_idx, prev); // TODO we can take a shortcut here by not modifying the mask
-                let pred = this.predecessor(src_idx);
-//                println!("a1: {}", src_idx);
-                pred
-            } else {
-                unsafe {
-                    this.move_from_to(src_idx, dst_idx);
-                }
-                None
+        TreeRepr::traverse_inorder_rev_mut(self, root, &mut (), (), |this, _, src_idx| {
+            let dst_idx = dst_iter.next().unwrap();
+            unsafe {
+                this.move_from_to(src_idx, dst_idx);
             }
+            None
         });
 
-        if from != capacity && /* corner case above */ root <= from  {
-//            println!("root={}, from={}", root, from);
-            TreeRepr::traverse_inorder_rev_from_mut(self, from, root, &mut item, (), |this, item, src_idx| {
-                let (_, dst_idx) = dst_iter.next().unwrap();
-//                println!("b src_idx={} dst_idx={}", src_idx, dst_idx);
-                let prev_item = mem::replace(item, this.take(src_idx));
-                this.place(dst_idx, prev_item); // TODO we can cut the corner here by not modifying the mask
-                None // TODO this can be made more efficient by breaking when dst_idx != src_idx
-            });
-        }
-
-
-        // 2. move the subtree to the root
+        // 2. move the subtree to the root (in 3 parts: first everything before the new item, then
+        // the new item, then everything after it)
 //        let mut src_level_start = dst_root;
 //        let mut dst_level_start = root;
 //        let mut level_n = 1;
@@ -270,19 +246,33 @@ impl<N: Node> TreeRepr<N> {
 
         let src_root = dst_root;
         let mut src_iter = RebuildIter::new(count).relative_to(src_root);
+        src_iter.next(); // TODO the first element is dummy
         let mut dst_iter = BuildIter::new(count).relative_to(root);
-        let mut iter = src_iter.zip(dst_iter);
 
-        let (_, fst) = iter.next().unwrap();
-        debug_assert!(self.is_nil(fst));
-        self.place(fst, item);
+        for i in 0..insert_offs {
+            src_iter.next().and_then(|src_idx| {
+                dst_iter.next().map(|dst_idx| {
+                    unsafe {
+                        self.move_from_to(src_idx, dst_idx);
+                    }
+                })
+            });
+        }
 
-        for (src_idx, dst_idx) in iter {
-//            println!("c src_idx={} dst_idx={}", src_idx, dst_idx);
-            debug_assert!(!self.is_nil(src_idx), "src_idx={}, dst_idx={}", src_idx, dst_idx);
-            unsafe {
-                self.move_from_to(src_idx, dst_idx);
-            }
+        dst_iter.next().map(|dst_idx| {
+            debug_assert!(self.is_nil(dst_idx));
+            self.place(dst_idx, item);
+        });
+
+
+        for i in insert_offs..count {
+            src_iter.next().and_then(|src_idx| {
+                dst_iter.next().map(|dst_idx| {
+                    unsafe {
+                        self.move_from_to(src_idx, dst_idx);
+                    }
+                })
+            });
         }
     }
 
