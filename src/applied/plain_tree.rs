@@ -1032,3 +1032,236 @@ mod bench {
 //        bench_dec(bencher, 50_000);
 //    }
 }
+
+
+
+#[cfg(all(feature = "unstable", test))]
+mod bench_btree {
+    extern crate test;
+
+    use std::collections::BTreeMap;
+    use rand::{Rng, SeedableRng, XorShiftRng, thread_rng};
+
+    use applied::plain_tree::{PlTree, PlNode};
+    use self::test::Bencher;
+    use util::make_permutation;
+
+
+    pub fn ins(tree: &mut BTreeMap<usize,usize>, x: usize) {
+        let old = tree.insert(x, x);
+        assert_eq!(None, old);
+    }
+
+
+    pub fn bench_rng(bencher: &mut Bencher, n: usize) {
+        let mut trng = thread_rng();
+        let seed = [trng.gen(), trng.gen(), trng.gen(), trng.gen()];
+        let mut rng = XorShiftRng::from_seed(seed);
+
+        let seq = make_permutation(n, &mut rng);
+        bencher.iter(|| {
+            let mut tree = &mut BTreeMap::new();
+            for i in 0..n {
+                ins(tree, seq[i]);
+            }
+            assert_eq!(tree.len(), n);
+        });
+    }
+
+
+    pub fn bench_inc(bencher: &mut Bencher, n: usize) {
+        bencher.iter(|| {
+            let tree = &mut BTreeMap::new();
+            for i in 0..n {
+                ins(tree, i);
+            }
+            assert_eq!(tree.len(), n);
+        });
+    }
+
+    pub fn bench_dec(bencher: &mut Bencher, n: usize) {
+        bencher.iter(|| {
+            let tree = &mut BTreeMap::new();
+            for i in (0..n).rev() {
+                ins(tree, i);
+            }
+            assert_eq!(tree.len(), n);
+        });
+    }
+
+
+    #[bench]
+    pub fn bench_insert_rng_01_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 1_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_02_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 2_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_03_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 3_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_04_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 4_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_05_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 5_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_06_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 6_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_07_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 7_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_08_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 8_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_09_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 9_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_rng_10_000(bencher: &mut Bencher) {
+        bench_rng(bencher, 10_000);
+    }
+
+
+    #[bench]
+    pub fn bench_insert_inc_01_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 1_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_02_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 2_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_03_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 3_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_04_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 4_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_05_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 5_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_06_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 6_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_07_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 7_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_08_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 8_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_09_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 9_000);
+    }
+
+
+    #[bench]
+    pub fn bench_insert_inc_10_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 10_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_20_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 20_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_30_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 30_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_40_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 40_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_inc_50_000(bencher: &mut Bencher) {
+        bench_inc(bencher, 50_000);
+    }
+
+
+
+
+    #[bench]
+    pub fn bench_insert_dec_01_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 1_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_02_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 2_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_03_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 3_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_04_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 4_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_05_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 5_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_06_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 6_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_07_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 7_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_08_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 8_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_09_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 9_000);
+    }
+
+    #[bench]
+    pub fn bench_insert_dec_10_000(bencher: &mut Bencher) {
+        bench_dec(bencher, 10_000);
+    }
+}
