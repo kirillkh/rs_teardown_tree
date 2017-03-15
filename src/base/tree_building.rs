@@ -188,10 +188,10 @@ impl GapIter {
         let leaves = count - internal_nodes;
         let nils = complete_leaves - leaves;
 
-        let full_gap = nils / leaves;
-        let remainder = nils % leaves;
+        let full_gap = nils / (leaves+1);
+        let remainder = nils % (leaves+1);
 
-        GapIter { gap:0, full_gap:full_gap, internal_nodes:internal_nodes, remainder:remainder, iter:iter }
+        GapIter { gap:full_gap, full_gap:full_gap, internal_nodes:internal_nodes, remainder:remainder, iter:iter }
     }
 
     pub fn relative_to(self, root: usize) -> GlobalBuildIter<Self> {
@@ -209,12 +209,8 @@ impl Iterator for GapIter {
                 if next >= self.internal_nodes {
                     if self.gap == 0 {
                         self.gap = self.full_gap +
-                            if self.remainder != 0 {
-                                self.remainder -= 1;
-                                1
-                            } else {
-                                0
-                            };
+                            if self.remainder == 0 { 0 }
+                            else { self.remainder -= 1; 1 };
                         false
                     } else {
                         self.gap -= 1;
