@@ -172,6 +172,70 @@ impl<I: Iterator<Item=usize>+DoubleEndedIterator> DoubleEndedIterator for Global
 
 
 
+struct GapIter {
+    gap: usize,
+    full_gap: usize,
+    internal_nodes: usize,
+    remainder: usize,
+    iter: BuildIter,
+}
+
+impl GapIter {
+    pub fn new(iter: BuildIter, count: usize) -> Self {
+        let complete_count = iter.complete_count;
+        let complete_leaves = (complete_count+1) >> 1;
+        let internal_nodes = complete_count - complete_leaves;
+        let leaves = count - internal_nodes;
+        let nils = complete_leaves - leaves;
+
+        let full_gap = nils / leaves;
+        let remainder = nils % leaves;
+
+        Self { gap:0, full_gap:full_gap, internal_nodes:internal_nodes, remainder:remainder, iter:iter }
+    }
+
+    pub fn relative_to(self, root: usize) -> GlobalBuildIter<Self> {
+        GlobalBuildIter { root:root, local: self }
+    }
+}
+
+
+impl Iterator for GapIter {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().and_then(|next| {
+            let skip =
+                if next >= self.internal_nodes {
+                    if self.gap == 0 {
+                        self.gap = self.full_gap +
+                            if self.remainder != 0 {
+                                self.remainder -= 1;
+                                1
+                            } else {
+                                0
+                            };
+                        false
+                    } else {
+                        self.gap -= 1;
+                        true
+                    }
+                } else {
+                    false
+                };
+
+            if skip {
+                self.iter.next()
+            } else {
+                Some(next)
+            }
+        })
+    }
+}
+
+
+
+
 
 // building and rebuilding
 impl<N: Node> TreeRepr<N> {
@@ -247,7 +311,10 @@ impl<N: Node> TreeRepr<N> {
         let src_root = dst_root;
         let mut src_iter = RebuildIter::new(count).relative_to(src_root);
         src_iter.next(); // TODO the first element is dummy
-        let mut dst_iter = BuildIter::new(count).relative_to(root);
+
+        let mut b_iter = BuildIter::new(count);
+        b_iter.count = b_iter.complete_count;
+        let mut dst_iter = GapIter::new(b_iter, count).relative_to(root);
 
         for i in 0..insert_offs {
             src_iter.next().and_then(|src_idx| {
@@ -328,22 +395,25 @@ impl<N: Node> TreeRepr<N> {
             let inorder = src_offs+skipped;
             let local_idx = a025480(complete_count+1+inorder) - 1;
 
-            let mut skip = local_idx >= internal_nodes;
-            if skip {
-                skip = if gap == 0 {
-                    gap = full_gap +
-                        if remainder != 0 {
-                            remainder -= 1;
-                            1
-                        } else {
-                            0
-                        };
-                    false
+
+            let skip =
+                if local_idx >= internal_nodes {
+                    if gap == 0 {
+                        gap = full_gap +
+                            if remainder != 0 {
+                                remainder -= 1;
+                                1
+                            } else {
+                                0
+                            };
+                        false
+                    } else {
+                        gap -= 1;
+                        true
+                    }
                 } else {
-                    gap -= 1;
-                    true
-                }
-            }
+                    false
+                };
 
             if !skip {
                 let local_depth = depth_of(local_idx);
