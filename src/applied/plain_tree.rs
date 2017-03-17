@@ -144,21 +144,20 @@ impl<K: Key, V> PlTree<K, V> {
             // full rebuild required
 //            println!("double: size={}, capacity={}", self.size(), self.capacity());
             self.double_and_rebuild(item);
-//            let target_idx = self.index_of(&item.0);
-//            debug_assert!(target_idx < self.capacity() && self.is_nil(target_idx));
-//            self.place(target_idx, PlNode::from_tuple(item));
         }
     }
 
     fn partial_rebuild(&mut self, mut idx: usize, item: (K, V)) {
         let h = self.complete_height();
-        let mut d = depth_of(idx);
+        debug_assert!(h == depth_of(idx));
+        let mut d = h;
+        let full_rebuild_depth = h - depth_of(h);
+        
         let mut count = 1; // 1 stands for the `item` that we pretend is already inserted
         let mut complete_count = 0;
         let mut insert_offs = 0;
         loop {
             debug_assert!(idx > 0);
-//            let sibling = idx ^ 1;
             let sibling_count;
             let sibling;
             if idx & 1 == 0 {
@@ -173,13 +172,22 @@ impl<K: Key, V> PlTree<K, V> {
             idx = parenti(idx);
             count += 1 + sibling_count;
             complete_count = 2*complete_count + 1;
-
+    
             d -= 1;
-            
-            // TODO: we avoid floating-point division for numeric stability and speed, but it will cause overflow for extremely big trees
-            if count * 2 * (h-1) <= complete_count * (h-1+d) {
-                self.rebuild_subtree2(idx, insert_offs, count, item);
-                break;
+    
+            if full_rebuild_depth <= d+1 {
+                // This was supposed to bring the insert complexity down to O(log(n))??? Not sure where I
+                // saw the idea, though! Experimentally, it does make sequential inserts a little faster.
+                if count <= complete_count {
+                    self.rebuild_subtree2(idx, insert_offs, count, item);
+                    break;
+                }
+            } else {
+                // TODO: we avoid floating-point division for numeric stability and speed, but it will cause overflow for extremely big trees
+                if count * 2 * (h-1) <= complete_count * (h-1+d) {
+                    self.rebuild_subtree2(idx, insert_offs, count, item);
+                    break;
+                }
             }
         }
     }
