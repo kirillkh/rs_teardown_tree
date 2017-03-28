@@ -266,44 +266,6 @@ impl<N: Node> TreeRepr<N> {
             None
         });
 
-        // 2. move the subtree to the root (in 3 parts: first everything before the new item, then
-        // the new item, then everything after it)
-//        let mut src_level_start = dst_root;
-//        let mut dst_level_start = root;
-//        let mut level_n = 1;
-//        for _ in 1..subtree_height {
-//            for i in 0..level_n {
-//                debug_assert!(!self.is_nil(src_level_start + i));
-//                debug_assert!(self.is_nil(dst_level_start + i));
-//                unsafe {
-//                    self.move_from_to(src_level_start + i, dst_level_start + i);
-//                }
-//            }
-//            src_level_start = lefti(src_level_start);
-//            dst_level_start = lefti(dst_level_start);
-//            level_n <<= 1;
-//        }
-//
-//        level_n = count + 1 - level_n;
-//        for i in 0..level_n {
-//            unsafe {
-//                self.move_from_to(src_level_start + i, dst_level_start + i);
-//            }
-//        }
-
-
-
-//        let src_root = dst_root;
-//        let mut dst_iter = BuildIter::new(count).relative_to(root);
-//        TreeRepr::traverse_inorder_mut(self, src_root, &mut (), (), |this, _, src_idx| {
-//            println!("stage 2 src_idx={}", src_idx);
-//            let dst_idx = dst_iter.next().unwrap();
-//            let item = this.take(src_idx);
-//            debug_assert!(this.is_nil(dst_idx));
-//            this.place(dst_idx, item);
-//            None
-//        });
-
         let src_root = dst_root;
         let mut src_iter = RebuildIter::new(count).relative_to(src_root);
         src_iter.next(); // TODO the first element is dummy
@@ -338,52 +300,6 @@ impl<N: Node> TreeRepr<N> {
             });
         }
     }
-    
-    
-//    #[inline(never)]
-//    pub fn rebuild_subtree_noinsert(&mut self, root: usize, count: usize)
-//    {
-//        let capacity = self.capacity();
-//
-//        // 1. compact the subtree at the bottom right corner of the complete subtree's storage
-//        let dst_iter = RebuildIter::new(count);
-//
-//        let complete_subtree_height = dst_iter.height;
-//        let complete_tree_height = self.complete_height();
-//        let root_depth = depth_of(root);
-//
-//        // dst_root is the root of the tree that is going to be the result of step 1
-//        let mut dst_root = root;
-//        for _ in 0 .. (complete_tree_height - complete_subtree_height) - root_depth {
-//            dst_root = righti(dst_root);
-//        }
-//
-////        println!("count={}, root={}, dst_root={}, subtree_height={}, sotrage_h={}, root_d={}", count, root, dst_root, subtree_height, storage_height, root_depth);
-//
-//        let mut dst_iter = dst_iter.relative_to(dst_root).rev();
-//
-//        TreeRepr::traverse_inorder_rev_mut(self, root, &mut (), (), |this, _, src_idx| {
-//            let dst_idx = dst_iter.next().unwrap();
-//            unsafe {
-//                this.move_from_to(src_idx, dst_idx);
-//            }
-//            None
-//        });
-//
-//        // 2. move the subtree to the root
-//        let src_root = dst_root;
-//        let mut src_iter = RebuildIter::new(count).relative_to(src_root);
-//
-//        let mut b_iter = BuildIter::new(count);
-//        b_iter.count = b_iter.complete_count;
-//        let mut dst_iter = GapIter::new(b_iter, count).relative_to(root);
-//
-//        for (src_idx, dst_idx) in src_iter.zip(dst_iter) {
-//            unsafe {
-//                self.move_from_to(src_idx, dst_idx);
-//            }
-//        }
-//    }
     
     
     /// Returns the height of the tree.

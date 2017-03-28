@@ -133,92 +133,11 @@ impl<K: Key, V> PlTree<K, V> {
         } else {
             let old = self.place(target_idx, PlNode::from_tuple(item));
             
-//            self.random_rebalance(target_idx);
-            
             old.map(|node| node.entry.into_tuple().1)
         }
     }
-    
-    
-//    fn random_rebalance(&mut self, idx: usize) {
-//        use rand::{Rng, SeedableRng, XorShiftRng, thread_rng};
-//        use rand::distributions::Sample;
-//
-//        let mut curr = idx;
-//        let mut d = depth_of(curr);
-//        let mut h = self.complete_height();
-//        let mut complete_count = (1 << h) - 1;
-//
-//        let mut s = self.size();
-//        if 2*s >= complete_count {
-////            let item = self.take(idx).into_tuple();
-////            self.double_and_rebuild(item);
-////            return;
-//            h += 1;
-//            complete_count = 2*complete_count + 1;
-//        }
-//
-//        let mut trng = thread_rng();
-//        let seed = [trng.gen(), trng.gen(), trng.gen(), trng.gen()];
-//        let mut rng = XorShiftRng::from_seed(seed);
-//
-//        // 1. choose the minimum level to rebalance at
-//
-//        let mut r = d;
-//        for i in 0 .. d {
-//            if s == 0 {
-//                break;
-//            }
-//            let p = rng.gen_range(0, s);
-//
-//            if p <= 0 {
-//                r = i;
-//                break;
-//            }
-////            s >>= 1;
-//            s -= 1;
-//            s >>= 1;
-//            complete_count >>= 1;
-//        }
-//
-////        let s = ::rand::distributions::exponential::Exp::new(0.5).sample(&mut rng);
-////        let mut r = (depth_of(h) as f64 * (1.0 + s)) as usize;
-////
-////        if r == d || r+2 >= h {
-////            return;
-////        }
-//
-//        for _ in r..d {
-//            curr = parenti(curr);
-//        }
-//
-//        // 2. ascend the tree until the weight invariant holds
-//        let mut count = self.count_nodes(curr);
-////        while count * 2 * (h-1) > complete_count * (h-1+r) {
-////            assert!(curr > 0);
-////            let sibling =
-////                if curr & 1 == 0 {
-////                    curr - 1
-////                } else {
-////                    curr + 1
-////                };
-////            count += 1 + self.count_nodes(sibling);
-////
-////            r -= 1;
-////            curr = parenti(curr);
-////            complete_count = 2*complete_count + 1;
-////        }
-//        if count * 2 * (h-1) > complete_count * (h-1+r) {
-//            return;
-//        }
-//
-////        return;
-//
-//        // 3. rebuild
-//        self.rebuild_subtree_noinsert(curr, count);
-//    }
-    
 
+    
     fn rebalance(&mut self, idx: usize, item: (K, V)) {
         if 2*(self.size()+1) <= self.capacity() {
             // partial rebuild
