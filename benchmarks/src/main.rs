@@ -185,7 +185,7 @@ mod bench_teardown {
 
     use treap::TreapMap;
     use teardown_tree::{IntervalTeardownSet, IntervalTeardownMap, KeyInterval, Refill, TeardownSet, TeardownMap, ItemFilter};
-    use teardown_tree::util::make_teardown_seq;
+    use teardown_tree::util::make_disjoint_range_permutation;
     use teardown_tree::sink::{UncheckedVecRefSink, SinkAdapter};
     use super::{nanos, black_box};
     use super::bst::BST;
@@ -301,7 +301,7 @@ mod bench_teardown {
         let mut rng = XorShiftRng::from_seed([1,2,3,4]);
         let elems: Vec<_> = (0..n).collect();
 
-        let ranges = make_teardown_seq(n, rm_items, &mut rng);
+        let ranges = make_disjoint_range_permutation(n, rm_items, &mut rng);
 
         let tree = build::<M>(elems);
         let mut copy = tree.cpy();
